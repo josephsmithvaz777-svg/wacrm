@@ -30,6 +30,11 @@ import {
   type MediaKind,
 } from '@/lib/whatsapp/meta-api';
 import {
+  sendWahaText,
+  sendWahaMedia,
+  type WahaClientOptions,
+} from '@/lib/whatsapp/waha-api';
+import {
   validateInteractivePayload,
   interactivePayloadPreviewText,
   type InteractiveMessagePayload,
@@ -262,10 +267,11 @@ export async function sendMessageToConversation(
     );
   }
 
-  const accessToken = decrypt(config.access_token);
+  const provider = (config.provider as string | undefined) || 'meta';
+  const accessToken = config.access_token ? decrypt(config.access_token) : '';
 
   // Self-heal legacy CBC ciphertexts. Fire-and-forget; idempotent.
-  if (isLegacyFormat(config.access_token)) {
+  if (config.access_token && isLegacyFormat(config.access_token)) {
     void db
       .from('whatsapp_config')
       .update({ access_token: encrypt(accessToken) })
@@ -280,9 +286,7 @@ export async function sendMessageToConversation(
       });
   }
 
-  // Resolve the reply target to its Meta message_id. The parent must
-  // belong to this same conversation — otherwise a caller could quote
-  // messages they can't see by guessing UUIDs.
+  // Resolve the reply target to its WhatsApp message_id (Meta wamid or WAHA id).
   let contextMessageId: string | undefined;
   if (replyToMessageId) {
     const { data: parent, error: parentError } = await db
@@ -301,11 +305,116 @@ export async function sendMessageToConversation(
     }
     if (!parent.message_id) {
       console.warn(
-        '[send-message] reply target has no Meta message_id; sending without context'
+        '[send-message] reply target has no WhatsApp message_id; sending without context'
       );
     } else {
       contextMessageId = parent.message_id;
     }
+  }
+
+  if (provider === 'waha') {
+    if (!config.waha_base_url) {
+      throw new SendMessageError(
+        'whatsapp_not_configured',
+        'WAHA base URL is missing. Save your WAHA settings first.',
+        400,
+      );
+    }
+    if (messageType === 'template' || messageType === 'interactive') {
+      throw new SendMessageError(
+        'bad_request',
+        'Templates and interactive messages are not supported on WAHA in this MVP. Use Meta Cloud API or send text/media.',
+        400,
+      );
+    }
+
+    const wahaOpts: WahaClientOptions = {
+      baseUrl: config.waha_base_url as string,
+      apiKey: accessToken || null,
+      session: (config.waha_session as string) || 'default',
+    };
+
+    let waMessageId = '';
+    try {
+      if (isMediaKind) {
+        const result = await sendWahaMedia(
+          wahaOpts,
+          sanitizedPhone,
+          messageType as MediaKind,
+          mediaUrl!,
+          contentText,
+          filename,
+        );
+        waMessageId = result.messageId;
+      } else {
+        const result = await sendWahaText(
+          wahaOpts,
+          sanitizedPhone,
+          contentText!,
+          contextMessageId,
+        );
+        waMessageId = result.messageId;
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Unknown WAHA API error';
+      console.error('[send-message] WAHA send failed:', message);
+      throw new SendMessageError('waha_error', `WAHA API error: ${message}`, 502);
+    }
+
+    const { data: messageRecord, error: msgError } = await db
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        sender_type: 'agent',
+        content_type: messageType,
+        content_text: contentText ?? null,
+        media_url: mediaUrl || null,
+        template_name: null,
+        interactive_payload: null,
+        message_id: waMessageId,
+        status: 'sent',
+        reply_to_message_id: replyToMessageId || null,
+      })
+      .select()
+      .single();
+
+    if (msgError) {
+      console.error('[send-message] error inserting WAHA message:', msgError);
+      throw new SendMessageError(
+        'db_error',
+        `Message sent via WAHA but failed to save to DB: ${msgError.message}`,
+        500,
+      );
+    }
+
+    await db
+      .from('conversations')
+      .update({
+        last_message_text: contentText || `[${messageType}]`,
+        last_message_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', conversationId);
+
+    try {
+      await supabaseAdmin()
+        .from('flow_runs')
+        .update({
+          status: 'paused_by_agent',
+          ended_at: new Date().toISOString(),
+        })
+        .eq('account_id', accountId)
+        .eq('contact_id', contact.id)
+        .eq('status', 'active');
+    } catch {
+      // best-effort
+    }
+
+    return {
+      messageId: messageRecord.id as string,
+      whatsappMessageId: waMessageId,
+    };
   }
 
   // Template row (for header + button components). isMessageTemplate

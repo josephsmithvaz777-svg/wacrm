@@ -1,0 +1,324 @@
+// ============================================================
+// WAHA (WhatsApp HTTP API) client — MVP transport.
+// Docs: https://waha.devlike.pro/
+// ============================================================
+
+export type WahaSessionStatus =
+  | 'STOPPED'
+  | 'STARTING'
+  | 'SCAN_QR_CODE'
+  | 'WORKING'
+  | 'FAILED'
+  | string;
+
+export interface WahaClientOptions {
+  baseUrl: string;
+  apiKey?: string | null;
+  session?: string;
+}
+
+export class WahaApiError extends Error {
+  readonly status: number;
+  readonly body: string;
+  constructor(status: number, body: string) {
+    super(`WAHA API ${status}: ${body}`);
+    this.name = 'WahaApiError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
+function normalizeBaseUrl(url: string): string {
+  return url.replace(/\/+$/, '');
+}
+
+function headers(apiKey?: string | null): HeadersInit {
+  const h: Record<string, string> = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  };
+  if (apiKey) h['X-Api-Key'] = apiKey;
+  return h;
+}
+
+async function wahaFetch(
+  opts: WahaClientOptions,
+  path: string,
+  init?: RequestInit,
+): Promise<Response> {
+  const base = normalizeBaseUrl(opts.baseUrl);
+  const res = await fetch(`${base}${path}`, {
+    ...init,
+    headers: {
+      ...headers(opts.apiKey),
+      ...(init?.headers || {}),
+    },
+  });
+  return res;
+}
+
+async function readJsonOrText(res: Response): Promise<unknown> {
+  const text = await res.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+export function phoneToChatId(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  return `${digits}@c.us`;
+}
+
+export function chatIdToPhone(chatId: string): string {
+  const raw = chatId.split('@')[0] || chatId;
+  return raw.replace(/\D/g, '');
+}
+
+function extractMessageId(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') {
+    return `waha-${Date.now()}`;
+  }
+  const p = payload as Record<string, unknown>;
+  if (typeof p.id === 'string') return p.id;
+  if (p.key && typeof p.key === 'object') {
+    const key = p.key as Record<string, unknown>;
+    if (typeof key.id === 'string') return key.id;
+  }
+  if (typeof p.messageId === 'string') return p.messageId;
+  return `waha-${Date.now()}`;
+}
+
+export async function getSession(
+  opts: WahaClientOptions,
+): Promise<{ name: string; status: WahaSessionStatus; me?: unknown } | null> {
+  const session = opts.session || 'default';
+  const res = await wahaFetch(opts, `/api/sessions/${encodeURIComponent(session)}`);
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new WahaApiError(res.status, await res.text());
+  }
+  return (await res.json()) as {
+    name: string;
+    status: WahaSessionStatus;
+    me?: unknown;
+  };
+}
+
+export async function ensureSession(
+  opts: WahaClientOptions,
+  webhookUrl: string,
+): Promise<{ name: string; status: WahaSessionStatus }> {
+  const session = opts.session || 'default';
+  const existing = await getSession(opts);
+  const config = {
+    webhooks: [
+      {
+        url: webhookUrl,
+        events: ['message', 'message.ack', 'session.status'],
+      },
+    ],
+  };
+
+  if (!existing) {
+    const res = await wahaFetch(opts, '/api/sessions/', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: session,
+        start: true,
+        config,
+      }),
+    });
+    if (!res.ok) {
+      throw new WahaApiError(res.status, await res.text());
+    }
+    const created = (await res.json()) as {
+      name: string;
+      status: WahaSessionStatus;
+    };
+    return { name: created.name || session, status: created.status };
+  }
+
+  // Update webhooks + restart if stopped.
+  const put = await wahaFetch(opts, `/api/sessions/${encodeURIComponent(session)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name: session, config }),
+  });
+  // Some engines use POST for update — fall through if PUT unsupported.
+  if (!put.ok && put.status !== 404 && put.status !== 405) {
+    // Non-fatal: session may already be fine; try start.
+    console.warn('[waha] session update failed:', put.status, await put.text());
+  }
+
+  if (existing.status === 'STOPPED' || existing.status === 'FAILED') {
+    const start = await wahaFetch(
+      opts,
+      `/api/sessions/${encodeURIComponent(session)}/start`,
+      { method: 'POST' },
+    );
+    if (!start.ok) {
+      throw new WahaApiError(start.status, await start.text());
+    }
+    const started = (await start.json()) as { status?: WahaSessionStatus };
+    return { name: session, status: started.status || 'STARTING' };
+  }
+
+  return { name: session, status: existing.status };
+}
+
+/**
+ * Returns a data-URL (image) or raw base64 string for the QR code.
+ */
+export async function getQrDataUrl(opts: WahaClientOptions): Promise<string> {
+  const session = opts.session || 'default';
+  // Prefer image format when supported.
+  const res = await wahaFetch(
+    opts,
+    `/api/${encodeURIComponent(session)}/auth/qr?format=image`,
+    { method: 'GET' },
+  );
+
+  if (res.ok) {
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const json = (await res.json()) as { data?: string; qr?: string };
+      const raw = json.data || json.qr;
+      if (raw?.startsWith('data:')) return raw;
+      if (raw) return `data:image/png;base64,${raw}`;
+    }
+    if (contentType.includes('image/')) {
+      const buf = Buffer.from(await res.arrayBuffer());
+      return `data:${contentType};base64,${buf.toString('base64')}`;
+    }
+  }
+
+  // Fallback: POST without format (older WAHA).
+  const res2 = await wahaFetch(opts, `/api/${encodeURIComponent(session)}/auth/qr`, {
+    method: 'POST',
+  });
+  if (!res2.ok) {
+    throw new WahaApiError(res2.status, await res2.text());
+  }
+  const contentType = res2.headers.get('content-type') || '';
+  if (contentType.includes('image/')) {
+    const buf = Buffer.from(await res2.arrayBuffer());
+    return `data:${contentType};base64,${buf.toString('base64')}`;
+  }
+  const json = (await res2.json()) as { data?: string; qr?: string };
+  const raw = json.data || json.qr;
+  if (!raw) throw new WahaApiError(500, 'QR payload missing');
+  return raw.startsWith('data:') ? raw : `data:image/png;base64,${raw}`;
+}
+
+export async function sendWahaText(
+  opts: WahaClientOptions,
+  toPhone: string,
+  text: string,
+  replyTo?: string | null,
+): Promise<{ messageId: string }> {
+  const body: Record<string, unknown> = {
+    session: opts.session || 'default',
+    chatId: phoneToChatId(toPhone),
+    text,
+  };
+  if (replyTo) {
+    body.reply_to = replyTo;
+  }
+  const res = await wahaFetch(opts, '/api/sendText', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new WahaApiError(res.status, await res.text());
+  const payload = await readJsonOrText(res);
+  return { messageId: extractMessageId(payload) };
+}
+
+export async function sendWahaMedia(
+  opts: WahaClientOptions,
+  toPhone: string,
+  kind: 'image' | 'video' | 'document' | 'audio',
+  link: string,
+  caption?: string | null,
+  filename?: string | null,
+): Promise<{ messageId: string }> {
+  const session = opts.session || 'default';
+  const chatId = phoneToChatId(toPhone);
+  const file: Record<string, string> = { url: link };
+  if (filename) file.filename = filename;
+
+  let path = '/api/sendFile';
+  const body: Record<string, unknown> = { session, chatId, file };
+  if (kind === 'image') {
+    path = '/api/sendImage';
+    if (caption) body.caption = caption;
+  } else if (kind === 'video') {
+    path = '/api/sendVideo';
+    if (caption) body.caption = caption;
+  } else if (kind === 'audio') {
+    path = '/api/sendVoice';
+  } else {
+    path = '/api/sendFile';
+    if (caption) body.caption = caption;
+  }
+
+  const res = await wahaFetch(opts, path, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new WahaApiError(res.status, await res.text());
+  const payload = await readJsonOrText(res);
+  return { messageId: extractMessageId(payload) };
+}
+
+export async function sendWahaReaction(
+  opts: WahaClientOptions,
+  toPhone: string,
+  messageId: string,
+  emoji: string,
+): Promise<void> {
+  const res = await wahaFetch(opts, '/api/reaction', {
+    method: 'PUT',
+    body: JSON.stringify({
+      session: opts.session || 'default',
+      chatId: phoneToChatId(toPhone),
+      messageId,
+      reaction: emoji,
+    }),
+  });
+  if (!res.ok) throw new WahaApiError(res.status, await res.text());
+}
+
+export async function downloadWahaMedia(
+  opts: WahaClientOptions,
+  mediaUrl: string,
+): Promise<{ buffer: Buffer; contentType: string }> {
+  const headersInit: Record<string, string> = {};
+  if (opts.apiKey) headersInit['X-Api-Key'] = opts.apiKey;
+
+  // Absolute URL from WAHA may point at internal host — rewrite to baseUrl origin when needed.
+  let url = mediaUrl;
+  try {
+    const parsed = new URL(mediaUrl);
+    const base = new URL(normalizeBaseUrl(opts.baseUrl));
+    if (
+      parsed.hostname === 'localhost' ||
+      parsed.hostname === '127.0.0.1' ||
+      parsed.hostname === '::1'
+    ) {
+      parsed.protocol = base.protocol;
+      parsed.host = base.host;
+      url = parsed.toString();
+    }
+  } catch {
+    // relative path
+    url = `${normalizeBaseUrl(opts.baseUrl)}${mediaUrl.startsWith('/') ? '' : '/'}${mediaUrl}`;
+  }
+
+  const res = await fetch(url, { headers: headersInit });
+  if (!res.ok) throw new WahaApiError(res.status, await res.text());
+  const contentType = res.headers.get('content-type') || 'application/octet-stream';
+  const buffer = Buffer.from(await res.arrayBuffer());
+  return { buffer, contentType };
+}

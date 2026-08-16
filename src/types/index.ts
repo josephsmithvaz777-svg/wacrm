@@ -269,8 +269,15 @@ export interface MessageReaction {
 export interface WhatsAppConfig {
   id: string;
   user_id: string;
+  account_id?: string;
+  /** Transport provider. Defaults to meta when unset (pre-038 rows). */
+  provider?: 'meta' | 'waha';
   phone_number_id: string;
   waba_id?: string;
+  /** WAHA instance origin (no trailing slash). */
+  waha_base_url?: string | null;
+  /** WAHA session name. */
+  waha_session?: string | null;
   access_token: string;
   verify_token?: string;
   status: 'connected' | 'disconnected';
@@ -279,6 +286,7 @@ export interface WhatsAppConfig {
    * Set when POST /{phone_number_id}/register last succeeded. NULL
    * means the number was saved but never actually subscribed for
    * webhooks on Meta's side — inbound events will be silently lost.
+   * For WAHA, set when session reaches WORKING.
    */
   registered_at?: string;
   /** Set when POST /{waba_id}/subscribed_apps last succeeded. */

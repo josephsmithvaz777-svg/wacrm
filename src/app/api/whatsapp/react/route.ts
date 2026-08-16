@@ -91,7 +91,7 @@ export async function POST(request: Request) {
     // WhatsApp config + access token. Account-scoped post-multi-user.
     const { data: config, error: configError } = await supabase
       .from('whatsapp_config')
-      .select('phone_number_id, access_token')
+      .select('phone_number_id, access_token, provider, waha_base_url, waha_session')
       .eq('account_id', accountId)
       .single();
 
@@ -106,19 +106,33 @@ export async function POST(request: Request) {
     const sanitizedPhone = sanitizePhoneForMeta(contact.phone);
 
     try {
-      await sendReactionMessage({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
-        to: sanitizedPhone,
-        targetMessageId: targetMessage.message_id,
-        emoji,
-      });
+      if ((config.provider as string | undefined) === 'waha') {
+        const { sendWahaReaction } = await import('@/lib/whatsapp/waha-api');
+        await sendWahaReaction(
+          {
+            baseUrl: config.waha_base_url as string,
+            apiKey: accessToken || null,
+            session: (config.waha_session as string) || 'default',
+          },
+          sanitizedPhone,
+          targetMessage.message_id,
+          emoji,
+        );
+      } else {
+        await sendReactionMessage({
+          phoneNumberId: config.phone_number_id,
+          accessToken,
+          to: sanitizedPhone,
+          targetMessageId: targetMessage.message_id,
+          emoji,
+        });
+      }
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : 'Unknown Meta API error';
-      console.error('[whatsapp/react] Meta send failed:', message);
+        err instanceof Error ? err.message : 'Unknown WhatsApp API error';
+      console.error('[whatsapp/react] send failed:', message);
       return NextResponse.json(
-        { error: `Meta API error: ${message}` },
+        { error: `WhatsApp API error: ${message}` },
         { status: 502 },
       );
     }

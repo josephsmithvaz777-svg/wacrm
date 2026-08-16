@@ -63,12 +63,19 @@ export function WhatsAppConfig() {
   // again and overwrites whatever the user typed but hadn't saved yet.
   const loadedAccountIdRef = useRef<string | null>(null);
 
+  const [provider, setProvider] = useState<'meta' | 'waha'>('meta');
   const [phoneNumberId, setPhoneNumberId] = useState('');
   const [wabaId, setWabaId] = useState('');
   const [accessToken, setAccessToken] = useState('');
   const [verifyToken, setVerifyToken] = useState('');
   const [pin, setPin] = useState('');
   const [tokenEdited, setTokenEdited] = useState(false);
+  const [wahaBaseUrl, setWahaBaseUrl] = useState('');
+  const [wahaSession, setWahaSession] = useState('default');
+  const [wahaQr, setWahaQr] = useState<string | null>(null);
+  const [wahaStatus, setWahaStatus] = useState('');
+  const [wahaSessionLoading, setWahaSessionLoading] = useState(false);
+  const wahaPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // True once /register has succeeded on Meta's side (timestamp set
   // in the row). When false, the saved config is metadata-only and
@@ -94,6 +101,20 @@ export function WhatsAppConfig() {
       ? `${window.location.origin}/api/whatsapp/webhook`
       : '';
 
+  const wahaWebhookUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/api/whatsapp/waha/webhook`
+      : '';
+
+  const stopWahaPolling = useCallback(() => {
+    if (wahaPollRef.current) {
+      clearInterval(wahaPollRef.current);
+      wahaPollRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => stopWahaPolling(), [stopWahaPolling]);
+
   const fetchConfig = useCallback(async (acctId: string) => {
     setLoading(true);
     try {
@@ -115,16 +136,22 @@ export function WhatsAppConfig() {
 
       if (data) {
         setConfig(data);
+        setProvider(data.provider === 'waha' ? 'waha' : 'meta');
         setPhoneNumberId(data.phone_number_id || '');
         setWabaId(data.waba_id || '');
+        setWahaBaseUrl(data.waha_base_url || '');
+        setWahaSession(data.waha_session || 'default');
         setAccessToken(MASKED_TOKEN);
         setVerifyToken('');
         setPin('');
         setTokenEdited(false);
       } else {
         setConfig(null);
+        setProvider('meta');
         setPhoneNumberId('');
         setWabaId('');
+        setWahaBaseUrl('');
+        setWahaSession('default');
         setAccessToken('');
         setVerifyToken('');
         setPin('');
@@ -200,6 +227,7 @@ export function WhatsAppConfig() {
       // and writing direct to Supabase stores the token in plaintext,
       // which then fails decryption on every subsequent health check.
       const payload: Record<string, unknown> = {
+        provider: 'meta',
         phone_number_id: phoneNumberId.trim(),
         waba_id: wabaId.trim() || null,
         verify_token: verifyToken.trim() || null,
@@ -277,6 +305,97 @@ export function WhatsAppConfig() {
     }
   }
 
+  async function handleSaveWaha() {
+    if (!wahaBaseUrl.trim()) {
+      toast.error('WAHA Base URL is required');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const payload: Record<string, unknown> = {
+        provider: 'waha',
+        waha_base_url: wahaBaseUrl.trim().replace(/\/+$/, ''),
+        waha_session: wahaSession.trim() || 'default',
+      };
+      if (tokenEdited && accessToken !== MASKED_TOKEN && accessToken.trim()) {
+        payload.access_token = accessToken.trim();
+      }
+
+      const res = await fetch('/api/whatsapp/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to save configuration');
+        return;
+      }
+
+      toast.success('WAHA configuration saved');
+      if (accountId) await fetchConfig(accountId);
+    } catch (err) {
+      console.error('WAHA save error:', err);
+      toast.error('Failed to save configuration');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function startWahaPolling() {
+    stopWahaPolling();
+    wahaPollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch('/api/whatsapp/waha/session');
+        const data = await res.json();
+        if (!res.ok) return;
+        const status = (data.status as string) || '';
+        setWahaStatus(status);
+        if (status === 'WORKING') {
+          stopWahaPolling();
+          toast.success(t('wahaWorking'));
+          if (accountId) await fetchConfig(accountId);
+        } else if (status !== 'SCAN_QR_CODE' && status !== 'STARTING') {
+          stopWahaPolling();
+        }
+      } catch (err) {
+        console.error('WAHA poll error:', err);
+      }
+    }, 3000);
+  }
+
+  async function handleStartWahaSession() {
+    try {
+      setWahaSessionLoading(true);
+      const res = await fetch('/api/whatsapp/waha/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ origin: window.location.origin }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to start WAHA session');
+        return;
+      }
+      setWahaStatus(data.status || '');
+      setWahaQr(data.qr || null);
+      if (data.status === 'SCAN_QR_CODE' || data.status === 'STARTING') {
+        startWahaPolling();
+      } else if (data.status === 'WORKING') {
+        stopWahaPolling();
+        toast.success(t('wahaWorking'));
+        if (accountId) await fetchConfig(accountId);
+      }
+    } catch (err) {
+      console.error('WAHA session start error:', err);
+      toast.error('Failed to start WAHA session');
+    } finally {
+      setWahaSessionLoading(false);
+    }
+  }
+
   async function handleTestConnection() {
     try {
       setTesting(true);
@@ -350,11 +469,17 @@ export function WhatsAppConfig() {
 
       toast.success('Configuration cleared. You can now re-enter your credentials.');
       setConfig(null);
+      setProvider('meta');
       setPhoneNumberId('');
       setWabaId('');
+      setWahaBaseUrl('');
+      setWahaSession('default');
       setAccessToken('');
       setVerifyToken('');
       setTokenEdited(false);
+      setWahaQr(null);
+      setWahaStatus('');
+      stopWahaPolling();
       setConnectionStatus('disconnected');
       setResetReason(null);
       setStatusMessage('');
@@ -368,6 +493,11 @@ export function WhatsAppConfig() {
 
   function handleCopyWebhookUrl() {
     navigator.clipboard.writeText(webhookUrl);
+    toast.success('Webhook URL copied to clipboard');
+  }
+
+  function handleCopyWahaWebhookUrl() {
+    navigator.clipboard.writeText(wahaWebhookUrl);
     toast.success('Webhook URL copied to clipboard');
   }
 
@@ -451,12 +581,12 @@ export function WhatsAppConfig() {
           </AlertDescription>
         </Alert>
 
-        {/* Registration Status — the "is it actually live?" check.
+        {/* Registration Status — Meta only.
             Credentials being valid is necessary but not sufficient;
             without a successful /register call the number won't
             receive inbound events. Surface this dimension separately
             so users don't trust a misleading green banner. */}
-        {config && (
+        {config && provider === 'meta' && (
           <Alert
             className={
               isRegistered
@@ -557,12 +687,51 @@ export function WhatsAppConfig() {
         {/* API Credentials */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-foreground">{t('apiCredentialsTitle')}</CardTitle>
+            <CardTitle className="text-foreground">
+              {provider === 'waha' ? t('wahaTitle') : t('apiCredentialsTitle')}
+            </CardTitle>
             <CardDescription className="text-muted-foreground">
-              {t('apiCredentialsDesc')}
+              {provider === 'waha' ? t('wahaDesc') : t('apiCredentialsDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">{t('providerTitle')}</Label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant={provider === 'meta' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    stopWahaPolling();
+                    setProvider('meta');
+                  }}
+                  className={
+                    provider === 'meta'
+                      ? 'bg-primary hover:bg-primary/90 text-primary-foreground'
+                      : 'border-border text-muted-foreground hover:text-foreground hover:bg-muted'
+                  }
+                >
+                  {t('providerMeta')}
+                </Button>
+                <Button
+                  type="button"
+                  variant={provider === 'waha' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setProvider('waha')}
+                  className={
+                    provider === 'waha'
+                      ? 'bg-primary hover:bg-primary/90 text-primary-foreground'
+                      : 'border-border text-muted-foreground hover:text-foreground hover:bg-muted'
+                  }
+                >
+                  {t('providerWaha')}
+                </Button>
+              </div>
+            </div>
+
+            {provider === 'meta' ? (
+              <>
             <div className="space-y-2">
               <Label className="text-muted-foreground">{t('phoneNumberId')}</Label>
               <Input
@@ -650,9 +819,76 @@ export function WhatsAppConfig() {
                 <span dangerouslySetInnerHTML={{ __html: t('pinHint') }} />
               </p>
             </div>
+              </>
+            ) : (
+              <>
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">{t('wahaBaseUrl')}</Label>
+              <Input
+                placeholder="https://waha.example.com"
+                value={wahaBaseUrl}
+                onChange={(e) => setWahaBaseUrl(e.target.value)}
+                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">{t('wahaSession')}</Label>
+              <Input
+                placeholder="default"
+                value={wahaSession}
+                onChange={(e) => setWahaSession(e.target.value)}
+                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">
+                {t('wahaApiKey')}
+                <span className="ml-1 text-muted-foreground">{t('optional')}</span>
+              </Label>
+              <div className="relative">
+                <Input
+                  type={showToken ? 'text' : 'password'}
+                  placeholder={t('wahaApiKeyHint')}
+                  value={accessToken}
+                  onChange={(e) => {
+                    setAccessToken(e.target.value);
+                    setTokenEdited(true);
+                  }}
+                  onFocus={() => {
+                    if (accessToken === MASKED_TOKEN) {
+                      setAccessToken('');
+                      setTokenEdited(true);
+                    }
+                  }}
+                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowToken(!showToken)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showToken ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+              {config && config.provider === 'waha' && !tokenEdited && (
+                <p className="text-xs text-muted-foreground">
+                  {t('tokenHidden')}
+                </p>
+              )}
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {t('wahaMvpNote')}
+            </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
+        {provider === 'meta' ? (
+          <>
         {/* Webhook URL */}
         <Card>
           <CardHeader>
@@ -738,6 +974,124 @@ export function WhatsAppConfig() {
             </Button>
           )}
         </div>
+          </>
+        ) : (
+          <>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-foreground">{t('wahaWebhookTitle')}</CardTitle>
+            <CardDescription className="text-muted-foreground">
+              {t('wahaWebhookDesc')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">{t('wahaWebhookUrl')}</Label>
+              <div className="flex gap-2">
+                <Input
+                  readOnly
+                  value={wahaWebhookUrl}
+                  className="bg-muted border-border text-muted-foreground font-mono text-sm"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handleCopyWahaWebhookUrl}
+                  className="shrink-0 border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                >
+                  <Copy className="size-4" />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex flex-wrap gap-3">
+          <Button
+            onClick={handleSaveWaha}
+            disabled={saving}
+            className="bg-primary hover:bg-primary/90 text-primary-foreground"
+          >
+            {saving ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                {t('saving')}
+              </>
+            ) : (
+              t('wahaSave')
+            )}
+          </Button>
+          {config && (
+            <Button
+              variant="outline"
+              onClick={handleReset}
+              disabled={resetting}
+              className="border-red-900 text-red-400 hover:text-red-300 hover:bg-red-950/40"
+            >
+              {resetting ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  {t('resetting')}
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="size-4" />
+                  {t('resetConfig')}
+                </>
+              )}
+            </Button>
+          )}
+        </div>
+
+        {(config?.provider === 'waha') && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-foreground">{t('wahaQrTitle')}</CardTitle>
+              <CardDescription className="text-muted-foreground">
+                {t('wahaQrDesc')}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Button
+                onClick={handleStartWahaSession}
+                disabled={wahaSessionLoading || !config || config.provider !== 'waha'}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              >
+                {wahaSessionLoading ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    {t('saving')}
+                  </>
+                ) : (
+                  t('wahaStartSession')
+                )}
+              </Button>
+              {wahaStatus && (
+                <p className="text-sm text-muted-foreground">
+                  {t('wahaStatus')}:{' '}
+                  <span className="text-foreground font-medium">{wahaStatus}</span>
+                </p>
+              )}
+              {wahaQr && (
+                <div className="space-y-2">
+                  <img
+                    src={wahaQr}
+                    alt="WhatsApp QR"
+                    className="mx-auto size-64 rounded-md bg-white p-2"
+                  />
+                  <p className="text-xs text-center text-muted-foreground">
+                    {t('wahaScanHint')}
+                  </p>
+                </div>
+              )}
+              {wahaStatus === 'WORKING' && (
+                <p className="text-sm text-emerald-400">{t('wahaWorking')}</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+          </>
+        )}
       </div>
 
       {/* Setup Instructions Sidebar */}
