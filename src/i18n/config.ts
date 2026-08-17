@@ -18,8 +18,15 @@ export function isAppLocale(value: string | null | undefined): value is AppLocal
 export function resolveLocale(
   preferred: string | null | undefined,
   fallbackEnv?: string | null,
+  acceptLanguage?: string | null,
 ): AppLocale {
   if (isAppLocale(preferred)) return preferred;
   if (isAppLocale(fallbackEnv)) return fallbackEnv;
+  if (acceptLanguage) {
+    const lower = acceptLanguage.toLowerCase();
+    // Prefer Spanish for es-* browsers (common for this deployment).
+    if (/(^|,)\s*es\b/.test(lower) || lower.includes('es-')) return 'es';
+    if (/(^|,)\s*ko\b/.test(lower) || lower.includes('ko-')) return 'ko';
+  }
   return 'en';
 }

@@ -41,6 +41,8 @@ interface DealFormProps {
   pipelineId: string;
   stages: PipelineStage[];
   defaultStageId?: string;
+  /** Pre-select this contact when creating a new deal (e.g. Inbox sidebar). */
+  defaultContactId?: string;
   onSaved: () => void;
 }
 
@@ -51,6 +53,7 @@ export function DealForm({
   pipelineId,
   stages,
   defaultStageId,
+  defaultContactId,
   onSaved,
 }: DealFormProps) {
   const t = useTranslations("Pipelines.form");
@@ -98,13 +101,13 @@ export function DealForm({
       setTitle("");
       setValue("");
       setCurrency(defaultCurrency);
-      setContactId("");
+      setContactId(defaultContactId || "");
       setStageId(defaultStageId || stages[0]?.id || "");
       setAssignedTo("");
       setExpectedCloseDate("");
       setNotes("");
     }
-  }, [open, deal, defaultStageId, stages, defaultCurrency]);
+  }, [open, deal, defaultStageId, defaultContactId, stages, defaultCurrency]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Load supporting data once the sheet is open

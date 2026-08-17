@@ -15,13 +15,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { MessageSquare, UsersRound } from "lucide-react";
+import { AuthBrandMark } from "@/components/auth/auth-brand";
+import {
+  useInviteBrand,
+  useSiteBrand,
+} from "@/hooks/use-invite-brand";
 
-// `useSearchParams` opts the component out of static prerendering
-// unless it sits under a Suspense boundary. We split the form into
-// a child component so the outer page can prerender the chrome
-// (background, card frame) while the form hydrates with the query
-// string on the client.
 export default function LoginPage() {
   return (
     <Suspense fallback={null}>
@@ -32,11 +31,13 @@ export default function LoginPage() {
 
 function LoginPageInner() {
   const searchParams = useSearchParams();
-  // Forwarded from `/join/<token>` when the visitor already has an
-  // account. After a successful sign-in we send them to the join
-  // page to accept rather than to /dashboard.
   const inviteToken = searchParams.get("invite");
   const t = useTranslations("LoginPage");
+  const inviteBrand = useInviteBrand(inviteToken);
+  const siteBrand = useSiteBrand();
+
+  const brandName = inviteBrand.accountName || siteBrand.name;
+  const brandLogo = inviteBrand.logoUrl || siteBrand.logoUrl;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -60,14 +61,6 @@ function LoginPageInner() {
       return;
     }
 
-    // Full-page navigation (not router.push) so the browser issues a
-    // fresh top-level request that carries the just-written Supabase
-    // auth cookies to the middleware gating /dashboard. A soft
-    // client-side navigation can reach the protected route before the
-    // server observes the new session, so the middleware bounces it
-    // back to /login — which looks like the page "just refreshing"
-    // instead of signing in (issue #365). Mirrors the deliberate full
-    // reload the invite-accept flow already uses in join/[token].
     const destination = inviteToken
       ? `/join/${encodeURIComponent(inviteToken)}`
       : "/dashboard";
@@ -78,20 +71,20 @@ function LoginPageInner() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md border-border bg-card">
         <CardHeader className="items-center text-center">
-          <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-            {inviteToken ? (
-              <UsersRound className="h-6 w-6 text-primary" />
-            ) : (
-              <MessageSquare className="h-6 w-6 text-primary" />
-            )}
-          </div>
+          <AuthBrandMark
+            name={brandName}
+            logoUrl={brandLogo}
+            invite={Boolean(inviteToken)}
+          />
           <CardTitle className="text-xl text-foreground">
-            {inviteToken ? t('titleAccept') : t('titleWelcome')}
+            {inviteToken
+              ? brandName
+                ? t("titleAcceptNamed", { name: brandName })
+                : t("titleAccept")
+              : t("titleWelcome")}
           </CardTitle>
           <CardDescription className="text-muted-foreground">
-            {inviteToken
-              ? t('descAccept')
-              : t('descWelcome')}
+            {inviteToken ? t("descAccept") : t("descWelcome")}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -104,12 +97,12 @@ function LoginPageInner() {
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="email" className="text-muted-foreground">
-                {t('emailLabel')}
+                {t("emailLabel")}
               </Label>
               <Input
                 id="email"
                 type="email"
-                placeholder={t('emailPlaceholder')}
+                placeholder={t("emailPlaceholder")}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -120,19 +113,19 @@ function LoginPageInner() {
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password" className="text-muted-foreground">
-                  {t('passwordLabel')}
+                  {t("passwordLabel")}
                 </Label>
                 <Link
                   href="/forgot-password"
                   className="text-sm text-primary hover:text-primary/80"
                 >
-                  {t('forgotPassword')}
+                  {t("forgotPassword")}
                 </Link>
               </div>
               <Input
                 id="password"
                 type="password"
-                placeholder={t('passwordPlaceholder')}
+                placeholder={t("passwordPlaceholder")}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -145,12 +138,12 @@ function LoginPageInner() {
               disabled={loading}
               className="mt-2 h-10 w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
-              {loading ? t('signingIn') : t('signIn')}
+              {loading ? t("signingIn") : t("signIn")}
             </Button>
           </form>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
-            {t('noAccount')}{" "}
+            {t("noAccount")}{" "}
             <Link
               href={
                 inviteToken
@@ -159,7 +152,7 @@ function LoginPageInner() {
               }
               className="text-primary hover:text-primary/80"
             >
-              {t('createAccount')}
+              {t("createAccount")}
             </Link>
           </p>
         </CardContent>

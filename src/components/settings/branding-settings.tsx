@@ -46,6 +46,9 @@ export function BrandingSettings() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(account?.name ?? "");
   const [logoUrl, setLogoUrl] = useState<string | null>(account?.logo_url ?? null);
+  const [loginBranding, setLoginBranding] = useState(
+    Boolean(account?.login_branding),
+  );
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [removeLogo, setRemoveLogo] = useState(false);
@@ -54,10 +57,11 @@ export function BrandingSettings() {
   useEffect(() => {
     setName(account?.name ?? "");
     setLogoUrl(account?.logo_url ?? null);
+    setLoginBranding(Boolean(account?.login_branding));
     setPendingFile(null);
     setPreviewUrl(null);
     setRemoveLogo(false);
-  }, [account?.id, account?.name, account?.logo_url]);
+  }, [account?.id, account?.name, account?.logo_url, account?.login_branding]);
 
   useEffect(() => {
     return () => {
@@ -71,7 +75,8 @@ export function BrandingSettings() {
   const dirty =
     name.trim() !== (account?.name ?? "") ||
     pendingFile != null ||
-    removeLogo;
+    removeLogo ||
+    loginBranding !== Boolean(account?.login_branding);
 
   function onPickFile(file: File | null) {
     if (!file) return;
@@ -131,6 +136,17 @@ export function BrandingSettings() {
         .eq("id", accountId);
 
       if (error) throw new Error(error.message);
+
+      if (loginBranding !== Boolean(account?.login_branding)) {
+        const { error: brandErr } = await supabase.rpc(
+          "set_account_login_branding",
+          {
+            p_account_id: accountId,
+            p_enabled: loginBranding,
+          },
+        );
+        if (brandErr) throw new Error(brandErr.message);
+      }
 
       await refreshProfile();
       setPendingFile(null);
@@ -231,6 +247,24 @@ export function BrandingSettings() {
             </div>
             <p className="text-xs text-muted-foreground">{t("logoDesc")}</p>
           </div>
+
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-muted/40 px-3 py-3">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 accent-primary"
+              checked={loginBranding}
+              disabled={!canEditSettings || profileLoading || saving}
+              onChange={(e) => setLoginBranding(e.target.checked)}
+            />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-foreground">
+                {t("showOnLogin")}
+              </span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {t("showOnLoginDesc")}
+              </span>
+            </span>
+          </label>
 
           <Button
             type="button"
