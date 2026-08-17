@@ -10,12 +10,14 @@ export interface AuthBrandInfo {
   tagline?: string | null;
   /** Invite flow uses the team icon fallback when there is no logo. */
   invite?: boolean;
-  /** Larger circular mark for the primary login hero. */
+  /** Larger mark for the primary login hero. */
   size?: "md" | "lg";
 }
 
 /**
  * Hero brand mark for auth cards: logo when available, else icon + name.
+ * Logos stay rectangular with object-contain (circular crop looks bad on
+ * wide marks with opaque backgrounds).
  */
 export function AuthBrandMark({
   name,
@@ -32,32 +34,40 @@ export function AuthBrandMark({
 
   return (
     <div className={cn("flex flex-col items-center text-center", className)}>
-      <div
-        className={cn(
-          "mb-4 flex items-center justify-center overflow-hidden rounded-full bg-primary/10 ring-2 ring-primary/25",
-          large ? "h-28 w-28" : "h-16 w-16",
-        )}
-      >
-        {logo ? (
-          // eslint-disable-next-line @next/next/no-img-element
+      {logo ? (
+        <div
+          className={cn(
+            "mb-4 flex items-center justify-center overflow-hidden rounded-2xl border border-border bg-white shadow-sm",
+            large
+              ? "h-[7.5rem] w-full max-w-[17rem] px-4 py-3"
+              : "h-16 w-16 p-1.5",
+          )}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={logo}
             alt={displayName ?? "Logo"}
-            className={cn(
-              "h-full w-full object-cover",
-              large ? "p-0" : "p-0.5",
-            )}
+            className="h-full w-full object-contain"
           />
-        ) : invite ? (
-          <UsersRound
-            className={cn("text-primary", large ? "h-12 w-12" : "h-7 w-7")}
-          />
-        ) : (
-          <MessageSquare
-            className={cn("text-primary", large ? "h-12 w-12" : "h-7 w-7")}
-          />
-        )}
-      </div>
+        </div>
+      ) : (
+        <div
+          className={cn(
+            "mb-4 flex items-center justify-center overflow-hidden rounded-full bg-primary/10 ring-2 ring-primary/25",
+            large ? "h-28 w-28" : "h-16 w-16",
+          )}
+        >
+          {invite ? (
+            <UsersRound
+              className={cn("text-primary", large ? "h-12 w-12" : "h-7 w-7")}
+            />
+          ) : (
+            <MessageSquare
+              className={cn("text-primary", large ? "h-12 w-12" : "h-7 w-7")}
+            />
+          )}
+        </div>
+      )}
       {displayName ? (
         <p
           className={cn(
