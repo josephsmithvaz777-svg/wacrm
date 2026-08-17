@@ -74,9 +74,11 @@ function LoginPageInner() {
           <AuthBrandMark
             name={brandName}
             logoUrl={brandLogo}
+            tagline={inviteToken ? null : t("tagline")}
             invite={Boolean(inviteToken)}
+            size="lg"
           />
-          <CardTitle className="text-xl text-foreground">
+          <CardTitle className="mt-3 text-xl text-foreground">
             {inviteToken
               ? brandName
                 ? t("titleAcceptNamed", { name: brandName })

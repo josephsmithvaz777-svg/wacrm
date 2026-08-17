@@ -133,8 +133,9 @@ function SignupPageInner() {
             name={brandName}
             logoUrl={brandLogo}
             invite={Boolean(inviteToken)}
+            size="lg"
           />
-          <CardTitle className="text-xl text-foreground">
+          <CardTitle className="mt-3 text-xl text-foreground">
             {inviteToken
               ? brandName
                 ? t("titleInviteNamed", { name: brandName })

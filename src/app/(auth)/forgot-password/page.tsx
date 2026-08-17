@@ -80,8 +80,12 @@ export default function ForgotPasswordPage() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md border-border bg-card">
         <CardHeader className="items-center text-center">
-          <AuthBrandMark name={siteBrand.name} logoUrl={siteBrand.logoUrl} />
-          <CardTitle className="text-xl text-foreground">{t("title")}</CardTitle>
+          <AuthBrandMark
+            name={siteBrand.name}
+            logoUrl={siteBrand.logoUrl}
+            size="lg"
+          />
+          <CardTitle className="mt-3 text-xl text-foreground">{t("title")}</CardTitle>
           <CardDescription className="text-muted-foreground">
             {t("description")}
           </CardDescription>
