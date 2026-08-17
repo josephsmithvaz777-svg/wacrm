@@ -223,7 +223,9 @@ export async function processWahaEvent(
     return;
   }
 
-  if (event.event !== 'message') return;
+  // GOWS/WEBJS: inbound texts arrive as `message`; `message.any` also
+  // includes outbound echoes — those are filtered via fromMe below.
+  if (event.event !== 'message' && event.event !== 'message.any') return;
 
   const payload = event.payload || {};
   if (payload.fromMe === true) return;

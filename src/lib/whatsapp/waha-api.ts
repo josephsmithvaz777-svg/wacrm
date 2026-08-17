@@ -167,7 +167,7 @@ export async function ensureSession(
     webhooks: [
       {
         url: webhookUrl,
-        events: ['message', 'message.ack', 'session.status'],
+        events: ['message', 'message.any', 'message.ack', 'session.status'],
       },
     ],
   };

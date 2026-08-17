@@ -336,21 +336,31 @@ export async function POST(request: Request) {
         )
       }
 
-      // If the WAHA session is already WORKING, mark connected immediately
-      // so the inbox banner clears without waiting for another webhook.
+      // Re-attach CRM webhook on the WAHA session (often lost when the
+      // session is recreated in the Dashboard) and mark connected if WORKING.
       try {
-        const { getSession } = await import('@/lib/whatsapp/waha-api')
+        const { ensureSession, getSession } = await import(
+          '@/lib/whatsapp/waha-api'
+        )
         const apiKeyPlain =
           access_token && access_token !== '••••••••••••••••'
             ? access_token
             : existing?.access_token
               ? decrypt(existing.access_token)
               : ''
-        const session = await getSession({
+        const opts = {
           baseUrl,
           apiKey: apiKeyPlain || null,
           session: sessionName,
-        })
+        }
+        const origin = new URL(request.url).origin
+        const webhookUrl = `${origin}/api/whatsapp/waha/webhook`
+        try {
+          await ensureSession(opts, webhookUrl)
+        } catch (err) {
+          console.warn('[whatsapp/config] WAHA ensureSession after save:', err)
+        }
+        const session = await getSession(opts)
         if (session?.status === 'WORKING') {
           await supabase
             .from('whatsapp_config')
