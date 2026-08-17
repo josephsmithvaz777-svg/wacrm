@@ -279,7 +279,13 @@
       "deals": "Deals",
       "noTags": "No tags",
       "noDeals": "No deals",
-      "addNotePlaceholder": "Add a note..."
+      "addNotePlaceholder": "Add a note...",
+      "editName": "Edit name",
+      "saveName": "Save name",
+      "cancelEditName": "Cancel",
+      "namePlaceholder": "Contact name",
+      "toastNameUpdated": "Name updated",
+      "toastNameUpdateFailed": "Couldn’t update name"
     },
     "aiBanner": {
       "pausedTitle": "AI assistant is paused here",

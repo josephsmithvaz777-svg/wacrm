@@ -3,29 +3,37 @@
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { cn } from "@/lib/utils";
 import type { Contact, Deal, ContactNote, Tag } from "@/types";
 import {
   Phone,
   Mail,
   Copy,
   Check,
-  User,
   Tag as TagIcon,
   DollarSign,
   StickyNote,
   Plus,
+  Pencil,
+  X,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 
 interface ContactSidebarProps {
   contact: Contact | null;
+  /** Called after name/details are saved so the Inbox list + thread header refresh. */
+  onContactUpdated?: (contact: Contact) => void;
 }
 
-export function ContactSidebar({ contact }: ContactSidebarProps) {
+export function ContactSidebar({
+  contact,
+  onContactUpdated,
+}: ContactSidebarProps) {
   const tSidebar = useTranslations("Inbox.sidebar");
   const tThread = useTranslations("Inbox.messageThread");
 
@@ -36,6 +44,10 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
   const [tags, setTags] = useState<(Tag & { contact_tag_id: string })[]>([]);
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
+
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [savingName, setSavingName] = useState(false);
 
   const fetchContactData = useCallback(async () => {
     if (!contact) return;
@@ -80,6 +92,11 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
     fetchContactData();
   }, [fetchContactData]);
 
+  useEffect(() => {
+    setEditingName(false);
+    setNameDraft(contact?.name ?? "");
+  }, [contact?.id, contact?.name]);
+
   const handleCopyPhone = useCallback(async () => {
     if (!contact?.phone) return;
     await navigator.clipboard.writeText(contact.phone);
@@ -89,6 +106,35 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
     // React Compiler's inference agrees with the manual dep list —
     // fixes the `preserve-manual-memoization` lint error.
   }, [contact]);
+
+  const handleSaveName = useCallback(async () => {
+    if (!contact) return;
+    const nextName = nameDraft.trim() || contact.phone;
+    if (nextName === (contact.name || contact.phone)) {
+      setEditingName(false);
+      return;
+    }
+    setSavingName(true);
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("contacts")
+      .update({
+        name: nextName,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", contact.id)
+      .select()
+      .single();
+
+    setSavingName(false);
+    if (error || !data) {
+      toast.error(tSidebar("toastNameUpdateFailed"));
+      return;
+    }
+    toast.success(tSidebar("toastNameUpdated"));
+    setEditingName(false);
+    onContactUpdated?.(data as Contact);
+  }, [contact, nameDraft, onContactUpdated, tSidebar]);
 
   const handleAddNote = useCallback(async () => {
     if (!contact || !newNote.trim()) return;
@@ -147,9 +193,75 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
                 initials
               )}
             </div>
-            <h3 className="mt-3 text-sm font-semibold text-foreground">
-              {displayName}
-            </h3>
+
+            {editingName ? (
+              <div className="mt-3 flex w-full items-center gap-1">
+                <Input
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  placeholder={tSidebar("namePlaceholder")}
+                  className="h-8 text-sm"
+                  autoFocus
+                  disabled={savingName}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void handleSaveName();
+                    }
+                    if (e.key === "Escape") {
+                      setEditingName(false);
+                      setNameDraft(contact.name ?? "");
+                    }
+                  }}
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0 p-0"
+                  onClick={() => void handleSaveName()}
+                  disabled={savingName}
+                  aria-label={tSidebar("saveName")}
+                >
+                  {savingName ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Check className="h-3.5 w-3.5 text-primary" />
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0 p-0"
+                  onClick={() => {
+                    setEditingName(false);
+                    setNameDraft(contact.name ?? "");
+                  }}
+                  disabled={savingName}
+                  aria-label={tSidebar("cancelEditName")}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <div className="mt-3 flex max-w-full items-center justify-center gap-1">
+                <h3 className="truncate text-sm font-semibold text-foreground">
+                  {displayName}
+                </h3>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    setNameDraft(contact.name ?? "");
+                    setEditingName(true);
+                  }}
+                  aria-label={tSidebar("editName")}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )}
+
             {contact.company && (
               <p className="text-xs text-muted-foreground">{contact.company}</p>
             )}

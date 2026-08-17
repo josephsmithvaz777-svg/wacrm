@@ -522,6 +522,20 @@ function InboxPageInner() {
     []
   );
 
+  const handleContactUpdated = useCallback((updated: Contact) => {
+    setActiveContact(updated);
+    setActiveConversation((prev) =>
+      prev && prev.contact_id === updated.id
+        ? { ...prev, contact: updated }
+        : prev,
+    );
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.contact_id === updated.id ? { ...c, contact: updated } : c,
+      ),
+    );
+  }, []);
+
   const handleStatusChange = useCallback(
     (conversationId: string, status: ConversationStatus) => {
       setConversations((prev) =>
@@ -632,7 +646,10 @@ function InboxPageInner() {
             toggle — which is itself desktop-only — never affects it. */}
         {contactPanelOpen && (
           <div className="hidden lg:block">
-            <ContactSidebar contact={activeContact} />
+            <ContactSidebar
+              contact={activeContact}
+              onContactUpdated={handleContactUpdated}
+            />
           </div>
         )}
       </div>
