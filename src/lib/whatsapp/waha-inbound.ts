@@ -10,9 +10,15 @@ import {
   downloadWahaMedia,
   extractInboundDisplayName,
   extractInboundText,
+  extractWahaMeId,
+  extractWahaMessageId,
   fetchContactDisplayName,
   isUsableDisplayName,
+  isWahaFromMe,
+  parseWahaSerializedId,
+  pickOutboundChatJid,
   resolveInboundChatId,
+  resolveWahaMeId,
   type WahaClientOptions,
 } from '@/lib/whatsapp/waha-api';
 import { runAutomationsForTrigger } from '@/lib/automations/engine';
@@ -180,6 +186,96 @@ async function findOrCreateConversation(
   return { conversation: created, created: true };
 }
 
+/**
+ * When WAHA only gives a Linked ID (`123@lid`) and the lids API cannot
+ * map it to a phone, reuse the conversation that already stored an
+ * inbound message with that JID in `messages.message_id`
+ * (`false_123@lid_…` / `true_123@lid_…`).
+ */
+async function findConversationByRemoteJid(accountId: string, remoteJid: string) {
+  const needle = remoteJid.replace(/[%\\]/g, '').trim();
+  if (needle.length < 6) return null;
+
+  const { data: msgs, error } = await admin()
+    .from('messages')
+    .select('conversation_id')
+    .like('message_id', `%${needle}%`)
+    .order('created_at', { ascending: false })
+    .limit(40);
+
+  if (error) {
+    console.warn('[waha-inbound] remote-jid lookup failed:', error.message);
+    return null;
+  }
+  const ids = [
+    ...new Set(
+      (msgs ?? [])
+        .map((row: { conversation_id?: string }) => row.conversation_id)
+        .filter((id: string | undefined): id is string => Boolean(id)),
+    ),
+  ];
+  if (!ids.length) return null;
+
+  const { data: convs } = await admin()
+    .from('conversations')
+    .select('*')
+    .eq('account_id', accountId)
+    .in('id', ids)
+    .limit(1);
+
+  return convs?.[0] ?? null;
+}
+
+/**
+ * GOWS emits `engine.event` / `events.Message` with Info.Chat + Info.IsFromMe.
+ * The Event Monitor shows those even when `message.any` already fired —
+ * treat them as a message.any payload so phone sends aren't dropped if
+ * only the engine event reaches the CRM webhook.
+ */
+function unwrapEngineMessageEvent(
+  event: WahaWebhookEvent,
+): WahaWebhookEvent {
+  if (event.event !== 'engine.event') return event;
+  const payload = event.payload || {};
+  const name = String(payload.event ?? payload.name ?? '');
+  if (name !== 'events.Message' && !name.endsWith('.Message')) return event;
+
+  const data = (
+    payload.data && typeof payload.data === 'object' ? payload.data : payload
+  ) as Record<string, unknown>;
+  const info =
+    data.Info && typeof data.Info === 'object'
+      ? (data.Info as Record<string, unknown>)
+      : null;
+  if (!info) return event;
+
+  const chat = typeof info.Chat === 'string' ? info.Chat : null;
+  const sender = typeof info.Sender === 'string' ? info.Sender : null;
+  const isFromMe = info.IsFromMe === true || info.isFromMe === true;
+  const rawId =
+    (typeof info.ID === 'string' && info.ID) ||
+    (typeof info.Id === 'string' && info.Id) ||
+    null;
+  const serialized =
+    chat && rawId
+      ? `${isFromMe ? 'true' : 'false'}_${chat}_${rawId}`
+      : undefined;
+
+  return {
+    ...event,
+    event: 'message.any',
+    payload: {
+      ...payload,
+      fromMe: isFromMe,
+      from: isFromMe ? chat : sender || chat,
+      to: isFromMe ? chat : undefined,
+      chatId: chat,
+      id: serialized,
+      _data: data,
+    },
+  };
+}
+
 export async function processWahaEvent(
   event: WahaWebhookEvent,
   config: {
@@ -190,6 +286,7 @@ export async function processWahaEvent(
     access_token: string | null;
   },
 ): Promise<void> {
+  event = unwrapEngineMessageEvent(event);
   const opts: WahaClientOptions = {
     baseUrl: config.waha_base_url,
     apiKey: config.access_token,
@@ -221,7 +318,7 @@ export async function processWahaEvent(
 
   if (event.event === 'message.ack') {
     const payload = event.payload || {};
-    const id = typeof payload.id === 'string' ? payload.id : null;
+    const id = extractWahaMessageId(payload);
     const ack = typeof payload.ack === 'number' ? payload.ack : null;
     if (!id || ack == null) return;
     // WAHA ack: 0 ERROR/PENDING, 1 SERVER, 2 DEVICE, 3 READ, 4 PLAYED
@@ -236,11 +333,13 @@ export async function processWahaEvent(
   }
 
   // GOWS/WEBJS: inbound texts arrive as `message`; `message.any` also
-  // includes outbound echoes — those are filtered via fromMe below.
+  // includes outbound echoes. Persist those as agent messages so sends
+  // from the CRM (and from the linked WhatsApp session) show in the
+  // thread — skipping fromMe was dropping every outgoing bubble.
   if (event.event !== 'message' && event.event !== 'message.any') return;
 
   const payload = event.payload || {};
-  if (payload.fromMe === true) return;
+  const fromMe = isWahaFromMe(payload);
 
   // Ignore empty protocol/sync noise (no body, no media).
   const bodyText = extractInboundText(payload);
@@ -254,6 +353,12 @@ export async function processWahaEvent(
         })
       : null;
   if (!bodyText && !(hasMedia && media?.url)) {
+    if (fromMe) {
+      console.warn(
+        '[waha-inbound] fromMe echo ignored (no text/media)',
+        extractWahaMessageId(payload),
+      );
+    }
     return;
   }
 
@@ -262,9 +367,13 @@ export async function processWahaEvent(
       ? payload.from
       : typeof payload.chatId === 'string'
         ? payload.chatId
-        : null;
+        : typeof payload.to === 'string'
+          ? payload.to
+          : null;
   // Groups / status / newsletters are not 1:1 inbox chats — skip quietly.
+  // For fromMe, `from` may be our own JID; don't treat that as a group skip.
   if (
+    !fromMe &&
     fromRaw &&
     (fromRaw.endsWith('@g.us') ||
       fromRaw.endsWith('@newsletter') ||
@@ -273,51 +382,106 @@ export async function processWahaEvent(
     return;
   }
 
-  const resolved = await resolveInboundChatId(opts, payload);
-  if (!resolved) {
+  const meId = fromMe
+    ? await resolveWahaMeId(opts, extractWahaMeId(event.me))
+    : extractWahaMeId(event.me);
+
+  const remoteHint =
+    (fromMe ? pickOutboundChatJid(payload, meId) : fromRaw) ||
+    (typeof payload.id === 'string'
+      ? parseWahaSerializedId(payload.id)?.remoteJid ?? null
+      : null);
+
+  const resolved = await resolveInboundChatId(opts, payload, {
+    fromMe,
+    meId,
+  });
+
+  let contactOutcome: {
+    contact: { id: string };
+    wasCreated: boolean;
+  } | null = null;
+  let convResult: {
+    conversation: {
+      id: string;
+      contact_id?: string;
+      unread_count?: number;
+      assigned_agent_id?: string | null;
+      status?: string;
+    };
+    created: boolean;
+  } | null = null;
+
+  if (resolved) {
+    const phone = normalizePhone(resolved.phone);
+    if (phone) {
+      await admin()
+        .from('whatsapp_config')
+        .update({
+          status: 'connected',
+          connected_at: new Date().toISOString(),
+          registered_at: new Date().toISOString(),
+          last_registration_error: null,
+        })
+        .eq('account_id', config.account_id)
+        .eq('provider', 'waha');
+
+      const fromPayload = extractInboundDisplayName(payload, phone);
+      const fromApi =
+        (isUsableDisplayName(fromPayload, phone) ? fromPayload : null) ||
+        (await fetchContactDisplayName(opts, resolved.chatId, phone)) ||
+        (await fetchContactDisplayName(opts, phone, phone));
+      const pushName = fromApi || phone;
+
+      const createdContact = await findOrCreateContact(
+        config.account_id,
+        config.user_id,
+        phone,
+        pushName,
+      );
+      if (createdContact) {
+        contactOutcome = {
+          contact: { id: createdContact.contact.id },
+          wasCreated: createdContact.wasCreated,
+        };
+        convResult = await findOrCreateConversation(
+          config.account_id,
+          config.user_id,
+          createdContact.contact.id,
+        );
+      }
+    }
+  }
+
+  // LID chats: WAHA Event Monitor shows `true_1840…@lid_…` but the lids
+  // API often cannot map that to a phone. If this thread already has an
+  // inbound whose message_id contains the same JID, attach there.
+  if (!convResult && remoteHint) {
+    const existing = await findConversationByRemoteJid(
+      config.account_id,
+      remoteHint,
+    );
+    if (existing?.id && existing.contact_id) {
+      contactOutcome = {
+        contact: { id: existing.contact_id as string },
+        wasCreated: false,
+      };
+      convResult = { conversation: existing, created: false };
+    }
+  }
+
+  if (!convResult || !contactOutcome) {
     console.warn(
-      '[waha-inbound] skipping message — could not resolve phone from',
-      fromRaw,
+      '[waha-inbound] skipping message — could not resolve chat',
+      {
+        event: event.event,
+        fromMe,
+        fromRaw,
+        remoteHint,
+      },
     );
     return;
   }
-
-  const phone = normalizePhone(resolved.phone);
-  if (!phone) return;
-
-  // Mark CRM WhatsApp as connected once real traffic flows.
-  await admin()
-    .from('whatsapp_config')
-    .update({
-      status: 'connected',
-      connected_at: new Date().toISOString(),
-      registered_at: new Date().toISOString(),
-      last_registration_error: null,
-    })
-    .eq('account_id', config.account_id)
-    .eq('provider', 'waha');
-
-  const fromPayload = extractInboundDisplayName(payload, phone);
-  const fromApi =
-    (isUsableDisplayName(fromPayload, phone) ? fromPayload : null) ||
-    (await fetchContactDisplayName(opts, resolved.chatId, phone)) ||
-    (await fetchContactDisplayName(opts, phone, phone));
-  const pushName = fromApi || phone;
-
-  const contactOutcome = await findOrCreateContact(
-    config.account_id,
-    config.user_id,
-    phone,
-    pushName,
-  );
-  if (!contactOutcome) return;
-
-  const convResult = await findOrCreateConversation(
-    config.account_id,
-    config.user_id,
-    contactOutcome.contact.id,
-  );
-  if (!convResult) return;
 
   if (convResult.created) {
     await dispatchWebhookEvent(admin(), config.account_id, 'conversation.created', {
@@ -339,8 +503,7 @@ export async function processWahaEvent(
     }
   }
 
-  const messageId =
-    typeof payload.id === 'string' ? payload.id : `waha-${Date.now()}`;
+  const messageId = extractWahaMessageId(payload) || `waha-${Date.now()}`;
 
   let contentType = 'text';
   let contentText = bodyText;
@@ -368,15 +531,21 @@ export async function processWahaEvent(
     .upsert(
       {
         conversation_id: convResult.conversation.id,
-        sender_type: 'customer',
+        sender_type: fromMe ? 'agent' : 'customer',
         content_type: contentType,
         content_text: contentText,
         media_url: mediaUrl,
         message_id: messageId,
-        status: 'delivered',
+        status: fromMe ? 'sent' : 'delivered',
         created_at: ts,
       },
-      { onConflict: 'conversation_id,message_id', ignoreDuplicates: true },
+      {
+        onConflict: 'conversation_id,message_id',
+        // Inbound must not overwrite an agent row if the CRM send won
+        // the race. Outbound echoes SHOULD overwrite a customer row
+        // that was mis-attributed when fromMe wasn't detected.
+        ignoreDuplicates: !fromMe,
+      },
     )
     .select('id');
 
@@ -386,18 +555,26 @@ export async function processWahaEvent(
   }
   if (!insertedRows || insertedRows.length === 0) return;
 
+  const convUpdate: Record<string, unknown> = {
+    last_message_text: contentText || `[${contentType}]`,
+    last_message_at: ts,
+    updated_at: ts,
+  };
+  if (!fromMe) {
+    convUpdate.unread_count = (convResult.conversation.unread_count || 0) + 1;
+  }
+
   await admin()
     .from('conversations')
-    .update({
-      last_message_text: contentText || `[${contentType}]`,
-      last_message_at: ts,
-      updated_at: ts,
-      unread_count: (convResult.conversation.unread_count || 0) + 1,
-    })
+    .update(convUpdate)
     .eq('id', convResult.conversation.id);
 
   const messageDbId = insertedRows[0].id as string;
   const inboundText = contentText || '';
+
+  // Outbound echoes are already in the thread (CRM send and/or this
+  // row). Don't fire inbound automations, AI, or message.received.
+  if (fromMe) return;
 
   try {
     const flowResult = await dispatchInboundToFlows({

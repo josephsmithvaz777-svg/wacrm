@@ -135,18 +135,152 @@ export async function resolveOutboundChatId(
   return fallback;
 }
 
-function extractMessageId(payload: unknown): string {
-  if (!payload || typeof payload !== 'object') {
-    return `waha-${Date.now()}`;
+function firstNonEmptyString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value;
   }
+  return null;
+}
+
+function idFromObject(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null;
+  const o = value as Record<string, unknown>;
+  return firstNonEmptyString(o._serialized, o.id);
+}
+
+/**
+ * Stable WhatsApp message id across WAHA engines (WEBJS string ids,
+ * GOWS `{ _serialized, id }` objects, `key.id`, arrays).
+ * Returns null when the payload has no usable id — callers that must
+ * persist a row can fall back to a synthetic `waha-${Date.now()}`.
+ */
+export function extractWahaMessageId(payload: unknown): string | null {
+  if (!payload) return null;
+  if (typeof payload === 'string' && payload.trim()) return payload;
+  if (Array.isArray(payload)) return extractWahaMessageId(payload[0]);
+  if (typeof payload !== 'object') return null;
+
   const p = payload as Record<string, unknown>;
-  if (typeof p.id === 'string') return p.id;
-  if (p.key && typeof p.key === 'object') {
-    const key = p.key as Record<string, unknown>;
-    if (typeof key.id === 'string') return key.id;
+  if (typeof p.id === 'string' && p.id.trim()) return p.id;
+  const fromId = idFromObject(p.id);
+  if (fromId) return fromId;
+  const fromKey = idFromObject(p.key);
+  if (fromKey) return fromKey;
+  if (typeof p.messageId === 'string' && p.messageId.trim()) return p.messageId;
+  if (Array.isArray(p.ids)) return extractWahaMessageId(p.ids[0]);
+  return null;
+}
+
+function extractMessageId(payload: unknown): string {
+  return extractWahaMessageId(payload) || `waha-${Date.now()}`;
+}
+
+function isTruthyFlag(value: unknown): boolean {
+  return value === true || value === 1 || value === 'true';
+}
+
+/**
+ * WEBJS serializes ids as `{true|false}_{remoteJid}_{messageId}`.
+ * Event Monitor shows e.g. `true_184086660382908@lid_A54F679B…` — the
+ * remote JID is often a Linked ID, not a phone `@c.us`.
+ */
+export function parseWahaSerializedId(
+  id: string,
+): { fromMe: boolean; remoteJid: string; messageId: string } | null {
+  const match = /^(true|false)_(.+)_([^_]+)$/.exec(id);
+  if (!match) return null;
+  const remoteJid = match[2];
+  if (!remoteJid.includes('@') && !/^\d{8,}$/.test(remoteJid)) return null;
+  return {
+    fromMe: match[1] === 'true',
+    remoteJid,
+    messageId: match[3],
+  };
+}
+
+function remoteJidFromSerializedPayload(
+  payload: Record<string, unknown>,
+): string | null {
+  if (typeof payload.id === 'string') {
+    return parseWahaSerializedId(payload.id)?.remoteJid ?? null;
   }
-  if (typeof p.messageId === 'string') return p.messageId;
-  return `waha-${Date.now()}`;
+  if (payload.id && typeof payload.id === 'object') {
+    const serialized = (payload.id as Record<string, unknown>)._serialized;
+    if (typeof serialized === 'string') {
+      return parseWahaSerializedId(serialized)?.remoteJid ?? null;
+    }
+  }
+  return null;
+}
+
+/**
+ * True when a WAHA message was sent by the connected session.
+ * Engines disagree on where `fromMe` lives — WEBJS puts it on the
+ * payload, GOWS often nests it under `id` / `key` / `_data.Info`.
+ */
+export function isWahaFromMe(payload: Record<string, unknown>): boolean {
+  if (isTruthyFlag(payload.fromMe)) return true;
+
+  if (typeof payload.id === 'string' && payload.id.startsWith('true_')) {
+    return true;
+  }
+
+  if (payload.id && typeof payload.id === 'object') {
+    const id = payload.id as Record<string, unknown>;
+    if (isTruthyFlag(id.fromMe)) return true;
+    if (typeof id._serialized === 'string' && id._serialized.startsWith('true_')) {
+      return true;
+    }
+  }
+
+  if (payload.key && typeof payload.key === 'object') {
+    const key = payload.key as Record<string, unknown>;
+    if (isTruthyFlag(key.fromMe)) return true;
+  }
+
+  const data =
+    payload._data && typeof payload._data === 'object'
+      ? (payload._data as Record<string, unknown>)
+      : null;
+  if (data) {
+    if (isTruthyFlag(data.fromMe)) return true;
+    if (data.key && typeof data.key === 'object') {
+      const key = data.key as Record<string, unknown>;
+      if (isTruthyFlag(key.fromMe)) return true;
+    }
+    if (data.id && typeof data.id === 'object') {
+      const id = data.id as Record<string, unknown>;
+      if (isTruthyFlag(id.fromMe)) return true;
+    }
+    if (data.Info && typeof data.Info === 'object') {
+      const info = data.Info as Record<string, unknown>;
+      if (isTruthyFlag(info.IsFromMe) || isTruthyFlag(info.isFromMe)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function isSessionMeJid(
+  jid: string | null | undefined,
+  meId: string | null | undefined,
+): boolean {
+  if (!jid || !meId) return false;
+  const left = chatIdToPhone(jid);
+  const right = chatIdToPhone(meId);
+  if (!left || !right) return false;
+  return left === right || left.endsWith(right) || right.endsWith(left);
+}
+
+/** Best-effort id from WAHA `me` (webhook `event.me` or `GET /sessions`). */
+export function extractWahaMeId(me: unknown): string | null {
+  if (!me) return null;
+  if (typeof me === 'string' && me.trim()) return me.trim();
+  if (typeof me !== 'object') return null;
+  const o = me as Record<string, unknown>;
+  return firstNonEmptyString(o.id, o.jid, o.lid);
 }
 
 export async function getSession(
@@ -175,7 +309,9 @@ export async function ensureSession(
     webhooks: [
       {
         url: webhookUrl,
-        events: ['message', 'message.any', 'message.ack', 'session.status'],
+        // `message` is inbound-only on most engines. Phone-sent echoes
+        // only arrive on `message.any`.
+        events: ['message', 'message.any', 'message.ack', 'session.status', 'engine.event'],
       },
     ],
   };
@@ -224,6 +360,33 @@ export async function ensureSession(
   }
 
   return { name: session, status: existing.status };
+}
+
+const meIdCache = new Map<string, { id: string; at: number }>();
+const ME_ID_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * Session's own JID — needed to tell the contact apart from us on
+ * fromMe echoes. Prefer the webhook `me` field; fall back to GET session
+ * (cached) because some engines omit `me` on message.any.
+ */
+export async function resolveWahaMeId(
+  opts: WahaClientOptions,
+  eventMeId?: string | null,
+): Promise<string | null> {
+  if (eventMeId) return eventMeId;
+  const key = `${normalizeBaseUrl(opts.baseUrl)}|${opts.session || 'default'}`;
+  const cached = meIdCache.get(key);
+  if (cached && Date.now() - cached.at < ME_ID_TTL_MS) return cached.id;
+  try {
+    const session = await getSession(opts);
+    const id = extractWahaMeId(session?.me);
+    if (id) meIdCache.set(key, { id, at: Date.now() });
+    return id;
+  } catch (err) {
+    console.warn('[waha] resolve me id failed:', err);
+    return cached?.id ?? null;
+  }
 }
 
 /**
@@ -617,21 +780,97 @@ function pushCandidate(list: string[], value: unknown) {
   if (typeof value === 'string' && value.trim()) list.push(value.trim());
 }
 
+function isGroupOrStatusJid(jid: string): boolean {
+  return (
+    jid.endsWith('@g.us') ||
+    jid.endsWith('@newsletter') ||
+    jid === 'status@broadcast'
+  );
+}
+
+function remoteJidFromPayload(payload: Record<string, unknown>): string | null {
+  const fromKey = (key: unknown): string | null => {
+    if (!key || typeof key !== 'object') return null;
+    const jid = (key as Record<string, unknown>).remoteJid;
+    return typeof jid === 'string' && jid.trim() ? jid.trim() : null;
+  };
+  const top = fromKey(payload.key);
+  if (top) return top;
+  const data =
+    payload._data && typeof payload._data === 'object'
+      ? (payload._data as Record<string, unknown>)
+      : null;
+  return fromKey(data?.key);
+}
+
+function infoChatFromPayload(payload: Record<string, unknown>): string | null {
+  const data =
+    payload._data && typeof payload._data === 'object'
+      ? (payload._data as Record<string, unknown>)
+      : null;
+  const info =
+    data?.Info && typeof data.Info === 'object'
+      ? (data.Info as Record<string, unknown>)
+      : null;
+  return typeof info?.Chat === 'string' && info.Chat.trim() ? info.Chat.trim() : null;
+}
+
+/**
+ * Chat JID for an outbound (fromMe) echo. WEBJS puts our number in `to`
+ * and the contact in `chatId`/`from`; GOWS often puts us in `from` and
+ * the contact in `to`/`key.remoteJid`. Prefer the chat, never our own JID.
+ */
+export function pickOutboundChatJid(
+  payload: Record<string, unknown>,
+  meId?: string | null,
+): string | null {
+  const to = typeof payload.to === 'string' ? payload.to : null;
+  const chatId = typeof payload.chatId === 'string' ? payload.chatId : null;
+  const from = typeof payload.from === 'string' ? payload.from : null;
+  const ranked = [
+    remoteJidFromSerializedPayload(payload),
+    chatId,
+    infoChatFromPayload(payload),
+    remoteJidFromPayload(payload),
+    from,
+    to,
+  ];
+  const usable = ranked.filter(
+    (jid): jid is string => Boolean(jid) && !isGroupOrStatusJid(jid as string),
+  );
+  const notMe = usable.find((jid) => !isSessionMeJid(jid, meId));
+  return notMe ?? usable[0] ?? null;
+}
+
 /**
  * Prefer real @c.us from webhook payload fields; fall back to LID resolve API.
+ * For outbound echoes (`fromMe`), GOWS often puts the session's own JID in
+ * `from` and the contact in `to` / `chatId` — those must win or the echo
+ * lands on the wrong conversation (or is dropped).
  */
 export async function resolveInboundChatId(
   opts: WahaClientOptions,
   payload: Record<string, unknown>,
+  options?: { fromMe?: boolean; meId?: string | null },
 ): Promise<{ chatId: string; phone: string } | null> {
-  const from =
+  const rawFrom =
     typeof payload.from === 'string'
       ? payload.from
       : typeof payload.chatId === 'string'
         ? payload.chatId
         : null;
+  const to = typeof payload.to === 'string' ? payload.to : null;
+  const chatIdField =
+    typeof payload.chatId === 'string' ? payload.chatId : null;
+  const meId = options?.meId ?? null;
+
+  const serializedRemote = remoteJidFromSerializedPayload(payload);
+  const from = options?.fromMe
+    ? pickOutboundChatJid(payload, meId)
+    : rawFrom || serializedRemote;
+
   if (!from) return null;
-  if (from.endsWith('@g.us') || from.endsWith('@newsletter') || from === 'status@broadcast') {
+  if (isGroupOrStatusJid(from)) {
     return null;
   }
 
@@ -641,7 +880,15 @@ export async function resolveInboundChatId(
       : null;
 
   const candidates: string[] = [];
-  if (from.endsWith('@c.us')) candidates.push(from);
+  // Picked chat jid first — for fromMe, `to` is often OUR number (WEBJS)
+  // and must not win the loop.
+  pushCandidate(candidates, from);
+  if (chatIdField) pushCandidate(candidates, chatIdField);
+  if (options?.fromMe) {
+    pushCandidate(candidates, infoChatFromPayload(payload));
+    pushCandidate(candidates, remoteJidFromPayload(payload));
+    if (to && !isSessionMeJid(to, meId)) pushCandidate(candidates, to);
+  }
 
   // WEBJS / NOWEB / GOWS alternate PN fields seen in the wild.
   if (data) {
@@ -681,6 +928,7 @@ export async function resolveInboundChatId(
     // Skip display names mistakenly collected.
     if (!/[0-9]/.test(c) && !c.includes('@')) continue;
     if (c.endsWith('@lid')) continue;
+    if (options?.fromMe && isSessionMeJid(c, meId)) continue;
     if (c.endsWith('@c.us') || (!c.includes('@') && /^\d{8,15}$/.test(c.replace(/\D/g, '')))) {
       const digits = c.replace(/\D/g, '');
       // Reject likely LIDs (very long numeric ids without @c.us).
@@ -716,9 +964,41 @@ function normalizeDigits(raw: string): string {
 }
 
 /** Best-effort body extraction across WAHA engines. */
+function textFromProtoMessage(msg: Record<string, unknown>): string | null {
+  if (typeof msg.conversation === 'string' && msg.conversation.trim()) {
+    return msg.conversation;
+  }
+  const ext =
+    msg.extendedTextMessage && typeof msg.extendedTextMessage === 'object'
+      ? (msg.extendedTextMessage as { text?: unknown }).text
+      : null;
+  if (typeof ext === 'string' && ext.trim()) return ext;
+
+  for (const wrap of [
+    'ephemeralMessage',
+    'viewOnceMessage',
+    'viewOnceMessageV2',
+  ]) {
+    const inner = msg[wrap];
+    if (!inner || typeof inner !== 'object') continue;
+    const nested = (inner as { message?: unknown }).message;
+    if (nested && typeof nested === 'object') {
+      const text = textFromProtoMessage(nested as Record<string, unknown>);
+      if (text) return text;
+    }
+  }
+  return null;
+}
+
 export function extractInboundText(payload: Record<string, unknown>): string | null {
   if (typeof payload.body === 'string' && payload.body.trim()) {
     return payload.body;
+  }
+  if (typeof payload.caption === 'string' && payload.caption.trim()) {
+    return payload.caption;
+  }
+  if (typeof payload.text === 'string' && payload.text.trim()) {
+    return payload.text;
   }
   const data =
     payload._data && typeof payload._data === 'object'
@@ -727,21 +1007,13 @@ export function extractInboundText(payload: Record<string, unknown>): string | n
   if (!data) return null;
   if (typeof data.body === 'string' && data.body.trim()) return data.body;
   if (typeof data.caption === 'string' && data.caption.trim()) return data.caption;
-  const msg =
-    data.message && typeof data.message === 'object'
-      ? (data.message as Record<string, unknown>)
-      : null;
-  if (msg) {
-    const conv =
-      msg.conversation && typeof msg.conversation === 'string'
-        ? msg.conversation
-        : null;
-    if (conv?.trim()) return conv;
-    const ext =
-      msg.extendedTextMessage && typeof msg.extendedTextMessage === 'object'
-        ? (msg.extendedTextMessage as { text?: string }).text
-        : null;
-    if (ext?.trim()) return ext;
+
+  for (const key of ['message', 'Message']) {
+    const msg = data[key];
+    if (msg && typeof msg === 'object') {
+      const text = textFromProtoMessage(msg as Record<string, unknown>);
+      if (text) return text;
+    }
   }
   return null;
 }

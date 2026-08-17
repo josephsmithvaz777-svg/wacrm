@@ -137,6 +137,23 @@ function groupMessagesByDate(messages: Message[]) {
   return groups;
 }
 
+function sentMessagePatch(payload: {
+  message_id?: unknown;
+  whatsapp_message_id?: unknown;
+}): Partial<Message> {
+  const patch: Partial<Message> = { status: "sent" };
+  if (typeof payload.message_id === "string" && payload.message_id) {
+    patch.id = payload.message_id;
+  }
+  if (
+    typeof payload.whatsapp_message_id === "string" &&
+    payload.whatsapp_message_id
+  ) {
+    patch.message_id = payload.whatsapp_message_id;
+  }
+  return patch;
+}
+
 const STATUS_OPTIONS: { label: string; value: ConversationStatus; color: string }[] = [
   { label: "Open", value: "open", color: "text-primary" },
   { label: "Pending", value: "pending", color: "text-amber-400" },
@@ -512,10 +529,10 @@ export function MessageThread({
           return;
         }
 
-        // Success — the realtime INSERT event will replace the temp bubble
-        // with the real DB row. If realtime hasn't arrived yet, at least
-        // flip status to 'sent' so the UI stops showing "sending".
-        onUpdateMessage(tempId, { status: "sent" });
+        // Stamp the real DB id onto the optimistic bubble so a later
+        // refetch / realtime INSERT can dedupe instead of leaving a
+        // temp row that disappears on resync.
+        onUpdateMessage(tempId, sentMessagePatch(payload));
       } catch (err) {
         console.error("Failed to send message:", err);
         const reason = err instanceof Error ? err.message : "network error";
@@ -580,7 +597,7 @@ export function MessageThread({
           return;
         }
 
-        onUpdateMessage(tempId, { status: "sent" });
+        onUpdateMessage(tempId, sentMessagePatch(data));
       } catch (err) {
         console.error("Failed to send media:", err);
         const reason = err instanceof Error ? err.message : "network error";
@@ -634,7 +651,7 @@ export function MessageThread({
           return;
         }
 
-        onUpdateMessage(tempId, { status: "sent" });
+        onUpdateMessage(tempId, sentMessagePatch(data));
       } catch (err) {
         console.error("Failed to send interactive message:", err);
         const reason = err instanceof Error ? err.message : "network error";
@@ -723,7 +740,7 @@ export function MessageThread({
           return;
         }
 
-        onUpdateMessage(tempId, { status: "sent" });
+        onUpdateMessage(tempId, sentMessagePatch(payload));
       } catch (err) {
         console.error("Failed to send template:", err);
         const reason = err instanceof Error ? err.message : "network error";

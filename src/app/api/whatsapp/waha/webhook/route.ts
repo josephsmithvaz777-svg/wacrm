@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
   }
 
-  const { data: configs, error } = await admin()
+  let { data: configs, error } = await admin()
     .from('whatsapp_config')
     .select(
       'id, account_id, user_id, provider, waha_base_url, waha_session, access_token',
@@ -51,13 +51,30 @@ export async function POST(request: Request) {
   }
 
   if (!configs?.length) {
-    // Unknown session — ack so WAHA does not retry forever.
-    console.warn('[waha/webhook] no config for session', body.session);
+    const fallback = await admin()
+      .from('whatsapp_config')
+      .select(
+        'id, account_id, user_id, provider, waha_base_url, waha_session, access_token',
+      )
+      .eq('provider', 'waha')
+      .ilike('waha_session', body.session);
+    configs = fallback.data ?? [];
+  }
+
+  if (!configs?.length) {
+    console.warn('[waha/webhook] no config for session', body.session, body.event);
     return NextResponse.json({ ok: true, matched: false });
   }
 
-  // Respond quickly; process after.
-  after(async () => {
+  const payload = body.payload || {};
+  const fromMeHint =
+    body.event === 'message.any' ||
+    body.event === 'engine.event' ||
+    (typeof payload === 'object' &&
+      payload !== null &&
+      (payload as { fromMe?: unknown }).fromMe === true);
+
+  const run = async () => {
     for (const row of configs) {
       if (!row.waha_base_url) continue;
       let apiKey: string | null = null;
@@ -81,7 +98,17 @@ export async function POST(request: Request) {
         console.error('[waha/webhook] process failed:', err);
       }
     }
-  });
+  };
+
+  // Phone-sent echoes only arrive as message.any. Process them before
+  // the response so a host that drops `after()` work cannot lose them.
+  // Inbound `message` events still run in `after()` so media download
+  // is not billed against the request timeout.
+  if (fromMeHint) {
+    await run();
+  } else {
+    after(run);
+  }
 
   return NextResponse.json({ ok: true });
 }

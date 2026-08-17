@@ -49,6 +49,7 @@ import {
 } from '@/lib/whatsapp/phone-utils';
 import type { MessageTemplate } from '@/types';
 import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard';
+import { isUniqueViolation } from '@/lib/contacts/dedupe';
 
 export const MEDIA_KINDS = ['image', 'video', 'document', 'audio'] as const;
 export const VALID_MESSAGE_TYPES = [
@@ -362,28 +363,67 @@ export async function sendMessageToConversation(
       throw new SendMessageError('waha_error', `WAHA API error: ${message}`, 502);
     }
 
-    const { data: messageRecord, error: msgError } = await db
+    const wahaRow = {
+      conversation_id: conversationId,
+      sender_type: 'agent' as const,
+      content_type: messageType,
+      content_text: contentText ?? null,
+      media_url: mediaUrl || null,
+      template_name: null,
+      interactive_payload: null,
+      message_id: waMessageId,
+      status: 'sent',
+      reply_to_message_id: replyToMessageId || null,
+    };
+
+    let { data: messageRecord, error: msgError } = await db
       .from('messages')
-      .insert({
-        conversation_id: conversationId,
-        sender_type: 'agent',
-        content_type: messageType,
-        content_text: contentText ?? null,
-        media_url: mediaUrl || null,
-        template_name: null,
-        interactive_payload: null,
-        message_id: waMessageId,
-        status: 'sent',
-        reply_to_message_id: replyToMessageId || null,
-      })
+      .insert(wahaRow)
       .select()
       .single();
 
-    if (msgError) {
+    // WAHA echoes the outbound message on `message.any` almost
+    // immediately. If that webhook won the race (or mis-attributed the
+    // echo as a customer row), the unique (conversation_id, message_id)
+    // index rejects this insert. Recover the existing row — and flip it
+    // to agent if the echo landed on the wrong side of the thread.
+    if (msgError && isUniqueViolation(msgError)) {
+      const { data: existing, error: existingErr } = await db
+        .from('messages')
+        .select()
+        .eq('conversation_id', conversationId)
+        .eq('message_id', waMessageId)
+        .maybeSingle();
+      if (existing) {
+        if (existing.sender_type !== 'agent') {
+          const { data: repaired } = await db
+            .from('messages')
+            .update({
+              sender_type: 'agent',
+              status: 'sent',
+              content_text: contentText ?? existing.content_text,
+            })
+            .eq('id', existing.id)
+            .select()
+            .single();
+          messageRecord = repaired ?? existing;
+        } else {
+          messageRecord = existing;
+        }
+        msgError = null;
+      } else if (existingErr) {
+        console.error(
+          '[send-message] WAHA unique-race re-read failed:',
+          existingErr,
+        );
+      }
+    }
+
+    if (msgError || !messageRecord) {
       console.error('[send-message] error inserting WAHA message:', msgError);
       throw new SendMessageError(
         'db_error',
-        `Message sent via WAHA but failed to save to DB: ${msgError.message}`,
+        `Message sent via WAHA but failed to save to DB: ${msgError?.message ?? 'no row returned'}`,
         500,
       );
     }

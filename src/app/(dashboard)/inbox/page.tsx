@@ -224,13 +224,23 @@ function InboxPageInner() {
           newMsg.conversation_id === activeConversation.id
         ) {
           setMessages((prev) => {
-            // Avoid duplicates
             if (prev.some((m) => m.id === newMsg.id)) return prev;
-            // Replace optimistic message if it exists
-            const withoutOptimistic = prev.filter(
-              (m) => !m.id.startsWith("temp-")
+            // Swap the matching optimistic bubble for the real row.
+            // Do NOT wipe every temp-* message — an inbound INSERT
+            // arriving while a send is in flight used to erase the
+            // outgoing bubble before the send response landed.
+            const matchIdx = prev.findIndex(
+              (m) =>
+                m.id.startsWith("temp-") &&
+                m.sender_type === newMsg.sender_type &&
+                (m.content_text ?? "") === (newMsg.content_text ?? ""),
             );
-            return [...withoutOptimistic, newMsg];
+            if (matchIdx >= 0) {
+              const copy = prev.slice();
+              copy[matchIdx] = newMsg;
+              return copy;
+            }
+            return [...prev, newMsg];
           });
         }
 
@@ -515,9 +525,15 @@ function InboxPageInner() {
 
   const handleUpdateMessage = useCallback(
     (id: string, updates: Partial<Message>) => {
-      setMessages((prev) =>
-        prev.map((m) => (m.id === id ? { ...m, ...updates } : m))
-      );
+      setMessages((prev) => {
+        const nextId = updates.id;
+        // Send response stamped the real UUID onto a temp bubble, but
+        // realtime already inserted that row — drop the temp, keep real.
+        if (nextId && nextId !== id && prev.some((m) => m.id === nextId)) {
+          return prev.filter((m) => m.id !== id);
+        }
+        return prev.map((m) => (m.id === id ? { ...m, ...updates } : m));
+      });
     },
     []
   );
