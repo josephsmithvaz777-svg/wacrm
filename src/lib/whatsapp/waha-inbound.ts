@@ -7,8 +7,9 @@ import { findExistingContact, isUniqueViolation } from '@/lib/contacts/dedupe';
 import { reopenClosedConversation } from '@/lib/conversations/reopen';
 import { normalizePhone } from '@/lib/whatsapp/phone-utils';
 import {
-  chatIdToPhone,
   downloadWahaMedia,
+  extractInboundText,
+  resolveInboundChatId,
   type WahaClientOptions,
 } from '@/lib/whatsapp/waha-api';
 import { runAutomationsForTrigger } from '@/lib/automations/engine';
@@ -227,18 +228,44 @@ export async function processWahaEvent(
   const payload = event.payload || {};
   if (payload.fromMe === true) return;
 
-  const from =
-    typeof payload.from === 'string'
-      ? payload.from
-      : typeof payload.chatId === 'string'
-        ? payload.chatId
-        : null;
-  if (!from || from.endsWith('@g.us') || from.endsWith('@newsletter')) {
-    return; // MVP: 1:1 chats only
+  // Ignore empty protocol/sync noise (no body, no media).
+  const bodyText = extractInboundText(payload);
+  const hasMedia = payload.hasMedia === true;
+  const media =
+    payload.media && typeof payload.media === 'object'
+      ? (payload.media as {
+          url?: string;
+          mimetype?: string;
+          filename?: string | null;
+        })
+      : null;
+  if (!bodyText && !(hasMedia && media?.url)) {
+    return;
   }
 
-  const phone = normalizePhone(chatIdToPhone(from));
+  const resolved = await resolveInboundChatId(opts, payload);
+  if (!resolved) {
+    console.warn(
+      '[waha-inbound] skipping message — could not resolve phone from',
+      payload.from || payload.chatId,
+    );
+    return;
+  }
+
+  const phone = normalizePhone(resolved.phone);
   if (!phone) return;
+
+  // Mark CRM WhatsApp as connected once real traffic flows.
+  await admin()
+    .from('whatsapp_config')
+    .update({
+      status: 'connected',
+      connected_at: new Date().toISOString(),
+      registered_at: new Date().toISOString(),
+      last_registration_error: null,
+    })
+    .eq('account_id', config.account_id)
+    .eq('provider', 'waha');
 
   const pushName =
     (typeof payload._data === 'object' &&
@@ -271,16 +298,6 @@ export async function processWahaEvent(
 
   const messageId =
     typeof payload.id === 'string' ? payload.id : `waha-${Date.now()}`;
-  const bodyText = typeof payload.body === 'string' ? payload.body : null;
-  const hasMedia = payload.hasMedia === true;
-  const media =
-    payload.media && typeof payload.media === 'object'
-      ? (payload.media as {
-          url?: string;
-          mimetype?: string;
-          filename?: string | null;
-        })
-      : null;
 
   let contentType = 'text';
   let contentText = bodyText;
@@ -354,7 +371,10 @@ export async function processWahaEvent(
     });
 
     const automationTriggers: Array<
-      'new_contact_created' | 'first_inbound_message' | 'new_message_received' | 'keyword_match'
+      | 'new_contact_created'
+      | 'first_inbound_message'
+      | 'new_message_received'
+      | 'keyword_match'
     > = ['new_message_received', 'keyword_match'];
     if (contactOutcome.wasCreated) automationTriggers.unshift('new_contact_created');
     automationTriggers.push('first_inbound_message');

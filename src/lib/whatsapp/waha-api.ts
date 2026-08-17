@@ -322,3 +322,136 @@ export async function downloadWahaMedia(
   const buffer = Buffer.from(await res.arrayBuffer());
   return { buffer, contentType };
 }
+
+/**
+ * Resolve WhatsApp Linked ID (`123@lid`) to a phone chat id (`5199…@c.us`).
+ * Returns null when WAHA cannot map it (common for some privacy/group cases).
+ */
+export async function resolveLidToPhone(
+  opts: WahaClientOptions,
+  lidOrChatId: string,
+): Promise<string | null> {
+  const session = opts.session || 'default';
+  const lid = lidOrChatId.includes('@')
+    ? lidOrChatId
+    : `${lidOrChatId.replace(/\D/g, '')}@lid`;
+  const encoded = encodeURIComponent(lid);
+  const res = await wahaFetch(
+    opts,
+    `/api/${encodeURIComponent(session)}/lids/${encoded}`,
+  );
+  if (!res.ok) {
+    console.warn('[waha] lid resolve failed:', res.status, await res.text());
+    return null;
+  }
+  const json = (await res.json()) as { pn?: string; lid?: string };
+  if (typeof json.pn === 'string' && json.pn.includes('@c.us')) {
+    return json.pn;
+  }
+  if (typeof json.pn === 'string' && /^\d+$/.test(json.pn)) {
+    return `${json.pn}@c.us`;
+  }
+  return null;
+}
+
+/**
+ * Prefer real @c.us from webhook payload fields; fall back to LID resolve API.
+ */
+export async function resolveInboundChatId(
+  opts: WahaClientOptions,
+  payload: Record<string, unknown>,
+): Promise<{ chatId: string; phone: string } | null> {
+  const from =
+    typeof payload.from === 'string'
+      ? payload.from
+      : typeof payload.chatId === 'string'
+        ? payload.chatId
+        : null;
+  if (!from) return null;
+  if (from.endsWith('@g.us') || from.endsWith('@newsletter')) return null;
+
+  const data =
+    payload._data && typeof payload._data === 'object'
+      ? (payload._data as Record<string, unknown>)
+      : null;
+
+  // Engines sometimes embed the real PN alongside a LID `from`.
+  const candidates: string[] = [];
+  if (from.endsWith('@c.us')) candidates.push(from);
+  const senderPn =
+    data &&
+    data.key &&
+    typeof data.key === 'object' &&
+    typeof (data.key as { senderPn?: string }).senderPn === 'string'
+      ? (data.key as { senderPn: string }).senderPn
+      : null;
+  if (senderPn) candidates.push(senderPn);
+
+  const info =
+    data && data.Info && typeof data.Info === 'object'
+      ? (data.Info as Record<string, unknown>)
+      : null;
+  if (typeof info?.SenderAlt === 'string') candidates.push(info.SenderAlt);
+  if (typeof info?.Chat === 'string') candidates.push(info.Chat);
+
+  if (typeof payload.participant === 'string') {
+    candidates.push(payload.participant);
+  }
+
+  for (const c of candidates) {
+    if (c.endsWith('@c.us') || (!c.includes('@') && /^\d{8,15}$/.test(c))) {
+      const chatId = c.includes('@') ? c : `${c}@c.us`;
+      const phone = normalizeDigits(chatIdToPhone(chatId));
+      if (phone) return { chatId, phone };
+    }
+  }
+
+  if (from.endsWith('@lid') || (!from.includes('@') && from.length > 15)) {
+    const resolved = await resolveLidToPhone(opts, from);
+    if (resolved) {
+      const phone = normalizeDigits(chatIdToPhone(resolved));
+      if (phone) return { chatId: resolved, phone };
+    }
+    // Unresolvable LID — skip rather than polluting contacts with fake phones.
+    return null;
+  }
+
+  const phone = normalizeDigits(chatIdToPhone(from));
+  if (!phone) return null;
+  return { chatId: from.includes('@') ? from : `${phone}@c.us`, phone };
+}
+
+function normalizeDigits(raw: string): string {
+  return raw.replace(/\D/g, '');
+}
+
+/** Best-effort body extraction across WAHA engines. */
+export function extractInboundText(payload: Record<string, unknown>): string | null {
+  if (typeof payload.body === 'string' && payload.body.trim()) {
+    return payload.body;
+  }
+  const data =
+    payload._data && typeof payload._data === 'object'
+      ? (payload._data as Record<string, unknown>)
+      : null;
+  if (!data) return null;
+  if (typeof data.body === 'string' && data.body.trim()) return data.body;
+  if (typeof data.caption === 'string' && data.caption.trim()) return data.caption;
+  const msg =
+    data.message && typeof data.message === 'object'
+      ? (data.message as Record<string, unknown>)
+      : null;
+  if (msg) {
+    const conv =
+      msg.conversation && typeof msg.conversation === 'string'
+        ? msg.conversation
+        : null;
+    if (conv?.trim()) return conv;
+    const ext =
+      msg.extendedTextMessage && typeof msg.extendedTextMessage === 'object'
+        ? (msg.extendedTextMessage as { text?: string }).text
+        : null;
+    if (ext?.trim()) return ext;
+  }
+  return null;
+}

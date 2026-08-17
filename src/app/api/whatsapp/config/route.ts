@@ -336,6 +336,36 @@ export async function POST(request: Request) {
         )
       }
 
+      // If the WAHA session is already WORKING, mark connected immediately
+      // so the inbox banner clears without waiting for another webhook.
+      try {
+        const { getSession } = await import('@/lib/whatsapp/waha-api')
+        const apiKeyPlain =
+          access_token && access_token !== '••••••••••••••••'
+            ? access_token
+            : existing?.access_token
+              ? decrypt(existing.access_token)
+              : ''
+        const session = await getSession({
+          baseUrl,
+          apiKey: apiKeyPlain || null,
+          session: sessionName,
+        })
+        if (session?.status === 'WORKING') {
+          await supabase
+            .from('whatsapp_config')
+            .update({
+              status: 'connected',
+              connected_at: new Date().toISOString(),
+              registered_at: new Date().toISOString(),
+              last_registration_error: null,
+            })
+            .eq('account_id', accountId)
+        }
+      } catch (err) {
+        console.warn('[whatsapp/config] WAHA session probe after save:', err)
+      }
+
       return NextResponse.json({
         success: true,
         provider: 'waha',
