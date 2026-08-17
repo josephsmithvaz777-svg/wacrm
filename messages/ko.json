@@ -51,6 +51,20 @@
     "checkEmailTitle": "이메일을 확인하세요",
     "checkEmailBody": "{email}로 비밀번호 재설정 링크를 보냈습니다. 받은편지함을 확인하세요."
   },
+  "ResetPasswordPage": {
+    "title": "새 비밀번호 선택",
+    "description": "계정에 사용할 새 비밀번호를 입력하세요.",
+    "titleDone": "비밀번호가 업데이트되었습니다",
+    "descDone": "앱으로 이동 중…",
+    "passwordLabel": "새 비밀번호",
+    "confirmLabel": "비밀번호 확인",
+    "submit": "비밀번호 업데이트",
+    "saving": "저장 중…",
+    "requestNewLink": "새 링크 요청",
+    "errorInvalidLink": "이 재설정 링크는 유효하지 않거나 만료되었습니다. 새 링크를 요청하세요.",
+    "errorPasswordShort": "비밀번호는 최소 8자여야 합니다.",
+    "errorPasswordMismatch": "비밀번호가 일치하지 않습니다."
+  },
   "JoinPage": {
     "verifying": "초대 확인 중…",
     "invitedTo": "{name}에 초대되었습니다",

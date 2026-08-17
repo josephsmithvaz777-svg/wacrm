@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,14 +15,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { MessageSquare, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { AuthBrandMark } from "@/components/auth/auth-brand";
+import { useSiteBrand } from "@/hooks/use-invite-brand";
 
 /**
  * /reset-password — set a new password after clicking the email link.
- *
- * The email redirect hits /auth/callback?next=/reset-password which
- * exchanges the code and then lands here with a recovery session.
- * We also accept a direct `?code=` on this page as a fallback.
  */
 export default function ResetPasswordPage() {
   return (
@@ -38,9 +37,11 @@ export default function ResetPasswordPage() {
 }
 
 function ResetPasswordInner() {
+  const t = useTranslations("ResetPasswordPage");
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
+  const siteBrand = useSiteBrand();
 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -53,7 +54,6 @@ function ResetPasswordInner() {
     let cancelled = false;
 
     async function prepare() {
-      // Fallback: code landed on this page instead of /auth/callback.
       const code = searchParams.get("code");
       if (code) {
         const { error: exchangeError } =
@@ -70,9 +70,7 @@ function ResetPasswordInner() {
       const { data } = await supabase.auth.getSession();
       if (cancelled) return;
       if (!data.session) {
-        setError(
-          "This reset link is invalid or has expired. Request a new one.",
-        );
+        setError(t("errorInvalidLink"));
         setReady(false);
         return;
       }
@@ -83,18 +81,18 @@ function ResetPasswordInner() {
     return () => {
       cancelled = true;
     };
-  }, [searchParams, supabase.auth]);
+  }, [searchParams, supabase.auth, t]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
+      setError(t("errorPasswordShort"));
       return;
     }
     if (password !== confirm) {
-      setError("Passwords do not match.");
+      setError(t("errorPasswordMismatch"));
       return;
     }
 
@@ -120,16 +118,16 @@ function ResetPasswordInner() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md border-border bg-card">
         <CardHeader className="items-center text-center">
-          <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-            <MessageSquare className="h-6 w-6 text-primary" />
-          </div>
-          <CardTitle className="text-xl text-foreground">
-            {done ? "Password updated" : "Choose a new password"}
+          <AuthBrandMark
+            name={siteBrand.name}
+            logoUrl={siteBrand.logoUrl}
+            size="lg"
+          />
+          <CardTitle className="mt-3 text-xl text-foreground">
+            {done ? t("titleDone") : t("title")}
           </CardTitle>
           <CardDescription className="text-muted-foreground">
-            {done
-              ? "Redirecting you to the app…"
-              : "Enter a new password for your account."}
+            {done ? t("descDone") : t("description")}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -148,7 +146,7 @@ function ResetPasswordInner() {
               </div>
               <Link href="/forgot-password">
                 <Button className="w-full" variant="outline">
-                  Request a new link
+                  {t("requestNewLink")}
                 </Button>
               </Link>
             </div>
@@ -162,7 +160,7 @@ function ResetPasswordInner() {
 
               <div className="flex flex-col gap-2">
                 <Label htmlFor="password" className="text-muted-foreground">
-                  New password
+                  {t("passwordLabel")}
                 </Label>
                 <Input
                   id="password"
@@ -178,7 +176,7 @@ function ResetPasswordInner() {
 
               <div className="flex flex-col gap-2">
                 <Label htmlFor="confirm" className="text-muted-foreground">
-                  Confirm password
+                  {t("confirmLabel")}
                 </Label>
                 <Input
                   id="confirm"
@@ -197,7 +195,7 @@ function ResetPasswordInner() {
                 disabled={loading}
                 className="mt-2 h-10 w-full bg-primary text-primary-foreground hover:bg-primary/90"
               >
-                {loading ? "Saving…" : "Update password"}
+                {loading ? t("saving") : t("submit")}
               </Button>
             </form>
           )}

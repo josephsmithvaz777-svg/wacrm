@@ -51,6 +51,20 @@
     "checkEmailTitle": "Check your email",
     "checkEmailBody": "We've sent a password reset link to {email}. Please check your inbox."
   },
+  "ResetPasswordPage": {
+    "title": "Choose a new password",
+    "description": "Enter a new password for your account.",
+    "titleDone": "Password updated",
+    "descDone": "Redirecting you to the app…",
+    "passwordLabel": "New password",
+    "confirmLabel": "Confirm password",
+    "submit": "Update password",
+    "saving": "Saving…",
+    "requestNewLink": "Request a new link",
+    "errorInvalidLink": "This reset link is invalid or has expired. Request a new one.",
+    "errorPasswordShort": "Password must be at least 8 characters.",
+    "errorPasswordMismatch": "Passwords do not match."
+  },
   "JoinPage": {
     "verifying": "Verifying invitation…",
     "invitedTo": "You're invited to {name}",

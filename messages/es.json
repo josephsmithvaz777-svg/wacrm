@@ -51,6 +51,20 @@
     "checkEmailTitle": "Revisa tu correo",
     "checkEmailBody": "Enviamos un enlace para restablecer la contraseña a {email}. Revisa tu bandeja."
   },
+  "ResetPasswordPage": {
+    "title": "Elige una nueva contraseña",
+    "description": "Ingresa una nueva contraseña para tu cuenta.",
+    "titleDone": "Contraseña actualizada",
+    "descDone": "Redirigiéndote a la app…",
+    "passwordLabel": "Nueva contraseña",
+    "confirmLabel": "Confirmar contraseña",
+    "submit": "Actualizar contraseña",
+    "saving": "Guardando…",
+    "requestNewLink": "Solicitar un enlace nuevo",
+    "errorInvalidLink": "Este enlace no es válido o expiró. Solicita uno nuevo.",
+    "errorPasswordShort": "La contraseña debe tener al menos 8 caracteres.",
+    "errorPasswordMismatch": "Las contraseñas no coinciden."
+  },
   "JoinPage": {
     "verifying": "Verificando invitación…",
     "invitedTo": "Te invitaron a {name}",
