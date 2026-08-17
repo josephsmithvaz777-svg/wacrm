@@ -1303,7 +1303,14 @@
       "restrictSaving": "Guardando…",
       "restrictEnabled": "Restricción de agentes activada",
       "restrictDisabled": "Restricción de agentes desactivada",
-      "restrictSaveFailed": "No se pudo guardar la restricción"
+      "restrictSaveFailed": "No se pudo guardar la restricción",
+      "roundRobinTitle": "Asignación round-robin",
+      "roundRobinDesc": "Los chats nuevos entrantes se asignan por turnos entre agentes y admins. También puedes usar el paso “Asignar conversación → Round-robin” en Automatizaciones.",
+      "roundRobinToggle": "Activar round-robin en chats nuevos",
+      "roundRobinSaving": "Guardando…",
+      "roundRobinEnabled": "Round-robin activado",
+      "roundRobinDisabled": "Round-robin desactivado",
+      "roundRobinSaveFailed": "No se pudo guardar round-robin"
     },
     "invite": {
       "inviteCreated": "Invite created",

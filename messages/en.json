@@ -1281,7 +1281,14 @@
       "restrictSaving": "Saving…",
       "restrictEnabled": "Agent contact restriction enabled",
       "restrictDisabled": "Agent contact restriction disabled",
-      "restrictSaveFailed": "Couldn’t save restriction"
+      "restrictSaveFailed": "Couldn’t save restriction",
+      "roundRobinTitle": "Round-robin assignment",
+      "roundRobinDesc": "New inbound chats rotate across agents and admins. You can also use the Automations step “Assign conversation → Round-robin”.",
+      "roundRobinToggle": "Enable round-robin on new chats",
+      "roundRobinSaving": "Saving…",
+      "roundRobinEnabled": "Round-robin enabled",
+      "roundRobinDisabled": "Round-robin disabled",
+      "roundRobinSaveFailed": "Couldn’t save round-robin setting"
     },
     "invite": {
       "inviteCreated": "Invite created",

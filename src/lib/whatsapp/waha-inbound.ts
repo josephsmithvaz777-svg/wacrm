@@ -324,6 +324,19 @@ export async function processWahaEvent(
       conversation_id: convResult.conversation.id,
       contact_id: contactOutcome.contact.id,
     });
+    try {
+      const { maybeRoundRobinAssignNewConversation } = await import(
+        '@/lib/assignments/round-robin'
+      );
+      await maybeRoundRobinAssignNewConversation(admin(), {
+        accountId: config.account_id,
+        contactId: contactOutcome.contact.id,
+        conversationId: convResult.conversation.id,
+        alreadyAssigned: convResult.conversation.assigned_agent_id ?? null,
+      });
+    } catch (err) {
+      console.warn('[waha-inbound] round-robin assign failed:', err);
+    }
   }
 
   const messageId =

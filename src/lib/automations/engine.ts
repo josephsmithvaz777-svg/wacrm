@@ -485,22 +485,22 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
       if (!args.contactId) throw new Error('assign_conversation needs a contact')
       let agentId = cfg.agent_id
       if (cfg.mode === 'round_robin') {
-        // Pick any member of the account. The existing implementation
-        // only ever returned the automation's author; preserving that
-        // shape until a real round-robin algorithm replaces it.
-        const { data: profiles } = await db
-          .from('profiles')
-          .select('user_id')
-          .eq('account_id', args.automation.account_id)
-          .limit(1)
-        agentId = profiles?.[0]?.user_id
+        const { pickRoundRobinAgent } = await import(
+          '@/lib/assignments/round-robin'
+        )
+        agentId =
+          (await pickRoundRobinAgent(db, args.automation.account_id)) ??
+          undefined
       }
       if (!agentId) return 'no agent resolved'
-      await db
-        .from('conversations')
-        .update({ assigned_agent_id: agentId })
-        .eq('account_id', args.automation.account_id)
-        .eq('contact_id', args.contactId)
+      const { assignConversationToAgent } = await import(
+        '@/lib/assignments/round-robin'
+      )
+      await assignConversationToAgent(db, {
+        accountId: args.automation.account_id,
+        contactId: args.contactId,
+        agentId,
+      })
       return `assigned to ${agentId}`
     }
 

@@ -47,6 +47,8 @@ interface AccountSummary {
   logo_url: string | null;
   /** When true, agents only see owned/assigned contacts (migration 040). */
   restrict_agent_contacts: boolean;
+  /** When true, new inbound chats rotate across agents (migration 041). */
+  round_robin_enabled: boolean;
 }
 
 interface AuthContextValue {
@@ -175,7 +177,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .from("accounts")
             // default_currency added in migration 021; narrowed to the
             // USD fallback below for older schemas where it reads null.
-            .select("id, name, default_currency, logo_url, restrict_agent_contacts")
+            .select(
+              "id, name, default_currency, logo_url, restrict_agent_contacts, round_robin_enabled",
+            )
             .eq("id", data.account_id)
             .maybeSingle();
           if (accountErr) {
@@ -193,6 +197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               logo_url:
                 typeof account.logo_url === "string" ? account.logo_url : null,
               restrict_agent_contacts: Boolean(account.restrict_agent_contacts),
+              round_robin_enabled: Boolean(account.round_robin_enabled),
             };
           }
         }

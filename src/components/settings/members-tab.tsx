@@ -140,7 +140,11 @@ export function MembersTab() {
   const [restrictAgents, setRestrictAgents] = useState(
     Boolean(account?.restrict_agent_contacts),
   );
+  const [roundRobin, setRoundRobin] = useState(
+    Boolean(account?.round_robin_enabled),
+  );
   const [savingRestrict, setSavingRestrict] = useState(false);
+  const [savingRoundRobin, setSavingRoundRobin] = useState(false);
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [removingMember, setRemovingMember] = useState<Member | null>(null);
@@ -150,7 +154,8 @@ export function MembersTab() {
 
   useEffect(() => {
     setRestrictAgents(Boolean(account?.restrict_agent_contacts));
-  }, [account?.restrict_agent_contacts]);
+    setRoundRobin(Boolean(account?.round_robin_enabled));
+  }, [account?.restrict_agent_contacts, account?.round_robin_enabled]);
 
   async function handleToggleRestrict(next: boolean) {
     if (!accountId || !canManageMembers) return;
@@ -171,6 +176,27 @@ export function MembersTab() {
     }
     await refreshProfile();
     toast.success(next ? t('restrictEnabled') : t('restrictDisabled'));
+  }
+
+  async function handleToggleRoundRobin(next: boolean) {
+    if (!accountId || !canManageMembers) return;
+    setSavingRoundRobin(true);
+    setRoundRobin(next);
+    const { error } = await supabase
+      .from('accounts')
+      .update({
+        round_robin_enabled: next,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', accountId);
+    setSavingRoundRobin(false);
+    if (error) {
+      setRoundRobin(!next);
+      toast.error(t('roundRobinSaveFailed'));
+      return;
+    }
+    await refreshProfile();
+    toast.success(next ? t('roundRobinEnabled') : t('roundRobinDisabled'));
   }
 
   const loadEverything = useCallback(async () => {
@@ -348,6 +374,31 @@ export function MembersTab() {
                 onChange={(e) => void handleToggleRestrict(e.target.checked)}
               />
               {savingRestrict ? t('restrictSaving') : t('restrictToggle')}
+            </label>
+          </RequireRole>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm font-medium text-foreground">
+              {t('roundRobinTitle')}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {t('roundRobinDesc')}
+            </p>
+          </div>
+          <RequireRole min="admin">
+            <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                className="size-4 rounded border-border"
+                checked={roundRobin}
+                disabled={savingRoundRobin || !canManageMembers}
+                onChange={(e) => void handleToggleRoundRobin(e.target.checked)}
+              />
+              {savingRoundRobin ? t('roundRobinSaving') : t('roundRobinToggle')}
             </label>
           </RequireRole>
         </CardContent>
