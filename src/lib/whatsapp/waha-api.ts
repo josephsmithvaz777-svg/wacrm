@@ -77,6 +77,56 @@ export function chatIdToPhone(chatId: string): string {
   return raw.replace(/\D/g, '');
 }
 
+/**
+ * Resolve the chatId WAHA/WEBJS expects for outbound sends.
+ * Modern WhatsApp often requires `@lid` — sending only `@c.us` yields
+ * "No LID for user" on WEBJS.
+ */
+export async function resolveOutboundChatId(
+  opts: WahaClientOptions,
+  toPhone: string,
+): Promise<string> {
+  const digits = toPhone.replace(/\D/g, '');
+  const session = opts.session || 'default';
+  const fallback = `${digits}@c.us`;
+
+  try {
+    const res = await wahaFetch(
+      opts,
+      `/api/contacts/check-exists?phone=${encodeURIComponent(digits)}&session=${encodeURIComponent(session)}`,
+    );
+    if (res.ok) {
+      const json = (await res.json()) as {
+        numberExists?: boolean;
+        chatId?: string;
+      };
+      if (json.numberExists && typeof json.chatId === 'string' && json.chatId) {
+        return json.chatId;
+      }
+    }
+  } catch (err) {
+    console.warn('[waha] check-exists failed:', err);
+  }
+
+  try {
+    const encoded = encodeURIComponent(`${digits}@c.us`);
+    const res = await wahaFetch(
+      opts,
+      `/api/${encodeURIComponent(session)}/lids/pn/${encoded}`,
+    );
+    if (res.ok) {
+      const json = (await res.json()) as { lid?: string | null };
+      if (typeof json.lid === 'string' && json.lid.includes('@lid')) {
+        return json.lid;
+      }
+    }
+  } catch (err) {
+    console.warn('[waha] lids/pn resolve failed:', err);
+  }
+
+  return fallback;
+}
+
 function extractMessageId(payload: unknown): string {
   if (!payload || typeof payload !== 'object') {
     return `waha-${Date.now()}`;
@@ -218,9 +268,10 @@ export async function sendWahaText(
   text: string,
   replyTo?: string | null,
 ): Promise<{ messageId: string }> {
+  const chatId = await resolveOutboundChatId(opts, toPhone);
   const body: Record<string, unknown> = {
     session: opts.session || 'default',
-    chatId: phoneToChatId(toPhone),
+    chatId,
     text,
   };
   if (replyTo) {
@@ -244,7 +295,7 @@ export async function sendWahaMedia(
   filename?: string | null,
 ): Promise<{ messageId: string }> {
   const session = opts.session || 'default';
-  const chatId = phoneToChatId(toPhone);
+  const chatId = await resolveOutboundChatId(opts, toPhone);
   const file: Record<string, string> = { url: link };
   if (filename) file.filename = filename;
 
@@ -278,11 +329,12 @@ export async function sendWahaReaction(
   messageId: string,
   emoji: string,
 ): Promise<void> {
+  const chatId = await resolveOutboundChatId(opts, toPhone);
   const res = await wahaFetch(opts, '/api/reaction', {
     method: 'PUT',
     body: JSON.stringify({
       session: opts.session || 'default',
-      chatId: phoneToChatId(toPhone),
+      chatId,
       messageId,
       reaction: emoji,
     }),
