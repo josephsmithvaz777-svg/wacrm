@@ -861,6 +861,20 @@ export function MessageThread({
         return;
       }
 
+      // Keep contact.assigned_to in sync so agent contact-scope RLS works.
+      if (conversation.contact_id) {
+        const { error: contactErr } = await supabase
+          .from("contacts")
+          .update({
+            assigned_to: agentId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", conversation.contact_id);
+        if (contactErr) {
+          console.warn("[inbox] contact assigned_to sync failed:", contactErr);
+        }
+      }
+
       onAssignChange(conversation.id, agentId);
     },
     [conversation, onAssignChange],

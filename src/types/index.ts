@@ -108,6 +108,10 @@ export interface Contact {
   email?: string;
   company?: string;
   avatar_url?: string;
+  /** Auth user who manually created the contact (migration 040). */
+  created_by?: string | null;
+  /** Agent assigned to this contact (migration 040). */
+  assigned_to?: string | null;
   created_at: string;
   updated_at: string;
   /** Hydrated by queries that embed `contact_tags(tags(*))` (e.g. the

@@ -1247,7 +1247,7 @@
     },
     "members": {
       "title": "Team members",
-      "description": "People with access to this account. Roles control what each teammate can do.",
+      "description": "People with access to this account. Change each teammate’s role, and optionally limit which contacts agents can see.",
       "inviteMember": "Invite member",
       "online": "online",
       "away": "away",
@@ -1274,7 +1274,14 @@
       "removeDialogDesc": "Remove <bold>{name}</bold> from the account? They'll be signed out of this account and given a fresh personal account on their next sign-in. Their login isn't deleted.",
       "cancel": "Cancel",
       "removing": "Removing...",
-      "removeBtn": "Remove member"
+      "removeBtn": "Remove member",
+      "restrictTitle": "Limit agent contacts",
+      "restrictDesc": "When on, agents and viewers only see contacts they created or that you assigned to them (Inbox → Assign). Owners and admins still see everything.",
+      "restrictToggle": "Only owned / assigned contacts",
+      "restrictSaving": "Saving…",
+      "restrictEnabled": "Agent contact restriction enabled",
+      "restrictDisabled": "Agent contact restriction disabled",
+      "restrictSaveFailed": "Couldn’t save restriction"
     },
     "invite": {
       "inviteCreated": "Invite created",
@@ -1439,7 +1446,7 @@
       "admin": "Admin",
       "adminHint": "Manage members + everything",
       "agent": "Agent",
-      "agentHint": "Use features; no settings",
+      "agentHint": "Use features; no settings (with restriction: only own/assigned contacts)",
       "viewer": "Viewer",
       "viewerHint": "Read-only across the app",
       "owner": "Owner",

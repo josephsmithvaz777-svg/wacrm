@@ -33,6 +33,8 @@ import {
   UsersRound,
 } from 'lucide-react';
 
+import { createClient } from '@/lib/supabase/client';
+
 import {
   Avatar,
   AvatarBadge,
@@ -127,18 +129,49 @@ function fmtExpiresIn(iso: string, t: (key: string, values?: Record<string, stri
 export function MembersTab() {
   const t = useTranslations('Settings.members');
   const tRoles = useTranslations('Settings.roles');
-  const { user, canManageMembers } = useAuth();
+  const { user, canManageMembers, account, accountId, refreshProfile } =
+    useAuth();
   const { getPresence, getRow, now } = usePresence();
+  const supabase = createClient();
 
   const [members, setMembers] = useState<Member[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [restrictAgents, setRestrictAgents] = useState(
+    Boolean(account?.restrict_agent_contacts),
+  );
+  const [savingRestrict, setSavingRestrict] = useState(false);
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [removingMember, setRemovingMember] = useState<Member | null>(null);
   const [pendingMemberAction, setPendingMemberAction] = useState<string | null>(
     null,
   );
+
+  useEffect(() => {
+    setRestrictAgents(Boolean(account?.restrict_agent_contacts));
+  }, [account?.restrict_agent_contacts]);
+
+  async function handleToggleRestrict(next: boolean) {
+    if (!accountId || !canManageMembers) return;
+    setSavingRestrict(true);
+    setRestrictAgents(next);
+    const { error } = await supabase
+      .from('accounts')
+      .update({
+        restrict_agent_contacts: next,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', accountId);
+    setSavingRestrict(false);
+    if (error) {
+      setRestrictAgents(!next);
+      toast.error(t('restrictSaveFailed'));
+      return;
+    }
+    await refreshProfile();
+    toast.success(next ? t('restrictEnabled') : t('restrictDisabled'));
+  }
 
   const loadEverything = useCallback(async () => {
     try {
@@ -294,6 +327,31 @@ export function MembersTab() {
           </RequireRole>
         }
       />
+
+      <Card>
+        <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm font-medium text-foreground">
+              {t('restrictTitle')}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {t('restrictDesc')}
+            </p>
+          </div>
+          <RequireRole min="admin">
+            <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                className="size-4 rounded border-border"
+                checked={restrictAgents}
+                disabled={savingRestrict || !canManageMembers}
+                onChange={(e) => void handleToggleRestrict(e.target.checked)}
+              />
+              {savingRestrict ? t('restrictSaving') : t('restrictToggle')}
+            </label>
+          </RequireRole>
+        </CardContent>
+      </Card>
 
       {/* Live presence summary across the roster. Updates without a
           full refresh as heartbeats and the local re-derive tick land. */}

@@ -167,6 +167,8 @@ export function ContactForm({
           .insert({
             user_id: user.id,
             account_id: accountId,
+            created_by: user.id,
+            assigned_to: user.id,
             name: name.trim() || null,
             phone: phone.trim(),
             email: email.trim() || null,

@@ -45,6 +45,8 @@ interface AccountSummary {
   default_currency: string;
   /** Workspace logo URL for white-label sidebar (migration 039). */
   logo_url: string | null;
+  /** When true, agents only see owned/assigned contacts (migration 040). */
+  restrict_agent_contacts: boolean;
 }
 
 interface AuthContextValue {
@@ -173,7 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .from("accounts")
             // default_currency added in migration 021; narrowed to the
             // USD fallback below for older schemas where it reads null.
-            .select("id, name, default_currency, logo_url")
+            .select("id, name, default_currency, logo_url, restrict_agent_contacts")
             .eq("id", data.account_id)
             .maybeSingle();
           if (accountErr) {
@@ -190,6 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               default_currency: account.default_currency ?? DEFAULT_CURRENCY,
               logo_url:
                 typeof account.logo_url === "string" ? account.logo_url : null,
+              restrict_agent_contacts: Boolean(account.restrict_agent_contacts),
             };
           }
         }
