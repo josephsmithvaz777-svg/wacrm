@@ -384,26 +384,61 @@ export async function resolveLidToPhone(
   lidOrChatId: string,
 ): Promise<string | null> {
   const session = opts.session || 'default';
+  const digits = lidOrChatId.replace(/\D/g, '');
   const lid = lidOrChatId.includes('@')
     ? lidOrChatId
-    : `${lidOrChatId.replace(/\D/g, '')}@lid`;
-  const encoded = encodeURIComponent(lid);
-  const res = await wahaFetch(
-    opts,
-    `/api/${encodeURIComponent(session)}/lids/${encoded}`,
-  );
-  if (!res.ok) {
-    console.warn('[waha] lid resolve failed:', res.status, await res.text());
+    : `${digits}@lid`;
+
+  const tryParsePn = (json: unknown): string | null => {
+    if (!json || typeof json !== 'object') return null;
+    const o = json as Record<string, unknown>;
+    const pn = o.pn ?? o.number ?? o.phone;
+    if (typeof pn === 'string' && pn.includes('@c.us')) return pn;
+    if (typeof pn === 'string' && /^\d{8,15}$/.test(pn.replace(/\D/g, ''))) {
+      return `${pn.replace(/\D/g, '')}@c.us`;
+    }
+    const id = o.id;
+    if (typeof id === 'string' && id.endsWith('@c.us')) return id;
     return null;
+  };
+
+  // 1) Lids API — full lid, then digits-only.
+  for (const key of [lid, digits]) {
+    try {
+      const res = await wahaFetch(
+        opts,
+        `/api/${encodeURIComponent(session)}/lids/${encodeURIComponent(key)}`,
+      );
+      if (res.ok) {
+        const parsed = tryParsePn(await res.json());
+        if (parsed) return parsed;
+      }
+    } catch (err) {
+      console.warn('[waha] lids resolve error:', err);
+    }
   }
-  const json = (await res.json()) as { pn?: string; lid?: string };
-  if (typeof json.pn === 'string' && json.pn.includes('@c.us')) {
-    return json.pn;
+
+  // 2) Contacts API with the lid / digits.
+  for (const contactId of [lid, digits]) {
+    try {
+      const res = await wahaFetch(
+        opts,
+        `/api/contacts?contactId=${encodeURIComponent(contactId)}&session=${encodeURIComponent(session)}`,
+      );
+      if (res.ok) {
+        const parsed = tryParsePn(await res.json());
+        if (parsed) return parsed;
+      }
+    } catch (err) {
+      console.warn('[waha] contacts resolve error:', err);
+    }
   }
-  if (typeof json.pn === 'string' && /^\d+$/.test(json.pn)) {
-    return `${json.pn}@c.us`;
-  }
+
   return null;
+}
+
+function pushCandidate(list: string[], value: unknown) {
+  if (typeof value === 'string' && value.trim()) list.push(value.trim());
 }
 
 /**
@@ -420,56 +455,83 @@ export async function resolveInboundChatId(
         ? payload.chatId
         : null;
   if (!from) return null;
-  if (from.endsWith('@g.us') || from.endsWith('@newsletter')) return null;
+  if (from.endsWith('@g.us') || from.endsWith('@newsletter') || from === 'status@broadcast') {
+    return null;
+  }
 
   const data =
     payload._data && typeof payload._data === 'object'
       ? (payload._data as Record<string, unknown>)
       : null;
 
-  // Engines sometimes embed the real PN alongside a LID `from`.
   const candidates: string[] = [];
   if (from.endsWith('@c.us')) candidates.push(from);
-  const senderPn =
-    data &&
-    data.key &&
-    typeof data.key === 'object' &&
-    typeof (data.key as { senderPn?: string }).senderPn === 'string'
-      ? (data.key as { senderPn: string }).senderPn
-      : null;
-  if (senderPn) candidates.push(senderPn);
 
-  const info =
-    data && data.Info && typeof data.Info === 'object'
-      ? (data.Info as Record<string, unknown>)
-      : null;
-  if (typeof info?.SenderAlt === 'string') candidates.push(info.SenderAlt);
-  if (typeof info?.Chat === 'string') candidates.push(info.Chat);
+  // WEBJS / NOWEB / GOWS alternate PN fields seen in the wild.
+  if (data) {
+    const key =
+      data.key && typeof data.key === 'object'
+        ? (data.key as Record<string, unknown>)
+        : null;
+    pushCandidate(candidates, key?.senderPn);
+    pushCandidate(candidates, key?.participantPn);
+    pushCandidate(candidates, key?.remoteJidAlt);
+    pushCandidate(candidates, data.from);
+    pushCandidate(candidates, data.author);
+    pushCandidate(candidates, data.participant);
+    pushCandidate(candidates, data.sender);
+    pushCandidate(candidates, data.notifyName); // not a phone — filtered below
 
-  if (typeof payload.participant === 'string') {
-    candidates.push(payload.participant);
+    const info =
+      data.Info && typeof data.Info === 'object'
+        ? (data.Info as Record<string, unknown>)
+        : null;
+    pushCandidate(candidates, info?.SenderAlt);
+    pushCandidate(candidates, info?.Chat);
+    pushCandidate(candidates, info?.Sender);
+
+    const id =
+      data.id && typeof data.id === 'object'
+        ? (data.id as Record<string, unknown>)
+        : null;
+    pushCandidate(candidates, id?.remote);
+    pushCandidate(candidates, id?.participant);
   }
 
+  pushCandidate(candidates, payload.participant);
+  pushCandidate(candidates, payload.from);
+
   for (const c of candidates) {
-    if (c.endsWith('@c.us') || (!c.includes('@') && /^\d{8,15}$/.test(c))) {
-      const chatId = c.includes('@') ? c : `${c}@c.us`;
+    // Skip display names mistakenly collected.
+    if (!/[0-9]/.test(c) && !c.includes('@')) continue;
+    if (c.endsWith('@lid')) continue;
+    if (c.endsWith('@c.us') || (!c.includes('@') && /^\d{8,15}$/.test(c.replace(/\D/g, '')))) {
+      const digits = c.replace(/\D/g, '');
+      // Reject likely LIDs (very long numeric ids without @c.us).
+      if (!c.endsWith('@c.us') && digits.length > 15) continue;
+      if (digits.length < 8) continue;
+      const chatId = c.includes('@') ? c : `${digits}@c.us`;
       const phone = normalizeDigits(chatIdToPhone(chatId));
-      if (phone) return { chatId, phone };
+      if (phone && phone.length >= 8 && phone.length <= 15) {
+        return { chatId, phone };
+      }
     }
   }
 
-  if (from.endsWith('@lid') || (!from.includes('@') && from.length > 15)) {
+  if (from.endsWith('@lid') || (!from.includes('@') && from.replace(/\D/g, '').length > 15)) {
     const resolved = await resolveLidToPhone(opts, from);
     if (resolved) {
       const phone = normalizeDigits(chatIdToPhone(resolved));
-      if (phone) return { chatId: resolved, phone };
+      if (phone && phone.length >= 8 && phone.length <= 15) {
+        return { chatId: resolved, phone };
+      }
     }
-    // Unresolvable LID — skip rather than polluting contacts with fake phones.
+    console.warn('[waha] could not resolve LID to phone:', from);
     return null;
   }
 
   const phone = normalizeDigits(chatIdToPhone(from));
-  if (!phone) return null;
+  if (!phone || phone.length < 8 || phone.length > 15) return null;
   return { chatId: from.includes('@') ? from : `${phone}@c.us`, phone };
 }
 
