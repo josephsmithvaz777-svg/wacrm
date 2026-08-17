@@ -1736,7 +1736,7 @@
     },
     "appearance": {
       "title": "화면 설정",
-      "description": "앱 전체에서 사용할 모드와 강조 색상을 설정합니다. 이 기기에 저장되며, 바로 적용되니 자유롭게 시도해보세요.",
+      "description": "모드, 강조 색상, 인터페이스 언어. 모드와 테마는 계정에 저장되어 다른 기기에서도 따라옵니다. 언어는 이 브라우저에 저장됩니다.",
       "mode": "모드",
       "useMode": "{mode} 모드 사용",
       "active": "사용 중",
@@ -1744,7 +1744,8 @@
       "useTheme": "{name} 테마 사용",
       "language": "언어",
       "languageDesc": "인터페이스 언어를 변경합니다. 이 브라우저에 저장됩니다.",
-      "languageUpdated": "언어가 업데이트되었습니다"
+      "languageUpdated": "언어가 업데이트되었습니다",
+      "themeSaved": "테마가 계정에 저장되었습니다"
     },
     "security": {
       "title": "로그인 & 보안",

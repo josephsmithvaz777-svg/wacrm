@@ -32,6 +32,10 @@ export interface Profile {
    * the `profiles` row.
    */
   beta_features?: string[];
+  /** Preferred accent theme (migration 045). */
+  ui_theme?: string | null;
+  /** Preferred light/dark mode (migration 045). */
+  ui_mode?: string | null;
   /**
    * Account this profile is a member of. Added by
    * `017_account_sharing.sql`; NOT NULL in the DB post-backfill.

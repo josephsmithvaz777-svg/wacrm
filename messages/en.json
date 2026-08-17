@@ -1736,7 +1736,7 @@
     },
     "appearance": {
       "title": "Appearance",
-      "description": "Set the mode, accent colour, and interface language. Mode and theme are saved on this device; language is saved in this browser.",
+      "description": "Set the mode, accent colour, and interface language. Mode and theme are saved to your account (they follow you on other devices); language is saved in this browser.",
       "mode": "Mode",
       "useMode": "Use {mode} mode",
       "active": "Active",
@@ -1744,7 +1744,8 @@
       "useTheme": "Use {name} theme",
       "language": "Language",
       "languageDesc": "Change the interface language. Saved in this browser.",
-      "languageUpdated": "Language updated"
+      "languageUpdated": "Language updated",
+      "themeSaved": "Theme saved to your account"
     },
     "security": {
       "title": "Login & security",

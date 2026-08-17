@@ -21,7 +21,7 @@ import { SettingsPanelHead } from "./settings-panel-head";
 /**
  * Appearance panel — light/dark mode + accent-color picker + language.
  *
- * Mode/theme: localStorage (device-scoped).
+ * Mode/theme: saved to the signed-in profile (and localStorage cache).
  * Language: NEXT_LOCALE cookie + router.refresh() for next-intl.
  */
 export function AppearancePanel() {
@@ -38,6 +38,18 @@ export function AppearancePanel() {
     toast.success(t("languageUpdated"));
     router.refresh();
     setPendingLocale(null);
+  }
+
+  function pickTheme(next: ThemeId) {
+    if (next === theme) return;
+    setTheme(next);
+    toast.success(t("themeSaved"));
+  }
+
+  function pickMode(next: Mode) {
+    if (next === mode) return;
+    setMode(next);
+    toast.success(t("themeSaved"));
   }
 
   const activeLocale =
@@ -102,7 +114,7 @@ export function AppearancePanel() {
               key={m}
               mode={m}
               isActive={m === mode}
-              onPick={() => setMode(m)}
+              onPick={() => pickMode(m)}
             />
           ))}
         </div>
@@ -122,7 +134,7 @@ export function AppearancePanel() {
               tagline={tObj.tagline}
               swatch={tObj.swatch}
               isActive={tObj.id === theme}
-              onPick={() => setTheme(tObj.id)}
+              onPick={() => pickTheme(tObj.id)}
             />
           ))}
         </div>

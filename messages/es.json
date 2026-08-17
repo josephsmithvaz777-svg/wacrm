@@ -1765,7 +1765,7 @@
     },
     "appearance": {
       "title": "Apariencia",
-      "description": "Modo, color de acento e idioma de la interfaz. El modo y el tema se guardan en este dispositivo; el idioma, en este navegador.",
+      "description": "Modo, color de acento e idioma de la interfaz. El modo y el tema se guardan en tu cuenta (te siguen en otros dispositivos); el idioma, en este navegador.",
       "mode": "Modo",
       "useMode": "Usar modo {mode}",
       "active": "Activo",
@@ -1773,7 +1773,8 @@
       "useTheme": "Usar tema {name}",
       "language": "Idioma",
       "languageDesc": "Cambia el idioma de la interfaz. Se guarda en este navegador.",
-      "languageUpdated": "Idioma actualizado"
+      "languageUpdated": "Idioma actualizado",
+      "themeSaved": "Tema guardado en tu cuenta"
     },
     "security": {
       "title": "Inicio de sesión y seguridad",
