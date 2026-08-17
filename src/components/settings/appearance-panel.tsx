@@ -1,28 +1,47 @@
 "use client";
 
-import { Check, Moon, Palette, SunMoon, Sun } from "lucide-react";
+import { Check, Languages, Moon, Sun } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { toast } from "sonner";
 
+import {
+  LOCALE_COOKIE,
+  LOCALE_LABELS,
+  SUPPORTED_LOCALES,
+  type AppLocale,
+  isAppLocale,
+} from "@/i18n/config";
 import { useTheme } from "@/hooks/use-theme";
 import { MODES, THEMES, type Mode, type ThemeId } from "@/lib/themes";
 import { cn } from "@/lib/utils";
-import { useTranslations } from "next-intl";
 import { SettingsPanelHead } from "./settings-panel-head";
 
 /**
- * Appearance panel — light/dark mode + accent-color picker.
+ * Appearance panel — light/dark mode + accent-color picker + language.
  *
- * Two independent controls: a mode toggle (light / dark) and the
- * accent grid. Either applies + persists immediately. No save button:
- * each change is a single attribute swap on <html>, there's nothing
- * to roll back.
- *
- * Persistence: localStorage only (device-scoped). The boot script in
- * layout.tsx replays both choices before first paint on subsequent
- * loads.
+ * Mode/theme: localStorage (device-scoped).
+ * Language: NEXT_LOCALE cookie + router.refresh() for next-intl.
  */
 export function AppearancePanel() {
   const { theme, setTheme, mode, setMode } = useTheme();
   const t = useTranslations("Settings.appearance");
+  const locale = useLocale();
+  const router = useRouter();
+  const [pendingLocale, setPendingLocale] = useState<AppLocale | null>(null);
+
+  function pickLocale(next: AppLocale) {
+    if (next === locale) return;
+    setPendingLocale(next);
+    document.cookie = `${LOCALE_COOKIE}=${next}; Path=/; Max-Age=31536000; SameSite=Lax`;
+    toast.success(t("languageUpdated"));
+    router.refresh();
+    setPendingLocale(null);
+  }
+
+  const activeLocale =
+    pendingLocale ?? (isAppLocale(locale) ? locale : ("en" as AppLocale));
 
   return (
     <section className="max-w-3xl animate-in fade-in-50 duration-200">
@@ -33,7 +52,43 @@ export function AppearancePanel() {
 
       <div className="space-y-4">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-          <SunMoon className="size-4 text-muted-foreground" />
+          <Languages className="size-4 text-muted-foreground" />
+          {t("language")}
+        </h3>
+        <p className="text-sm text-muted-foreground">{t("languageDesc")}</p>
+        <div
+          role="radiogroup"
+          aria-label={t("language")}
+          className="grid max-w-md grid-cols-1 gap-2 sm:grid-cols-3"
+        >
+          {SUPPORTED_LOCALES.map((code) => {
+            const active = activeLocale === code;
+            return (
+              <button
+                key={code}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => pickLocale(code)}
+                className={cn(
+                  "flex items-center justify-between rounded-lg border bg-card px-3 py-2.5 text-left text-sm transition-colors",
+                  active
+                    ? "border-primary/60 ring-2 ring-primary/40"
+                    : "border-border hover:border-border hover:bg-muted/40",
+                )}
+              >
+                <span className="font-medium text-foreground">
+                  {LOCALE_LABELS[code]}
+                </span>
+                {active && <Check className="h-3.5 w-3.5 text-primary" />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mt-8 space-y-4">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
           {t("mode")}
         </h3>
 
@@ -55,7 +110,6 @@ export function AppearancePanel() {
 
       <div className="mt-8 space-y-4">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-          <Palette className="size-4 text-muted-foreground" />
           {t("accentColor")}
         </h3>
 
