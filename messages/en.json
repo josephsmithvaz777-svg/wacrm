@@ -401,8 +401,11 @@
         "email": "Email",
         "company": "Company",
         "tags": "Tags",
+        "assignedTo": "Assigned to",
+        "notes": "Notes",
         "createdAt": "Created"
       },
+      "unassigned": "Unassigned",
       "loading": "Loading contacts...",
       "noContactsMatch": "No contacts match your filters.",
       "noContactsYet": "No contacts yet.",

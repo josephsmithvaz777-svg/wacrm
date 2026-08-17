@@ -62,6 +62,8 @@ const PAGE_SIZE = 25;
 
 interface ContactWithTags extends Contact {
   tags?: Tag[];
+  assigneeName?: string | null;
+  latestNote?: string | null;
 }
 
 export default function ContactsPage() {
@@ -184,18 +186,52 @@ export default function ContactsPage() {
       return;
     }
 
-    // Fetch tags for these contacts
+    // Fetch tags, assignee profiles, and latest notes for these contacts.
     const contactIds = contactRows.map((c) => c.id);
-    const { data: contactTags } = await supabase
-      .from('contact_tags')
-      .select('contact_id, tag_id')
-      .in('contact_id', contactIds);
+    const assigneeIds = [
+      ...new Set(
+        contactRows
+          .map((c) => c.assigned_to)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+
+    const [contactTagsRes, profilesRes, notesRes] = await Promise.all([
+      supabase
+        .from('contact_tags')
+        .select('contact_id, tag_id')
+        .in('contact_id', contactIds),
+      assigneeIds.length > 0
+        ? supabase
+            .from('profiles')
+            .select('user_id, full_name, email')
+            .in('user_id', assigneeIds)
+        : Promise.resolve({ data: [] as { user_id: string; full_name: string | null; email: string | null }[] }),
+      supabase
+        .from('contact_notes')
+        .select('contact_id, note_text, created_at')
+        .in('contact_id', contactIds)
+        .order('created_at', { ascending: false }),
+    ]);
     if (seq !== fetchSeq.current) return; // superseded by a newer fetch
 
     const tagsByContact: Record<string, string[]> = {};
-    contactTags?.forEach((ct) => {
+    contactTagsRes.data?.forEach((ct) => {
       if (!tagsByContact[ct.contact_id]) tagsByContact[ct.contact_id] = [];
       tagsByContact[ct.contact_id].push(ct.tag_id);
+    });
+
+    const nameByUserId: Record<string, string> = {};
+    (profilesRes.data ?? []).forEach((p) => {
+      const label = (p.full_name || p.email || '').trim();
+      if (label) nameByUserId[p.user_id] = label;
+    });
+
+    const latestNoteByContact: Record<string, string> = {};
+    (notesRes.data ?? []).forEach((n) => {
+      if (latestNoteByContact[n.contact_id]) return;
+      const text = (n.note_text ?? '').trim();
+      if (text) latestNoteByContact[n.contact_id] = text;
     });
 
     const enriched: ContactWithTags[] = contactRows.map((c) => ({
@@ -203,6 +239,8 @@ export default function ContactsPage() {
       tags: (tagsByContact[c.id] ?? [])
         .map((tid) => tagsMap[tid])
         .filter(Boolean),
+      assigneeName: c.assigned_to ? nameByUserId[c.assigned_to] ?? null : null,
+      latestNote: latestNoteByContact[c.id] ?? null,
     }));
 
     setContacts(enriched);
@@ -544,16 +582,18 @@ export default function ContactsPage() {
               <TableHead className="text-muted-foreground">{t('tableColumns.name')}</TableHead>
               <TableHead className="text-muted-foreground">{t('tableColumns.phone')}</TableHead>
               <TableHead className="text-muted-foreground hidden md:table-cell">{t('tableColumns.email')}</TableHead>
-              <TableHead className="text-muted-foreground hidden lg:table-cell">{t('tableColumns.company')}</TableHead>
+              <TableHead className="text-muted-foreground hidden xl:table-cell">{t('tableColumns.company')}</TableHead>
               <TableHead className="text-muted-foreground hidden md:table-cell">{t('tableColumns.tags')}</TableHead>
-              <TableHead className="text-muted-foreground hidden lg:table-cell">{t('tableColumns.createdAt')}</TableHead>
+              <TableHead className="text-muted-foreground">{t('tableColumns.assignedTo')}</TableHead>
+              <TableHead className="text-muted-foreground hidden lg:table-cell">{t('tableColumns.notes')}</TableHead>
+              <TableHead className="text-muted-foreground hidden xl:table-cell">{t('tableColumns.createdAt')}</TableHead>
               <TableHead className="text-muted-foreground w-12" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow className="border-border">
-                <TableCell colSpan={8} className="text-center py-12">
+                <TableCell colSpan={10} className="text-center py-12">
                   <div className="flex flex-col items-center gap-2">
                     <Loader2 className="size-6 animate-spin text-primary" />
                     <p className="text-sm text-muted-foreground">{t('loading')}</p>
@@ -562,7 +602,7 @@ export default function ContactsPage() {
               </TableRow>
             ) : contacts.length === 0 ? (
               <TableRow className="border-border">
-                <TableCell colSpan={8} className="text-center py-12">
+                <TableCell colSpan={10} className="text-center py-12">
                   <div className="flex flex-col items-center gap-2">
                     <Users className="size-8 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">
@@ -609,7 +649,7 @@ export default function ContactsPage() {
                   <TableCell className="text-muted-foreground hidden md:table-cell text-sm">
                     {contact.email || <span className="text-muted-foreground">-</span>}
                   </TableCell>
-                  <TableCell className="text-muted-foreground hidden lg:table-cell text-sm">
+                  <TableCell className="text-muted-foreground hidden xl:table-cell text-sm">
                     {contact.company || <span className="text-muted-foreground">-</span>}
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
@@ -637,7 +677,27 @@ export default function ContactsPage() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="text-muted-foreground text-xs hidden lg:table-cell">
+                  <TableCell className="text-sm text-foreground">
+                    {contact.assigneeName ? (
+                      <span className="truncate block max-w-[10rem]" title={contact.assigneeName}>
+                        {contact.assigneeName}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">
+                        {t('unassigned')}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell text-sm text-muted-foreground max-w-[14rem]">
+                    {contact.latestNote ? (
+                      <span className="line-clamp-2" title={contact.latestNote}>
+                        {contact.latestNote}
+                      </span>
+                    ) : (
+                      <span className="text-xs">-</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-xs hidden xl:table-cell">
                     {new Date(contact.created_at).toLocaleDateString('en-US', {
                       month: 'short',
                       day: 'numeric',
