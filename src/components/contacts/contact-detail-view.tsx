@@ -40,7 +40,7 @@ import {
   DollarSign,
   LayoutTemplate,
 } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 
 interface ContactDetailViewProps {
   open: boolean;
@@ -56,6 +56,7 @@ export function ContactDetailView({
   onUpdated,
 }: ContactDetailViewProps) {
   const t = useTranslations('Contacts.detailView');
+  const locale = useLocale();
   const supabase = createClient();
   const { accountId, defaultCurrency } = useAuth();
 
@@ -627,7 +628,7 @@ export function ContactDetailView({
                           </button>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1.5">
-                          {new Date(note.created_at).toLocaleDateString('en-US', {
+                          {new Date(note.created_at).toLocaleString(locale, {
                             month: 'short',
                             day: 'numeric',
                             year: 'numeric',
