@@ -8,7 +8,9 @@ import { reopenClosedConversation } from '@/lib/conversations/reopen';
 import { normalizePhone } from '@/lib/whatsapp/phone-utils';
 import {
   downloadWahaMedia,
+  extractInboundDisplayName,
   extractInboundText,
+  fetchContactDisplayName,
   resolveInboundChatId,
   type WahaClientOptions,
 } from '@/lib/whatsapp/waha-api';
@@ -74,6 +76,15 @@ async function uploadInboundMedia(
   }
 }
 
+function isPlaceholderContactName(name: string | null | undefined, phone: string): boolean {
+  if (!name || !name.trim()) return true;
+  const trimmed = name.trim();
+  if (trimmed === '~') return true;
+  const nameDigits = trimmed.replace(/\D/g, '');
+  const phoneDigits = phone.replace(/\D/g, '');
+  return Boolean(nameDigits) && nameDigits === phoneDigits && !/[A-Za-zÀ-ÿ]/.test(trimmed);
+}
+
 async function findOrCreateContact(
   accountId: string,
   ownerUserId: string,
@@ -82,11 +93,16 @@ async function findOrCreateContact(
 ) {
   const existing = await findExistingContact(admin(), accountId, phone);
   if (existing) {
-    if (name && name !== existing.name) {
+    const shouldUpdate =
+      name &&
+      !isPlaceholderContactName(name, phone) &&
+      (name !== existing.name || isPlaceholderContactName(existing.name, phone));
+    if (shouldUpdate && name !== existing.name) {
       await admin()
         .from('contacts')
         .update({ name, updated_at: new Date().toISOString() })
         .eq('id', existing.id);
+      return { contact: { ...existing, name }, wasCreated: false };
     }
     return { contact: existing, wasCreated: false };
   }
@@ -285,12 +301,12 @@ export async function processWahaEvent(
     .eq('account_id', config.account_id)
     .eq('provider', 'waha');
 
-  const pushName =
-    (typeof payload._data === 'object' &&
-      payload._data &&
-      typeof (payload._data as { notifyName?: string }).notifyName === 'string' &&
-      (payload._data as { notifyName: string }).notifyName) ||
-    phone;
+  const fromPayload = extractInboundDisplayName(payload);
+  const fromApi =
+    fromPayload ||
+    (await fetchContactDisplayName(opts, resolved.chatId)) ||
+    (await fetchContactDisplayName(opts, phone));
+  const pushName = fromApi || phone;
 
   const contactOutcome = await findOrCreateContact(
     config.account_id,

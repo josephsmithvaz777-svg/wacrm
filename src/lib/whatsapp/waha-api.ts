@@ -445,6 +445,89 @@ export async function resolveLidToPhone(
   return null;
 }
 
+/**
+ * Best-effort display name from a WAHA inbound message payload.
+ * Engines differ: WEBJS often uses notifyName; NOWEB/GOWS use pushName.
+ */
+export function extractInboundDisplayName(
+  payload: Record<string, unknown>,
+): string | null {
+  const candidates: unknown[] = [
+    payload.notifyName,
+    payload.pushName,
+    payload.pushname,
+    payload.senderName,
+    payload.authorName,
+  ];
+  const data =
+    payload._data && typeof payload._data === 'object'
+      ? (payload._data as Record<string, unknown>)
+      : null;
+  if (data) {
+    candidates.push(
+      data.notifyName,
+      data.pushName,
+      data.pushname,
+      data.verifiedBizName,
+      data.verifiedName,
+    );
+    const info =
+      data.Info && typeof data.Info === 'object'
+        ? (data.Info as Record<string, unknown>)
+        : null;
+    if (info) candidates.push(info.PushName, info.pushName);
+  }
+
+  for (const c of candidates) {
+    if (typeof c !== 'string') continue;
+    const name = c.trim();
+    if (!name || name === '~') continue;
+    // Reject pure digit strings (phone / LID mistaken for a name).
+    if (/^\d{6,}$/.test(name.replace(/\D/g, '')) && !/[A-Za-zÀ-ÿ]/.test(name)) {
+      continue;
+    }
+    return name;
+  }
+  return null;
+}
+
+/** Look up saved WhatsApp contact name / pushname via WAHA Contacts API. */
+export async function fetchContactDisplayName(
+  opts: WahaClientOptions,
+  chatIdOrPhone: string,
+): Promise<string | null> {
+  const session = opts.session || 'default';
+  const digits = chatIdOrPhone.replace(/\D/g, '');
+  const contactIds = [
+    chatIdOrPhone.includes('@') ? chatIdOrPhone : `${digits}@c.us`,
+    digits,
+  ];
+
+  for (const contactId of contactIds) {
+    try {
+      const res = await wahaFetch(
+        opts,
+        `/api/contacts?contactId=${encodeURIComponent(contactId)}&session=${encodeURIComponent(session)}`,
+      );
+      if (!res.ok) continue;
+      const json = (await res.json()) as Record<string, unknown>;
+      for (const key of ['name', 'pushname', 'pushName', 'shortName', 'shortname']) {
+        const v = json[key];
+        if (typeof v === 'string' && v.trim() && v.trim() !== '~') {
+          const name = v.trim();
+          if (/^\d{6,}$/.test(name.replace(/\D/g, '')) && !/[A-Za-zÀ-ÿ]/.test(name)) {
+            continue;
+          }
+          return name;
+        }
+      }
+    } catch (err) {
+      console.warn('[waha] contact name lookup failed:', err);
+    }
+  }
+  return null;
+}
+
 function pushCandidate(list: string[], value: unknown) {
   if (typeof value === 'string' && value.trim()) list.push(value.trim());
 }
