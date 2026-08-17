@@ -299,22 +299,174 @@ export async function getSession(
   };
 }
 
+/**
+ * Events the CRM webhook must be subscribed to. `message` is
+ * inbound-only on most engines: phone-sent echoes arrive on
+ * `message.any` (and on `engine.event` for GOWS). A session created
+ * before this list grew keeps its old subscription until it is
+ * updated, so `ensureWebhookSubscription` repairs it in place.
+ */
+export const WAHA_WEBHOOK_EVENTS = [
+  'message',
+  'message.any',
+  'message.ack',
+  'session.status',
+  'engine.event',
+] as const;
+
+function sameWebhookUrl(a: string, b: string): boolean {
+  return a.replace(/\/+$/, '') === b.replace(/\/+$/, '');
+}
+
+interface WahaSessionConfig {
+  webhooks?: Array<{ url?: string; events?: string[] }>;
+  [key: string]: unknown;
+}
+
+/**
+ * WAHA's NOWEB engine only keeps chat history when its store is
+ * enabled. Without it `fetchWahaChatMessages` comes back empty and a
+ * message the webhook missed is unrecoverable. Other engines ignore the
+ * key. Applied only when the session config is being written anyway —
+ * WAHA does not always echo the value back, so treating it as a repair
+ * trigger would restart the session on every check.
+ */
+function withHistoryStore(config: WahaSessionConfig): WahaSessionConfig {
+  const noweb =
+    config.noweb && typeof config.noweb === 'object'
+      ? (config.noweb as Record<string, unknown>)
+      : {};
+  const store =
+    noweb.store && typeof noweb.store === 'object'
+      ? (noweb.store as Record<string, unknown>)
+      : {};
+  return {
+    ...config,
+    noweb: { ...noweb, store: { fullSync: false, ...store, enabled: true } },
+  };
+}
+
+async function getSessionConfig(
+  opts: WahaClientOptions,
+): Promise<WahaSessionConfig | null> {
+  const session = opts.session || 'default';
+  const res = await wahaFetch(
+    opts,
+    `/api/sessions/${encodeURIComponent(session)}`,
+  );
+  if (!res.ok) return null;
+  const json = (await res.json()) as { config?: WahaSessionConfig };
+  return json.config ?? null;
+}
+
+/**
+ * Make sure the live session actually delivers every event the CRM
+ * needs to `webhookUrl`. WAHA's Event Monitor shows all engine events
+ * regardless of the webhook config, so a session subscribed only to
+ * `message` looks healthy there while phone-sent messages never reach
+ * the CRM. Only PUTs when something is missing — the update restarts
+ * the session (auth is preserved, no new QR).
+ */
+export async function ensureWebhookSubscription(
+  opts: WahaClientOptions,
+  webhookUrl: string,
+): Promise<{ repaired: boolean; events: string[] }> {
+  const session = opts.session || 'default';
+  const config = await getSessionConfig(opts);
+  const rawWebhooks = config?.webhooks;
+  const webhooks = Array.isArray(rawWebhooks) ? rawWebhooks : [];
+  const mine = webhooks.find(
+    (hook) => typeof hook?.url === 'string' && sameWebhookUrl(hook.url, webhookUrl),
+  );
+  const current = mine && Array.isArray(mine.events) ? mine.events : [];
+  const missing = WAHA_WEBHOOK_EVENTS.filter(
+    (event) => !current.includes(event),
+  );
+  if (mine && missing.length === 0) {
+    return { repaired: false, events: current };
+  }
+
+  const events = [...WAHA_WEBHOOK_EVENTS];
+  const others = webhooks.filter(
+    (hook) =>
+      typeof hook?.url === 'string' && !sameWebhookUrl(hook.url, webhookUrl),
+  );
+  const res = await wahaFetch(opts, `/api/sessions/${encodeURIComponent(session)}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      name: session,
+      config: withHistoryStore({
+        ...(config ?? {}),
+        webhooks: [...others, { url: webhookUrl, events }],
+      }),
+    }),
+  });
+  if (!res.ok) {
+    throw new WahaApiError(res.status, await res.text());
+  }
+  return { repaired: true, events };
+}
+
+/**
+ * Recent messages for a chat, straight from WAHA. Used to backfill the
+ * thread when a webhook delivery was missed or the chat could not be
+ * resolved — the engine's own history is the source of truth.
+ * Returns raw payloads shaped like the webhook `message` payload, so
+ * the same extractors apply.
+ */
+export async function fetchWahaChatMessages(
+  opts: WahaClientOptions,
+  chatId: string,
+  limit = 50,
+  downloadMedia = true,
+): Promise<Record<string, unknown>[]> {
+  const session = opts.session || 'default';
+  const query = `limit=${limit}&downloadMedia=${downloadMedia ? 'true' : 'false'}`;
+  const paths = [
+    `/api/${encodeURIComponent(session)}/chats/${encodeURIComponent(chatId)}/messages?${query}`,
+    `/api/messages?session=${encodeURIComponent(session)}&chatId=${encodeURIComponent(chatId)}&${query}`,
+  ];
+
+  for (const path of paths) {
+    try {
+      const res = await wahaFetch(opts, path);
+      if (!res.ok) continue;
+      const json = await res.json();
+      const list = Array.isArray(json)
+        ? json
+        : Array.isArray((json as { messages?: unknown }).messages)
+          ? (json as { messages: unknown[] }).messages
+          : null;
+      if (!list) continue;
+      return list.filter(
+        (row): row is Record<string, unknown> =>
+          Boolean(row) && typeof row === 'object',
+      );
+    } catch (err) {
+      console.warn('[waha] chat messages fetch failed:', err);
+    }
+  }
+  return [];
+}
+
 export async function ensureSession(
   opts: WahaClientOptions,
   webhookUrl: string,
 ): Promise<{ name: string; status: WahaSessionStatus }> {
   const session = opts.session || 'default';
   const existing = await getSession(opts);
-  const config = {
+  // Reuse whatever the session already carries (proxy, metadata, store
+  // settings) so updating the webhooks can't silently reset it.
+  const previous = existing ? await getSessionConfig(opts) : null;
+  const config = withHistoryStore({
+    ...(previous ?? {}),
     webhooks: [
       {
         url: webhookUrl,
-        // `message` is inbound-only on most engines. Phone-sent echoes
-        // only arrive on `message.any`.
-        events: ['message', 'message.any', 'message.ack', 'session.status', 'engine.event'],
+        events: [...WAHA_WEBHOOK_EVENTS],
       },
     ],
-  };
+  });
 
   if (!existing) {
     const res = await wahaFetch(opts, '/api/sessions/', {

@@ -1,13 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   chatIdToPhone,
+  ensureWebhookSubscription,
   extractInboundText,
   extractWahaMeId,
   extractWahaMessageId,
+  fetchWahaChatMessages,
   isWahaFromMe,
   parseWahaSerializedId,
   phoneToChatId,
   pickOutboundChatJid,
+  WAHA_WEBHOOK_EVENTS,
 } from './waha-api';
 
 describe('waha-api phone helpers', () => {
@@ -168,5 +171,130 @@ describe('parseWahaSerializedId', () => {
         'false_184086660382908@lid_A56B6E07451C6B471362A49A6573C3EF',
       )?.fromMe,
     ).toBe(false);
+  });
+});
+
+const opts = {
+  baseUrl: 'https://waha.example.com',
+  apiKey: 'secret',
+  session: 'default',
+};
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('ensureWebhookSubscription', () => {
+  const webhookUrl = 'https://crm.example.com/api/whatsapp/waha/webhook';
+
+  it('leaves a fully-subscribed session alone', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        name: 'default',
+        status: 'WORKING',
+        config: {
+          webhooks: [{ url: webhookUrl, events: [...WAHA_WEBHOOK_EVENTS] }],
+        },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await ensureWebhookSubscription(opts, webhookUrl);
+
+    expect(result.repaired).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-subscribes a session that predates message.any', async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') return jsonResponse({ name: 'default' });
+      return jsonResponse({
+        name: 'default',
+        status: 'WORKING',
+        config: {
+          metadata: { keep: 'me' },
+          webhooks: [
+            { url: 'https://other.example.com/hook', events: ['message'] },
+            { url: webhookUrl, events: ['message', 'session.status'] },
+          ],
+        },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await ensureWebhookSubscription(opts, webhookUrl);
+
+    expect(result.repaired).toBe(true);
+    expect(result.events).toContain('message.any');
+
+    const put = fetchMock.mock.calls.find((call) => call[1]?.method === 'PUT');
+    expect(put).toBeDefined();
+    const sent = JSON.parse(String(put?.[1]?.body ?? '{}'));
+    // Unrelated config and other webhooks must survive the update.
+    expect(sent.config.metadata).toEqual({ keep: 'me' });
+    expect(sent.config.webhooks).toHaveLength(2);
+    expect(
+      sent.config.webhooks.find(
+        (hook: { url: string }) => hook.url === webhookUrl,
+      ).events,
+    ).toEqual([...WAHA_WEBHOOK_EVENTS]);
+  });
+
+  it('adds the webhook when the session has none', async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') return jsonResponse({ name: 'default' });
+      return jsonResponse({ name: 'default', status: 'WORKING', config: {} });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect((await ensureWebhookSubscription(opts, webhookUrl)).repaired).toBe(true);
+  });
+});
+
+describe('fetchWahaChatMessages', () => {
+  it('reads the chat-scoped endpoint', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes('/chats/')) {
+        return jsonResponse([{ id: 'true_51999111222@c.us_ABC', body: 'hola' }]);
+      }
+      return jsonResponse({ error: 'nope' }, 404);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const rows = await fetchWahaChatMessages(opts, '51999111222@c.us', 10);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].body).toBe('hola');
+  });
+
+  it('falls back to the legacy /api/messages endpoint', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes('/api/messages')) {
+        return jsonResponse({ messages: [{ id: 'ABC', body: 'hey' }] });
+      }
+      return jsonResponse({ error: 'not found' }, 404);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const rows = await fetchWahaChatMessages(opts, '51999111222@c.us');
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].body).toBe('hey');
+  });
+
+  it('returns an empty list when every endpoint fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ error: 'boom' }, 500)),
+    );
+
+    expect(await fetchWahaChatMessages(opts, '51999111222@c.us')).toEqual([]);
   });
 });

@@ -7,7 +7,6 @@ import { findExistingContact, isUniqueViolation } from '@/lib/contacts/dedupe';
 import { reopenClosedConversation } from '@/lib/conversations/reopen';
 import { normalizePhone } from '@/lib/whatsapp/phone-utils';
 import {
-  downloadWahaMedia,
   extractInboundDisplayName,
   extractInboundText,
   extractWahaMeId,
@@ -25,7 +24,7 @@ import { runAutomationsForTrigger } from '@/lib/automations/engine';
 import { dispatchInboundToFlows } from '@/lib/flows/engine';
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply';
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver';
-import { buildMediaPath } from '@/lib/storage/upload-media';
+import { mimeToContentType, uploadWahaMedia } from '@/lib/whatsapp/waha-media';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _admin: any = null;
@@ -44,43 +43,6 @@ export interface WahaWebhookEvent {
   session: string;
   payload?: Record<string, unknown>;
   me?: { id?: string; pushName?: string };
-}
-
-function mimeToContentType(mime: string | null | undefined): string {
-  if (!mime) return 'document';
-  if (mime.startsWith('image/')) return 'image';
-  if (mime.startsWith('video/')) return 'video';
-  if (mime.startsWith('audio/')) return 'audio';
-  return 'document';
-}
-
-async function uploadInboundMedia(
-  accountId: string,
-  opts: WahaClientOptions,
-  mediaUrl: string,
-  mime: string | null | undefined,
-  filename: string | null | undefined,
-): Promise<string | null> {
-  try {
-    const { buffer, contentType } = await downloadWahaMedia(opts, mediaUrl);
-    const name = filename || `waha-${Date.now()}.${(mime || contentType).split('/')[1] || 'bin'}`;
-    const path = buildMediaPath(accountId, name);
-    const { error } = await admin()
-      .storage.from('chat-media')
-      .upload(path, buffer, {
-        contentType: mime || contentType,
-        upsert: false,
-      });
-    if (error) {
-      console.error('[waha-inbound] storage upload failed:', error.message);
-      return null;
-    }
-    const { data } = admin().storage.from('chat-media').getPublicUrl(path);
-    return data.publicUrl as string;
-  } catch (err) {
-    console.error('[waha-inbound] media download failed:', err);
-    return null;
-  }
 }
 
 function isPlaceholderContactName(name: string | null | undefined, phone: string): boolean {
@@ -511,7 +473,7 @@ export async function processWahaEvent(
 
   if (hasMedia && media?.url) {
     contentType = mimeToContentType(media.mimetype);
-    mediaUrl = await uploadInboundMedia(
+    mediaUrl = await uploadWahaMedia(
       config.account_id,
       opts,
       media.url,

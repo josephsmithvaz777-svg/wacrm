@@ -513,7 +513,16 @@ function InboxPageInner() {
 
 
   const handleMessagesLoaded = useCallback((loaded: Message[]) => {
-    setMessages(loaded);
+    setMessages((prev) => {
+      // A refetch (thread open, manual refresh, WAHA history backfill)
+      // must not drop bubbles whose send is still in flight — those rows
+      // exist only client-side until the API call returns. Failed ones
+      // are dropped: the refetch is the user's way to clear them.
+      const pending = prev.filter(
+        (m) => m.id.startsWith("temp-") && m.status === "sending",
+      );
+      return pending.length ? [...loaded, ...pending] : loaded;
+    });
   }, []);
 
   const handleNewMessage = useCallback((msg: Message) => {

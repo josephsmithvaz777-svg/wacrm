@@ -309,6 +309,65 @@ export function MessageThread({
     [conversationId],
   );
 
+  // Returns the rows instead of applying them so the caller can drop a
+  // response that arrived after the user switched threads.
+  const fetchMessages = useCallback(
+    async (convId: string): Promise<Message[] | null> => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("conversation_id", convId)
+        .order("created_at", { ascending: true });
+      if (error) {
+        console.error("Failed to fetch messages:", error);
+        return null;
+      }
+      return (data ?? []) as Message[];
+    },
+    [],
+  );
+
+  // WAHA's webhook is best-effort: messages sent from the linked phone,
+  // chats WhatsApp keys by `@lid`, and deliveries dropped on a cold
+  // start never reach the CRM. Asking WAHA for the chat's own history
+  // fills those holes. `null` = provider unknown yet, `false` = not a
+  // WAHA account, so stop asking.
+  const wahaSyncSupportedRef = useRef<boolean | null>(null);
+  const wahaSyncInFlightRef = useRef(false);
+
+  const pullWahaHistory = useCallback(
+    async (convId: string): Promise<number> => {
+      if (wahaSyncSupportedRef.current === false) return 0;
+      if (wahaSyncInFlightRef.current) return 0;
+      wahaSyncInFlightRef.current = true;
+      try {
+        const res = await fetch("/api/whatsapp/waha/sync-chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ conversation_id: convId }),
+        });
+        if (!res.ok) return 0;
+        const json = (await res.json()) as {
+          supported?: boolean;
+          inserted?: number;
+        };
+        if (json.supported === false) {
+          wahaSyncSupportedRef.current = false;
+          return 0;
+        }
+        wahaSyncSupportedRef.current = true;
+        return json.inserted ?? 0;
+      } catch (err) {
+        console.warn("WAHA history sync failed:", err);
+        return 0;
+      } finally {
+        wahaSyncInFlightRef.current = false;
+      }
+    },
+    [],
+  );
+
   // Fetch messages whenever the selected conversation changes. Kept
   // separate from the unread-reset effect so that incoming messages
   // arriving while the thread is open don't trigger a full refetch —
@@ -316,27 +375,21 @@ export function MessageThread({
   useEffect(() => {
     if (!conversationId) return;
 
-    const supabase = createClient();
     let cancelled = false;
 
     (async () => {
       setLoading(true);
-
-      const { data, error } = await supabase
-        .from("messages")
-        .select("*")
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: true });
-
+      const rows = await fetchMessages(conversationId);
       if (cancelled) return;
+      if (rows) onMessagesLoadedRef.current(rows);
+      setLoading(false);
 
-      if (error) {
-        console.error("Failed to fetch messages:", error);
-      } else {
-        onMessagesLoadedRef.current(data ?? []);
-      }
-
-      if (!cancelled) setLoading(false);
+      // Paint what the DB has first, then backfill from WAHA — the
+      // round-trip to the engine must not delay opening the thread.
+      const inserted = await pullWahaHistory(conversationId);
+      if (cancelled || inserted === 0) return;
+      const synced = await fetchMessages(conversationId);
+      if (!cancelled && synced) onMessagesLoadedRef.current(synced);
     })();
 
     return () => {
@@ -346,7 +399,30 @@ export function MessageThread({
     // the realtime channel reconnects or the tab regains focus —
     // realtime is best-effort and any message events sent while the WS
     // was disconnected or throttled are otherwise lost.
-  }, [conversationId, resyncToken]);
+  }, [conversationId, resyncToken, fetchMessages, pullWahaHistory]);
+
+  // Keep an open WAHA thread current even when no webhook arrives. Only
+  // runs while the tab is visible, and stops itself on Meta accounts
+  // (the sync endpoint reports `supported: false`).
+  useEffect(() => {
+    if (!conversationId) return;
+    let cancelled = false;
+
+    const interval = setInterval(async () => {
+      if (cancelled) return;
+      if (wahaSyncSupportedRef.current === false) return;
+      if (typeof document !== "undefined" && document.hidden) return;
+      const inserted = await pullWahaHistory(conversationId);
+      if (cancelled || inserted === 0) return;
+      const rows = await fetchMessages(conversationId);
+      if (!cancelled && rows) onMessagesLoadedRef.current(rows);
+    }, 20_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [conversationId, fetchMessages, pullWahaHistory]);
 
   // Reactions fetch — pulls the current state from the DB. Kept separate
   // from the channel subscription below so a `resyncToken` bump just
