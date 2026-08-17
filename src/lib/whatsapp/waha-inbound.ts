@@ -11,6 +11,7 @@ import {
   extractInboundDisplayName,
   extractInboundText,
   fetchContactDisplayName,
+  isUsableDisplayName,
   resolveInboundChatId,
   type WahaClientOptions,
 } from '@/lib/whatsapp/waha-api';
@@ -77,12 +78,7 @@ async function uploadInboundMedia(
 }
 
 function isPlaceholderContactName(name: string | null | undefined, phone: string): boolean {
-  if (!name || !name.trim()) return true;
-  const trimmed = name.trim();
-  if (trimmed === '~') return true;
-  const nameDigits = trimmed.replace(/\D/g, '');
-  const phoneDigits = phone.replace(/\D/g, '');
-  return Boolean(nameDigits) && nameDigits === phoneDigits && !/[A-Za-zÀ-ÿ]/.test(trimmed);
+  return !isUsableDisplayName(name, phone);
 }
 
 async function findOrCreateContact(
@@ -301,11 +297,11 @@ export async function processWahaEvent(
     .eq('account_id', config.account_id)
     .eq('provider', 'waha');
 
-  const fromPayload = extractInboundDisplayName(payload);
+  const fromPayload = extractInboundDisplayName(payload, phone);
   const fromApi =
-    fromPayload ||
-    (await fetchContactDisplayName(opts, resolved.chatId)) ||
-    (await fetchContactDisplayName(opts, phone));
+    (isUsableDisplayName(fromPayload, phone) ? fromPayload : null) ||
+    (await fetchContactDisplayName(opts, resolved.chatId, phone)) ||
+    (await fetchContactDisplayName(opts, phone, phone));
   const pushName = fromApi || phone;
 
   const contactOutcome = await findOrCreateContact(

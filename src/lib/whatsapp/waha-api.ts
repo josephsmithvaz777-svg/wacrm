@@ -446,11 +446,47 @@ export async function resolveLidToPhone(
 }
 
 /**
+ * True when a string is usable as a contact display name (not phone / junk).
+ */
+export function isUsableDisplayName(
+  name: string | null | undefined,
+  phone?: string,
+): boolean {
+  if (!name) return false;
+  const trimmed = name.trim();
+  if (!trimmed) return false;
+  if (trimmed === '~' || trimmed === '.' || trimmed === '..' || trimmed === '-') {
+    return false;
+  }
+  // Punctuation / emoji-only placeholders.
+  if (!/[A-Za-zÀ-ÿ0-9]/.test(trimmed)) return false;
+  if (/^[\s._\-•·]+$/.test(trimmed)) return false;
+  const nameDigits = trimmed.replace(/\D/g, '');
+  if (phone) {
+    const phoneDigits = phone.replace(/\D/g, '');
+    if (
+      nameDigits &&
+      phoneDigits &&
+      nameDigits === phoneDigits &&
+      !/[A-Za-zÀ-ÿ]/.test(trimmed)
+    ) {
+      return false;
+    }
+  }
+  // Pure long digit strings are phones / LIDs, not names.
+  if (/^\d{6,}$/.test(nameDigits) && !/[A-Za-zÀ-ÿ]/.test(trimmed)) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Best-effort display name from a WAHA inbound message payload.
  * Engines differ: WEBJS often uses notifyName; NOWEB/GOWS use pushName.
  */
 export function extractInboundDisplayName(
   payload: Record<string, unknown>,
+  phone?: string,
 ): string | null {
   const candidates: unknown[] = [
     payload.notifyName,
@@ -480,28 +516,41 @@ export function extractInboundDisplayName(
 
   for (const c of candidates) {
     if (typeof c !== 'string') continue;
-    const name = c.trim();
-    if (!name || name === '~') continue;
-    // Reject pure digit strings (phone / LID mistaken for a name).
-    if (/^\d{6,}$/.test(name.replace(/\D/g, '')) && !/[A-Za-zÀ-ÿ]/.test(name)) {
-      continue;
-    }
-    return name;
+    if (isUsableDisplayName(c, phone)) return c.trim();
   }
   return null;
 }
 
-/** Look up saved WhatsApp contact name / pushname via WAHA Contacts API. */
+/** Look up saved WhatsApp contact name / pushname via WAHA Contacts / Chats API. */
 export async function fetchContactDisplayName(
   opts: WahaClientOptions,
   chatIdOrPhone: string,
+  phone?: string,
 ): Promise<string | null> {
   const session = opts.session || 'default';
   const digits = chatIdOrPhone.replace(/\D/g, '');
+  const phoneHint = phone || digits;
   const contactIds = [
     chatIdOrPhone.includes('@') ? chatIdOrPhone : `${digits}@c.us`,
     digits,
   ];
+
+  const pickName = (json: Record<string, unknown>): string | null => {
+    for (const key of [
+      'name',
+      'pushname',
+      'pushName',
+      'shortName',
+      'shortname',
+      'verifiedName',
+    ]) {
+      const v = json[key];
+      if (typeof v === 'string' && isUsableDisplayName(v, phoneHint)) {
+        return v.trim();
+      }
+    }
+    return null;
+  };
 
   for (const contactId of contactIds) {
     try {
@@ -509,22 +558,58 @@ export async function fetchContactDisplayName(
         opts,
         `/api/contacts?contactId=${encodeURIComponent(contactId)}&session=${encodeURIComponent(session)}`,
       );
-      if (!res.ok) continue;
-      const json = (await res.json()) as Record<string, unknown>;
-      for (const key of ['name', 'pushname', 'pushName', 'shortName', 'shortname']) {
-        const v = json[key];
-        if (typeof v === 'string' && v.trim() && v.trim() !== '~') {
-          const name = v.trim();
-          if (/^\d{6,}$/.test(name.replace(/\D/g, '')) && !/[A-Za-zÀ-ÿ]/.test(name)) {
-            continue;
-          }
-          return name;
-        }
+      if (res.ok) {
+        const picked = pickName((await res.json()) as Record<string, unknown>);
+        if (picked) return picked;
       }
     } catch (err) {
       console.warn('[waha] contact name lookup failed:', err);
     }
   }
+
+  // Chat overview is the most reliable place for display names.
+  try {
+    const chatId = contactIds.find((id) => id.includes('@')) || `${digits}@c.us`;
+    const res = await wahaFetch(
+      opts,
+      `/api/${encodeURIComponent(session)}/chats/overview?limit=1&ids=${encodeURIComponent(chatId)}&ids=${encodeURIComponent(digits)}`,
+    );
+    if (res.ok) {
+      const list = (await res.json()) as unknown;
+      if (Array.isArray(list)) {
+        for (const row of list) {
+          if (!row || typeof row !== 'object') continue;
+          const name = (row as { name?: unknown }).name;
+          if (typeof name === 'string' && isUsableDisplayName(name, phoneHint)) {
+            return name.trim();
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[waha] chats overview name lookup failed:', err);
+  }
+
+  // Chat metadata sometimes has the display name when Contacts API is empty.
+  for (const chatId of contactIds.filter((id) => id.includes('@'))) {
+    try {
+      const res = await wahaFetch(
+        opts,
+        `/api/${encodeURIComponent(session)}/chats/${encodeURIComponent(chatId)}`,
+      );
+      if (!res.ok) continue;
+      const json = (await res.json()) as Record<string, unknown>;
+      const nested =
+        json.chat && typeof json.chat === 'object'
+          ? (json.chat as Record<string, unknown>)
+          : json;
+      const picked = pickName(nested);
+      if (picked) return picked;
+    } catch (err) {
+      console.warn('[waha] chat name lookup failed:', err);
+    }
+  }
+
   return null;
 }
 
