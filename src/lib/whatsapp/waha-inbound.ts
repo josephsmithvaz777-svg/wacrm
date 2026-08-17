@@ -245,11 +245,27 @@ export async function processWahaEvent(
     return;
   }
 
+  const fromRaw =
+    typeof payload.from === 'string'
+      ? payload.from
+      : typeof payload.chatId === 'string'
+        ? payload.chatId
+        : null;
+  // Groups / status / newsletters are not 1:1 inbox chats — skip quietly.
+  if (
+    fromRaw &&
+    (fromRaw.endsWith('@g.us') ||
+      fromRaw.endsWith('@newsletter') ||
+      fromRaw === 'status@broadcast')
+  ) {
+    return;
+  }
+
   const resolved = await resolveInboundChatId(opts, payload);
   if (!resolved) {
     console.warn(
       '[waha-inbound] skipping message — could not resolve phone from',
-      payload.from || payload.chatId,
+      fromRaw,
     );
     return;
   }

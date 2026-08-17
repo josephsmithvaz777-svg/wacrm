@@ -87,6 +87,14 @@ export async function resolveOutboundChatId(
   toPhone: string,
 ): Promise<string> {
   const digits = toPhone.replace(/\D/g, '');
+  // E.164 max is 15 digits. Longer values are almost always Linked IDs
+  // wrongly stored as phones — WEBJS then fails with "No LID for user".
+  if (digits.length < 8 || digits.length > 15) {
+    throw new WahaApiError(
+      400,
+      `Invalid phone for WAHA send (len=${digits.length}): ${digits.slice(0, 20)}`,
+    );
+  }
   const session = opts.session || 'default';
   const fallback = `${digits}@c.us`;
 
