@@ -145,7 +145,7 @@
   },
   "NotificationsPage": {
     "title": "알림",
-    "description": "팀원이 나에게 할당한 대화가 여기에 표시됩니다.",
+    "description": "팀원이 할당한 대화.",
     "markAllRead": "모두 읽음으로 표시",
     "emptyTitle": "아직 알림이 없습니다",
     "emptyBody": "누군가 대화를 할당하면 여기에 알림이 표시됩니다.",
@@ -1362,6 +1362,8 @@
       "tagsCount": "태그 {count}개",
       "fieldsCount": "커스텀 필드 {count}개",
       "appearance": "{mode} 모드 · {theme} 색상",
+      "notificationsTile": "알림 및 소리",
+      "activityTile": "팀 활동 로그",
       "yourAccount": "내 계정",
       "loading": "불러오는 중…"
     },
@@ -1670,12 +1672,14 @@
       "profile": "내 프로필",
       "security": "로그인 & 보안",
       "appearance": "화면 설정",
+      "notifications": "알림",
       "whatsapp": "WhatsApp",
       "templates": "템플릿",
       "quick-replies": "빠른 답장",
       "fields": "필드 & 태그",
       "deals": "딜 & 통화",
       "members": "팀원",
+      "activity": "활동 로그",
       "api": "API 키",
       "branding": "화이트 라벨"
     },
@@ -1746,6 +1750,38 @@
       "languageDesc": "인터페이스 언어를 변경합니다. 이 브라우저에 저장됩니다.",
       "languageUpdated": "언어가 업데이트되었습니다",
       "themeSaved": "테마가 계정에 저장되었습니다"
+    },
+    "notifications": {
+      "title": "알림 및 소리",
+      "description": "배정은 헤더의 종 아이콘에 표시됩니다. 알림과 새 고객 메시지 소리를 켜거나 끌 수 있습니다.",
+      "assignmentSound": "알림 소리",
+      "assignmentSoundDesc": "동료가 대화를 배정할 때 재생됩니다.",
+      "messageSound": "메시지 소리",
+      "messageSoundDesc": "고객이 새 메시지를 보낼 때 재생됩니다.",
+      "preview": "소리 미리듣기",
+      "previewPlayed": "소리를 재생했습니다",
+      "hintOn": "소리 켜짐",
+      "hintOff": "음소거"
+    },
+    "activity": {
+      "title": "활동 로그",
+      "description": "팀원이 수행한 작업 기록: 연락처, 딜, 메시지, 배정 등. 관리자만 볼 수 있습니다.",
+      "adminOnly": "관리자만 활동 로그를 볼 수 있습니다.",
+      "refresh": "새로고침",
+      "filterUser": "사용자",
+      "allUsers": "전체",
+      "system": "시스템",
+      "unknownUser": "사용자",
+      "empty": "아직 기록된 활동이 없습니다",
+      "emptyHint": "팀 작업이 여기에 자동으로 나타납니다.",
+      "entities": {
+        "contact": "연락처",
+        "deal": "딜",
+        "conversation": "대화",
+        "message": "메시지",
+        "broadcast": "브로드캐스트",
+        "member": "멤버"
+      }
     },
     "security": {
       "title": "로그인 & 보안",

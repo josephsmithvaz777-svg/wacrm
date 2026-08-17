@@ -145,7 +145,7 @@
   },
   "NotificationsPage": {
     "title": "Notificaciones",
-    "description": "Aquí aparecen las conversaciones que tus compañeros te asignan.",
+    "description": "Conversaciones que tus compañeros te asignan.",
     "markAllRead": "Marcar todas como leídas",
     "emptyTitle": "Aún no hay notificaciones",
     "emptyBody": "Verás un aviso aquí cuando alguien te asigne una conversación.",
@@ -1384,6 +1384,8 @@
       "tagsCount": "{count} {count, plural, =1 {etiqueta} other {etiquetas}}",
       "fieldsCount": "{count} {count, plural, =1 {campo} other {campos}}",
       "appearance": "Modo {mode} · acento {theme}",
+      "notificationsTile": "Campana y sonidos",
+      "activityTile": "Registro del equipo",
       "yourAccount": "Tu cuenta",
       "loading": "Cargando…"
     },
@@ -1695,12 +1697,14 @@
       "profile": "Tu perfil",
       "security": "Inicio de sesión y seguridad",
       "appearance": "Apariencia",
+      "notifications": "Notificaciones",
       "whatsapp": "WhatsApp",
       "templates": "Plantillas",
       "quick-replies": "Respuestas rápidas",
       "fields": "Campos y etiquetas",
       "deals": "Deals y moneda",
       "members": "Miembros del equipo",
+      "activity": "Actividades",
       "api": "Claves API",
       "branding": "Marca blanca"
     },
@@ -1775,6 +1779,38 @@
       "languageDesc": "Cambia el idioma de la interfaz. Se guarda en este navegador.",
       "languageUpdated": "Idioma actualizado",
       "themeSaved": "Tema guardado en tu cuenta"
+    },
+    "notifications": {
+      "title": "Notificaciones y sonido",
+      "description": "Las asignaciones aparecen en la campana del encabezado. Activa o desactiva los sonidos de avisos y mensajes nuevos.",
+      "assignmentSound": "Sonido de notificaciones",
+      "assignmentSoundDesc": "Suena cuando un compañero te asigna una conversación.",
+      "messageSound": "Sonido de mensajes",
+      "messageSoundDesc": "Suena cuando un cliente envía un mensaje nuevo.",
+      "preview": "Probar sonido",
+      "previewPlayed": "Sonido reproducido",
+      "hintOn": "Sonido activo",
+      "hintOff": "Silenciado"
+    },
+    "activity": {
+      "title": "Actividades",
+      "description": "Registro de lo que hace cada miembro del equipo: contactos, deals, mensajes, asignaciones y más. Solo visible para administradores.",
+      "adminOnly": "Solo los administradores pueden ver el registro de actividades.",
+      "refresh": "Actualizar",
+      "filterUser": "Usuario",
+      "allUsers": "Todos",
+      "system": "Sistema",
+      "unknownUser": "Usuario",
+      "empty": "Aún no hay actividad registrada",
+      "emptyHint": "Las acciones del equipo aparecerán aquí automáticamente.",
+      "entities": {
+        "contact": "Contacto",
+        "deal": "Deal",
+        "conversation": "Conversación",
+        "message": "Mensaje",
+        "broadcast": "Difusión",
+        "member": "Miembro"
+      }
     },
     "security": {
       "title": "Inicio de sesión y seguridad",

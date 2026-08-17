@@ -35,6 +35,10 @@ interface Profile {
   beta_features: string[];
   account_id: string | null;
   account_role: AccountRole | null;
+  ui_theme?: string | null;
+  ui_mode?: string | null;
+  sound_notifications?: boolean | null;
+  sound_messages?: boolean | null;
 }
 
 interface AccountSummary {
@@ -146,7 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "id, full_name, email, avatar_url, role, beta_features, account_id, account_role, ui_theme, ui_mode",
+          "id, full_name, email, avatar_url, role, beta_features, account_id, account_role, ui_theme, ui_mode, sound_notifications, sound_messages",
         )
         .eq("user_id", userId)
         .maybeSingle();
@@ -230,6 +234,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ui_theme:
             typeof data.ui_theme === "string" ? data.ui_theme : null,
           ui_mode: typeof data.ui_mode === "string" ? data.ui_mode : null,
+          sound_notifications:
+            typeof data.sound_notifications === "boolean"
+              ? data.sound_notifications
+              : null,
+          sound_messages:
+            typeof data.sound_messages === "boolean"
+              ? data.sound_messages
+              : null,
         });
         setAccount(accountRow);
       } else {

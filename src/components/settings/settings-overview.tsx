@@ -218,6 +218,20 @@ export function SettingsOverview({
       subtitle: t('appearance', { mode: cap(mode), theme: themeName }),
     },
     {
+      section: 'notifications',
+      loading: false,
+      subtitle: t('notificationsTile'),
+    },
+    ...(canManageMembers
+      ? [
+          {
+            section: 'activity' as const,
+            loading: false,
+            subtitle: t('activityTile'),
+          },
+        ]
+      : []),
+    {
       section: 'branding',
       loading: false,
       subtitle: account?.name?.trim() || t('yourAccount'),

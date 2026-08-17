@@ -1,10 +1,12 @@
 import {
+  Bell,
   Coins,
   FileText,
   KeyRound,
   LayoutGrid,
   Palette,
   PlugZap,
+  ScrollText,
   Shield,
   Sparkles,
   Tags,
@@ -27,6 +29,7 @@ export const SETTINGS_SECTIONS = [
   'profile',
   'security',
   'appearance',
+  'notifications',
   'branding',
   'whatsapp',
   'templates',
@@ -34,6 +37,7 @@ export const SETTINGS_SECTIONS = [
   'fields',
   'deals',
   'members',
+  'activity',
   'api',
 ] as const;
 
@@ -47,6 +51,8 @@ export interface SectionMeta {
   label: string;
   icon: LucideIcon;
   group: 'top' | 'account' | 'workspace';
+  /** Hide from rail / deep-links unless caller is admin+. */
+  adminOnly?: boolean;
 }
 
 export const SECTION_META: Record<SettingsSection, SectionMeta> = {
@@ -54,6 +60,12 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   profile: { id: 'profile', label: 'Your profile', icon: User, group: 'account' },
   security: { id: 'security', label: 'Login & security', icon: Shield, group: 'account' },
   appearance: { id: 'appearance', label: 'Appearance', icon: Palette, group: 'account' },
+  notifications: {
+    id: 'notifications',
+    label: 'Notifications',
+    icon: Bell,
+    group: 'account',
+  },
   branding: { id: 'branding', label: 'Branding', icon: Sparkles, group: 'workspace' },
   whatsapp: { id: 'whatsapp', label: 'WhatsApp', icon: PlugZap, group: 'workspace' },
   templates: { id: 'templates', label: 'Templates', icon: FileText, group: 'workspace' },
@@ -61,6 +73,13 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   fields: { id: 'fields', label: 'Fields & tags', icon: Tags, group: 'workspace' },
   deals: { id: 'deals', label: 'Deals & currency', icon: Coins, group: 'workspace' },
   members: { id: 'members', label: 'Team members', icon: UsersRound, group: 'workspace' },
+  activity: {
+    id: 'activity',
+    label: 'Activity',
+    icon: ScrollText,
+    group: 'workspace',
+    adminOnly: true,
+  },
   api: { id: 'api', label: 'API keys', icon: KeyRound, group: 'workspace' },
 };
 

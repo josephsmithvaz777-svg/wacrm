@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
-import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
-import { Bell, LogOut, Menu, Settings as SettingsIcon, User } from "lucide-react";
+import { LogOut, Menu, Settings as SettingsIcon, User } from "lucide-react";
 import {
   Avatar,
   AvatarFallback,
@@ -18,13 +17,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ModeToggle } from "@/components/layout/mode-toggle";
-import { cn } from "@/lib/utils";
+import { NotificationsBell } from "@/components/layout/notifications-bell";
 import { useTranslations } from "next-intl";
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "dashboard",
   "/inbox": "inbox",
-  "/notifications": "notifications",
   "/contacts": "contacts",
   "/pipelines": "pipelines",
   "/broadcasts": "broadcasts",
@@ -50,9 +48,7 @@ export function Header({ onOpenSidebar }: HeaderProps) {
   const t = useTranslations("Header");
   const pathname = usePathname();
   const { profile, signOut } = useAuth();
-  const unreadNotifications = useUnreadNotifications();
   const titleKey = getPageTitleKey(pathname);
-  const notificationsActive = pathname.startsWith("/notifications");
 
   const initial =
     profile?.full_name?.charAt(0)?.toUpperCase() ??
@@ -78,28 +74,7 @@ export function Header({ onOpenSidebar }: HeaderProps) {
 
       <div className="flex items-center gap-1 sm:gap-2">
         <ModeToggle />
-
-        <Link
-          href="/notifications"
-          aria-label={
-            unreadNotifications > 0
-              ? t("notificationsWithCount", { count: unreadNotifications })
-              : t("notifications")
-          }
-          className={cn(
-            "relative flex h-10 w-10 items-center justify-center rounded-md transition-colors",
-            notificationsActive
-              ? "bg-primary/10 text-primary"
-              : "text-muted-foreground hover:bg-muted hover:text-foreground",
-          )}
-        >
-          <Bell className="h-5 w-5" />
-          {unreadNotifications > 0 ? (
-            <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground">
-              {unreadNotifications > 9 ? "9+" : unreadNotifications}
-            </span>
-          ) : null}
-        </Link>
+        <NotificationsBell />
 
         <DropdownMenu>
           <DropdownMenuTrigger

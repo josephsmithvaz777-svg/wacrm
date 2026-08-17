@@ -145,7 +145,7 @@
   },
   "NotificationsPage": {
     "title": "Notifications",
-    "description": "Conversations other teammates assign to you show up here.",
+    "description": "Conversations teammates assign to you.",
     "markAllRead": "Mark all as read",
     "emptyTitle": "No notifications yet",
     "emptyBody": "You'll see an alert here when someone assigns you a conversation.",
@@ -1362,6 +1362,8 @@
       "tagsCount": "{count} {count, plural, =1 {tag} other {tags}}",
       "fieldsCount": "{count} custom {count, plural, =1 {field} other {fields}}",
       "appearance": "{mode} mode · {theme} accent",
+      "notificationsTile": "Bell & sounds",
+      "activityTile": "Team activity log",
       "yourAccount": "Your account",
       "loading": "Loading…"
     },
@@ -1670,12 +1672,14 @@
       "profile": "Your profile",
       "security": "Login & security",
       "appearance": "Appearance",
+      "notifications": "Notifications",
       "whatsapp": "WhatsApp",
       "templates": "Templates",
       "quick-replies": "Quick replies",
       "fields": "Fields & tags",
       "deals": "Deals & currency",
       "members": "Team members",
+      "activity": "Activity",
       "api": "API keys",
       "branding": "Branding"
     },
@@ -1746,6 +1750,38 @@
       "languageDesc": "Change the interface language. Saved in this browser.",
       "languageUpdated": "Language updated",
       "themeSaved": "Theme saved to your account"
+    },
+    "notifications": {
+      "title": "Notifications & sound",
+      "description": "Assignments show in the header bell. Toggle sounds for alerts and new customer messages.",
+      "assignmentSound": "Notification sound",
+      "assignmentSoundDesc": "Plays when a teammate assigns you a conversation.",
+      "messageSound": "Message sound",
+      "messageSoundDesc": "Plays when a customer sends a new message.",
+      "preview": "Preview sound",
+      "previewPlayed": "Sound played",
+      "hintOn": "Sound on",
+      "hintOff": "Muted"
+    },
+    "activity": {
+      "title": "Activity",
+      "description": "Log of what each team member does: contacts, deals, messages, assignments, and more. Admins only.",
+      "adminOnly": "Only admins can view the activity log.",
+      "refresh": "Refresh",
+      "filterUser": "User",
+      "allUsers": "Everyone",
+      "system": "System",
+      "unknownUser": "User",
+      "empty": "No activity recorded yet",
+      "emptyHint": "Team actions will appear here automatically.",
+      "entities": {
+        "contact": "Contact",
+        "deal": "Deal",
+        "conversation": "Conversation",
+        "message": "Message",
+        "broadcast": "Broadcast",
+        "member": "Member"
+      }
     },
     "security": {
       "title": "Login & security",

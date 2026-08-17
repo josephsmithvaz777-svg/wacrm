@@ -36,6 +36,10 @@ export interface Profile {
   ui_theme?: string | null;
   /** Preferred light/dark mode (migration 045). */
   ui_mode?: string | null;
+  /** Play sound on in-app notifications (migration 046). */
+  sound_notifications?: boolean | null;
+  /** Play sound on inbound customer messages (migration 046). */
+  sound_messages?: boolean | null;
   /**
    * Account this profile is a member of. Added by
    * `017_account_sharing.sql`; NOT NULL in the DB post-backfill.
@@ -210,6 +214,19 @@ export interface Notification {
   title: string;
   body?: string;
   read_at?: string;
+  created_at: string;
+}
+
+/** Admin audit trail (migration 047). */
+export interface UserActivityLog {
+  id: string;
+  account_id: string;
+  actor_user_id?: string | null;
+  action: string;
+  entity_type: string;
+  entity_id?: string | null;
+  summary: string;
+  metadata: Record<string, unknown>;
   created_at: string;
 }
 
