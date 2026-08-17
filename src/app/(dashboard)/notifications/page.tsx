@@ -2,22 +2,28 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import type { Notification } from "@/types";
 import { Bell, CheckCheck, Loader2, UserPlus } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { enUS, es, ko } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-// Icon per notification type. Only one type exists today
-// (conversation_assigned) but this keeps future types a one-line add.
 const TYPE_ICON: Record<Notification["type"], typeof Bell> = {
   conversation_assigned: UserPlus,
 };
 
+const DATE_LOCALE = { en: enUS, es, ko } as const;
+
 export default function NotificationsPage() {
+  const t = useTranslations("NotificationsPage");
+  const locale = useLocale();
+  const dateLocale =
+    DATE_LOCALE[locale as keyof typeof DATE_LOCALE] ?? enUS;
   const router = useRouter();
   const { accountId } = useAuth();
   const [notifications, setNotifications] = useState<Notification[] | null>(
@@ -25,6 +31,37 @@ export default function NotificationsPage() {
   );
   const [error, setError] = useState<string | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
+
+  const displayTitle = useCallback(
+    (n: Notification) => {
+      if (n.type === "conversation_assigned") {
+        return t("types.conversationAssigned.title");
+      }
+      return n.title;
+    },
+    [t],
+  );
+
+  const displayBody = useCallback(
+    (n: Notification) => {
+      if (
+        n.type === "conversation_assigned" &&
+        n.body &&
+        /assigned you a conversation/i.test(n.body)
+      ) {
+        // Legacy English rows from the old trigger — paraphrase lightly.
+        return n.body
+          .replace(/Someone/i, t("types.conversationAssigned.someone"))
+          .replace(
+            /assigned you a conversation with/i,
+            t("types.conversationAssigned.assignedVerb"),
+          )
+          .replace(/a contact$/i, t("types.conversationAssigned.aContact"));
+      }
+      return n.body;
+    },
+    [t],
+  );
 
   const load = useCallback(async () => {
     if (!accountId) return;
@@ -47,8 +84,6 @@ export default function NotificationsPage() {
     load();
   }, [load]);
 
-  // Realtime — new assignments appear without a refresh, and a
-  // "mark all read" fired from another tab/device stays in sync here.
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
@@ -66,9 +101,10 @@ export default function NotificationsPage() {
             });
           } else if (payload.eventType === "UPDATE") {
             const row = payload.new as Notification;
-            setNotifications((prev) =>
-              prev?.map((n) => (n.id === row.id ? { ...n, ...row } : n)) ??
-              prev,
+            setNotifications(
+              (prev) =>
+                prev?.map((n) => (n.id === row.id ? { ...n, ...row } : n)) ??
+                prev,
             );
           } else if (payload.eventType === "DELETE") {
             const oldRow = payload.old as Partial<Notification>;
@@ -87,8 +123,6 @@ export default function NotificationsPage() {
 
   const markRead = useCallback(
     async (id: string) => {
-      // Optimistic — the row is already visually "read" by the time the
-      // request lands, so the UI doesn't wait on the round-trip.
       setNotifications(
         (prev) =>
           prev?.map((n) =>
@@ -104,11 +138,11 @@ export default function NotificationsPage() {
         .eq("id", id)
         .is("read_at", null);
       if (updateErr) {
-        toast.error("Failed to mark notification as read");
+        toast.error(t("toastMarkReadFailed"));
         load();
       }
     },
-    [load],
+    [load, t],
   );
 
   const handleClick = useCallback(
@@ -121,14 +155,16 @@ export default function NotificationsPage() {
     [markRead, router],
   );
 
-  const unreadIds = notifications?.filter((n) => !n.read_at).map((n) => n.id) ?? [];
+  const unreadIds =
+    notifications?.filter((n) => !n.read_at).map((n) => n.id) ?? [];
 
   const markAllRead = useCallback(async () => {
     if (unreadIds.length === 0) return;
     setMarkingAll(true);
     const now = new Date().toISOString();
     setNotifications(
-      (prev) => prev?.map((n) => (n.read_at ? n : { ...n, read_at: now })) ?? prev,
+      (prev) =>
+        prev?.map((n) => (n.read_at ? n : { ...n, read_at: now })) ?? prev,
     );
     const supabase = createClient();
     const { error: updateErr } = await supabase
@@ -137,17 +173,17 @@ export default function NotificationsPage() {
       .is("read_at", null);
     setMarkingAll(false);
     if (updateErr) {
-      toast.error("Failed to mark all as read");
+      toast.error(t("toastMarkAllFailed"));
       load();
     }
-  }, [unreadIds.length, load]);
+  }, [unreadIds.length, load, t]);
 
   if (error) {
     return (
       <div className="flex h-64 flex-col items-center justify-center gap-2">
         <p className="text-sm text-destructive">{error}</p>
         <Button variant="outline" onClick={() => window.location.reload()}>
-          Retry
+          {t("retry")}
         </Button>
       </div>
     );
@@ -163,11 +199,11 @@ export default function NotificationsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Notifications</h1>
+          <h1 className="text-2xl font-bold text-foreground">{t("title")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Conversations other teammates assign to you show up here.
+            {t("description")}
           </p>
         </div>
         <Button
@@ -181,7 +217,7 @@ export default function NotificationsPage() {
           ) : (
             <CheckCheck className="h-4 w-4" />
           )}
-          Mark all as read
+          {t("markAllRead")}
         </Button>
       </div>
 
@@ -191,18 +227,16 @@ export default function NotificationsPage() {
             <Bell className="h-6 w-6 text-primary" />
           </div>
           <p className="mt-3 text-sm font-medium text-foreground">
-            No notifications yet
+            {t("emptyTitle")}
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            You&apos;ll see an alert here when someone assigns you a
-            conversation.
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">{t("emptyBody")}</p>
         </div>
       ) : (
         <ul className="space-y-2">
           {notifications.map((n) => {
             const Icon = TYPE_ICON[n.type] ?? Bell;
             const isUnread = !n.read_at;
+            const body = displayBody(n);
             return (
               <li key={n.id}>
                 <button
@@ -234,26 +268,29 @@ export default function NotificationsPage() {
                       <span
                         className={cn(
                           "truncate text-sm font-semibold",
-                          isUnread ? "text-foreground" : "text-muted-foreground",
+                          isUnread
+                            ? "text-foreground"
+                            : "text-muted-foreground",
                         )}
                       >
-                        {n.title}
+                        {displayTitle(n)}
                       </span>
                       {isUnread && (
                         <span
-                          aria-label="Unread"
+                          aria-label={t("unread")}
                           className="h-2 w-2 flex-shrink-0 rounded-full bg-primary"
                         />
                       )}
                     </div>
-                    {n.body && (
+                    {body ? (
                       <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                        {n.body}
+                        {body}
                       </p>
-                    )}
+                    ) : null}
                     <p className="mt-1 text-[11px] text-muted-foreground/70">
                       {formatDistanceToNow(new Date(n.created_at), {
                         addSuffix: true,
+                        locale: dateLocale,
                       })}
                     </p>
                   </div>

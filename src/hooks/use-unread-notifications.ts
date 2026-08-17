@@ -6,7 +6,7 @@ import type { Notification } from "@/types";
 
 /**
  * Count of unread notifications for the current user. Used by the
- * sidebar to surface a badge on the Notifications nav entry.
+ * header bell badge next to the profile avatar.
  *
  * RLS on `notifications` already scopes every read to `auth.uid() =
  * user_id`, so no explicit filter is needed here — same pattern as

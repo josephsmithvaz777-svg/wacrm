@@ -114,6 +114,7 @@
     "dashboard": "대시보드",
     "inbox": "인박스",
     "notifications": "알림",
+    "notificationsWithCount": "읽지 않은 알림 {count}개",
     "contacts": "연락처",
     "pipelines": "파이프라인",
     "broadcasts": "브로드캐스트",
@@ -126,6 +127,25 @@
     "menuProfile": "프로필",
     "menuSettings": "설정",
     "menuSignOut": "로그아웃"
+  },
+  "NotificationsPage": {
+    "title": "알림",
+    "description": "팀원이 나에게 할당한 대화가 여기에 표시됩니다.",
+    "markAllRead": "모두 읽음으로 표시",
+    "emptyTitle": "아직 알림이 없습니다",
+    "emptyBody": "누군가 대화를 할당하면 여기에 알림이 표시됩니다.",
+    "retry": "다시 시도",
+    "unread": "읽지 않음",
+    "toastMarkReadFailed": "알림을 읽음으로 표시하지 못했습니다",
+    "toastMarkAllFailed": "모두 읽음으로 표시하지 못했습니다",
+    "types": {
+      "conversationAssigned": {
+        "title": "새 대화가 할당됨",
+        "someone": "누군가",
+        "assignedVerb": "님이 다음 대화를 할당했습니다:",
+        "aContact": "연락처"
+      }
+    }
   },
   "ModeToggle": {
     "switchMode": "{mode} 모드로 전환"

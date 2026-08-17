@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
-import { LogOut, Menu, Settings as SettingsIcon, User } from "lucide-react";
+import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
+import { Bell, LogOut, Menu, Settings as SettingsIcon, User } from "lucide-react";
 import {
   Avatar,
   AvatarFallback,
@@ -17,6 +18,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ModeToggle } from "@/components/layout/mode-toggle";
+import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "dashboard",
@@ -43,13 +46,13 @@ interface HeaderProps {
   onOpenSidebar?: () => void;
 }
 
-import { useTranslations } from "next-intl";
-
 export function Header({ onOpenSidebar }: HeaderProps) {
   const t = useTranslations("Header");
   const pathname = usePathname();
   const { profile, signOut } = useAuth();
+  const unreadNotifications = useUnreadNotifications();
   const titleKey = getPageTitleKey(pathname);
+  const notificationsActive = pathname.startsWith("/notifications");
 
   const initial =
     profile?.full_name?.charAt(0)?.toUpperCase() ??
@@ -76,71 +79,93 @@ export function Header({ onOpenSidebar }: HeaderProps) {
       <div className="flex items-center gap-1 sm:gap-2">
         <ModeToggle />
 
+        <Link
+          href="/notifications"
+          aria-label={
+            unreadNotifications > 0
+              ? t("notificationsWithCount", { count: unreadNotifications })
+              : t("notifications")
+          }
+          className={cn(
+            "relative flex h-10 w-10 items-center justify-center rounded-md transition-colors",
+            notificationsActive
+              ? "bg-primary/10 text-primary"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+          )}
+        >
+          <Bell className="h-5 w-5" />
+          {unreadNotifications > 0 ? (
+            <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground">
+              {unreadNotifications > 9 ? "9+" : unreadNotifications}
+            </span>
+          ) : null}
+        </Link>
+
         <DropdownMenu>
-        <DropdownMenuTrigger
-          className="flex items-center gap-2 rounded-md px-1 py-1 transition-colors hover:bg-muted/70 focus:bg-muted/70 focus:outline-none data-popup-open:bg-muted/70 sm:gap-3 sm:pl-1 sm:pr-3"
-          aria-label={t("openAccountMenu")}
-        >
-          <Avatar className="size-8">
-            {profile?.avatar_url ? (
-              <AvatarImage
-                src={profile.avatar_url}
-                alt={profile.full_name ?? t("defaultAvatar")}
-              />
-            ) : null}
-            <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
-              {initial}
-            </AvatarFallback>
-          </Avatar>
-          <span className="hidden text-sm font-medium text-foreground sm:inline">
-            {profile?.full_name ?? t("defaultUser")}
-          </span>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="end"
-          sideOffset={6}
-          className="min-w-56 bg-popover text-popover-foreground ring-border"
-        >
-          <div className="px-2 py-1.5">
-            <p className="truncate text-sm font-medium text-foreground">
+          <DropdownMenuTrigger
+            className="flex items-center gap-2 rounded-md px-1 py-1 transition-colors hover:bg-muted/70 focus:bg-muted/70 focus:outline-none data-popup-open:bg-muted/70 sm:gap-3 sm:pl-1 sm:pr-3"
+            aria-label={t("openAccountMenu")}
+          >
+            <Avatar className="size-8">
+              {profile?.avatar_url ? (
+                <AvatarImage
+                  src={profile.avatar_url}
+                  alt={profile.full_name ?? t("defaultAvatar")}
+                />
+              ) : null}
+              <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
+                {initial}
+              </AvatarFallback>
+            </Avatar>
+            <span className="hidden text-sm font-medium text-foreground sm:inline">
               {profile?.full_name ?? t("defaultUser")}
-            </p>
-            <p className="truncate text-xs text-muted-foreground">
-              {profile?.email ?? ""}
-            </p>
-          </div>
-          <DropdownMenuSeparator className="bg-border" />
-          <DropdownMenuItem
-            render={
-              <Link
-                href="/settings?tab=profile"
-                className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
-              />
-            }
+            </span>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            sideOffset={6}
+            className="min-w-56 bg-popover text-popover-foreground ring-border"
           >
-            <User className="size-4" />
-            {t("menuProfile")}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            render={
-              <Link
-                href="/settings?tab=whatsapp"
-                className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
-              />
-            }
-          >
-            <SettingsIcon className="size-4" />
-            {t("menuSettings")}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator className="bg-border" />
-          <DropdownMenuItem
-            onClick={signOut}
-            className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
-          >
-            <LogOut className="size-4" />
-            {t("menuSignOut")}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
+            <div className="px-2 py-1.5">
+              <p className="truncate text-sm font-medium text-foreground">
+                {profile?.full_name ?? t("defaultUser")}
+              </p>
+              <p className="truncate text-xs text-muted-foreground">
+                {profile?.email ?? ""}
+              </p>
+            </div>
+            <DropdownMenuSeparator className="bg-border" />
+            <DropdownMenuItem
+              render={
+                <Link
+                  href="/settings?tab=profile"
+                  className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
+                />
+              }
+            >
+              <User className="size-4" />
+              {t("menuProfile")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              render={
+                <Link
+                  href="/settings?tab=whatsapp"
+                  className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
+                />
+              }
+            >
+              <SettingsIcon className="size-4" />
+              {t("menuSettings")}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-border" />
+            <DropdownMenuItem
+              onClick={signOut}
+              className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
+            >
+              <LogOut className="size-4" />
+              {t("menuSignOut")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
         </DropdownMenu>
       </div>
     </header>

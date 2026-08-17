@@ -114,18 +114,38 @@
     "dashboard": "Panel",
     "inbox": "Bandeja",
     "notifications": "Notificaciones",
+    "notificationsWithCount": "{count} notificaciones sin leer",
     "contacts": "Contactos",
     "pipelines": "Embudos",
     "broadcasts": "Difusiones",
     "automations": "Automatizaciones",
     "settings": "Configuración",
     "openMenu": "Abrir menú",
-    "openAccountMenu": "Open account menu",
-    "defaultUser": "User",
+    "openAccountMenu": "Abrir menú de cuenta",
+    "defaultUser": "Usuario",
     "defaultAvatar": "Avatar",
     "menuProfile": "Perfil",
     "menuSettings": "Configuración",
     "menuSignOut": "Cerrar sesión"
+  },
+  "NotificationsPage": {
+    "title": "Notificaciones",
+    "description": "Aquí aparecen las conversaciones que tus compañeros te asignan.",
+    "markAllRead": "Marcar todas como leídas",
+    "emptyTitle": "Aún no hay notificaciones",
+    "emptyBody": "Verás un aviso aquí cuando alguien te asigne una conversación.",
+    "retry": "Reintentar",
+    "unread": "Sin leer",
+    "toastMarkReadFailed": "No se pudo marcar la notificación como leída",
+    "toastMarkAllFailed": "No se pudieron marcar todas como leídas",
+    "types": {
+      "conversationAssigned": {
+        "title": "Nueva conversación asignada",
+        "someone": "Alguien",
+        "assignedVerb": "te asignó una conversación con",
+        "aContact": "un contacto"
+      }
+    }
   },
   "ModeToggle": {
     "switchMode": "Cambiar a modo {mode}"
