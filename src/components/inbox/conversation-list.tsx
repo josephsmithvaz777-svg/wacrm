@@ -9,8 +9,7 @@ import {
 } from "@/lib/inbox/conversations";
 import { cn } from "@/lib/utils";
 import type { Conversation, ConversationStatus, Tag } from "@/types";
-import type { ChatKindFilter } from "@/lib/whatsapp/chat-kind";
-import { Search, ChevronDown, X, Users } from "lucide-react";
+import { Search, ChevronDown, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useTranslations } from "next-intl";
 import { Input } from "@/components/ui/input";
@@ -47,20 +46,6 @@ const STATUS_COLORS: Record<ConversationStatus, string> = {
 
 type InboxFilter = ConversationStatus | "all" | "unread";
 
-const CHAT_KIND_STORAGE_KEY = "wacrm:inbox:chat-kind";
-
-function readStoredChatKind(): ChatKindFilter {
-  try {
-    const stored = localStorage.getItem(CHAT_KIND_STORAGE_KEY);
-    if (stored === "all" || stored === "direct" || stored === "groups") {
-      return stored;
-    }
-  } catch {
-    // private browsing / sandboxed contexts
-  }
-  return "direct";
-}
-
 export function ConversationList({
   activeConversationId,
   onSelect,
@@ -78,12 +63,6 @@ export function ConversationList({
     { label: t("filterClosed"), value: "closed" },
   ], [t]);
 
-  const CHAT_KIND_OPTIONS: { label: string; value: ChatKindFilter }[] = useMemo(() => [
-    { label: t("chatKindDirect"), value: "direct" },
-    { label: t("chatKindGroups"), value: "groups" },
-    { label: t("chatKindAll"), value: "all" },
-  ], [t]);
-
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<InboxFilter>("all");
   const [loading, setLoading] = useState(true);
@@ -93,22 +72,6 @@ export function ConversationList({
   const [tags, setTags] = useState<Tag[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
-  // Hide group chats by default — WAHA delivers them but they aren't
-  // useful 1:1 inbox threads. Restored from localStorage after mount.
-  const [chatKind, setChatKind] = useState<ChatKindFilter>("direct");
-
-  useEffect(() => {
-    setChatKind(readStoredChatKind());
-  }, []);
-
-  const persistChatKind = useCallback((next: ChatKindFilter) => {
-    setChatKind(next);
-    try {
-      localStorage.setItem(CHAT_KIND_STORAGE_KEY, next);
-    } catch {
-      // Persistence is best-effort.
-    }
-  }, []);
 
   // Keep the latest callback in a ref so the fetch effect below can
   // have a stable, empty-dep identity. Previously the fetch useCallback
@@ -204,18 +167,12 @@ export function ConversationList({
       result = result.filter((c) => c.status === filter);
     }
 
-    // Contact-based filters (tags via OR logic, exact company match,
-    // plus 1:1 vs group chats).
-    if (
-      selectedTagIds.length > 0 ||
-      selectedCompany !== null ||
-      chatKind !== "all"
-    ) {
+    // Contact-based filters (tags via OR logic, exact company match).
+    if (selectedTagIds.length > 0 || selectedCompany !== null) {
       result = result.filter((c) =>
         matchesContactFilters(c, {
           tagIds: selectedTagIds,
           company: selectedCompany,
-          chatKind,
         })
       );
     }
@@ -231,7 +188,7 @@ export function ConversationList({
     }
 
     return result;
-  }, [conversations, filter, search, selectedTagIds, selectedCompany, chatKind]);
+  }, [conversations, filter, search, selectedTagIds, selectedCompany]);
 
   const toggleTag = useCallback((id: string) => {
     setSelectedTagIds((prev) =>
@@ -261,7 +218,6 @@ export function ConversationList({
   );
 
   const activeFilter = FILTER_OPTIONS.find((o) => o.value === filter);
-  const activeChatKind = CHAT_KIND_OPTIONS.find((o) => o.value === chatKind);
 
   return (
     // w-full on mobile so the list occupies the whole viewport when it's
@@ -297,40 +253,6 @@ export function ConversationList({
                   className={cn(
                     "text-sm",
                     filter === opt.value
-                      ? "text-primary"
-                      : "text-popover-foreground"
-                  )}
-                >
-                  {opt.label}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              className={cn(
-                "inline-flex items-center justify-center h-7 gap-1 px-2 text-xs rounded-md hover:bg-muted",
-                chatKind !== "all"
-                  ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Users className="h-3 w-3" />
-              {activeChatKind?.label ?? t("chatKindDirect")}
-              <ChevronDown className="h-3 w-3" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="start"
-              className="border-border bg-popover"
-            >
-              {CHAT_KIND_OPTIONS.map((opt) => (
-                <DropdownMenuItem
-                  key={opt.value}
-                  onClick={() => persistChatKind(opt.value)}
-                  className={cn(
-                    "text-sm",
-                    chatKind === opt.value
                       ? "text-primary"
                       : "text-popover-foreground"
                   )}

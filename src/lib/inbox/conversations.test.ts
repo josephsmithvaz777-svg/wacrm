@@ -98,38 +98,6 @@ describe("matchesContactFilters", () => {
       matchesContactFilters(conv, { tagIds: ["tX"], company: "Acme" }),
     ).toBe(false);
   });
-
-  it("hides group chats when chatKind is direct", () => {
-    const group = makeConversation({
-      phone: "120363012345678901@g.us",
-      name: "Netflix",
-    });
-    const person = makeConversation({
-      phone: "51931387898",
-      name: "Ana",
-    });
-    expect(
-      matchesContactFilters(group, {
-        tagIds: [],
-        company: null,
-        chatKind: "direct",
-      }),
-    ).toBe(false);
-    expect(
-      matchesContactFilters(person, {
-        tagIds: [],
-        company: null,
-        chatKind: "direct",
-      }),
-    ).toBe(true);
-    expect(
-      matchesContactFilters(group, {
-        tagIds: [],
-        company: null,
-        chatKind: "groups",
-      }),
-    ).toBe(true);
-  });
 });
 
 describe("normalizeConversation", () => {
