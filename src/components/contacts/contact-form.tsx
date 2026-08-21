@@ -215,8 +215,18 @@ export function ContactForm({
         }
         return;
       }
-      const message = err instanceof Error ? err.message : t('toastError');
-      toast.error(message);
+      // Supabase rejections are plain objects, not `Error`s, so reading
+      // only `Error.message` collapsed every DB failure into the generic
+      // "could not save" toast with no way to tell what the DB refused.
+      const detail =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'object' &&
+              err !== null &&
+              typeof (err as { message?: unknown }).message === 'string'
+            ? (err as { message: string }).message
+            : null;
+      toast.error(detail ?? t('toastError'));
     } finally {
       setSaving(false);
     }
@@ -302,9 +312,11 @@ export function ContactForm({
             <Label htmlFor="cf-email" className="text-muted-foreground">
               {t('emailLabel')}
             </Label>
+            {/* Not `type="email"`: the browser would refuse to submit the
+                whole form over a malformed value in an optional field. */}
             <Input
               id="cf-email"
-              type="email"
+              inputMode="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder={t('emailPlaceholder')}
