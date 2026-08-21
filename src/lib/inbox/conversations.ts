@@ -1,4 +1,9 @@
 import type { Conversation, Contact, Tag } from "@/types";
+import {
+  isGroupContact,
+  matchesChatKindFilter,
+  type ChatKindFilter,
+} from "@/lib/whatsapp/chat-kind";
 
 /**
  * Conversation select that embeds the contact plus its tags, so the Inbox
@@ -47,6 +52,11 @@ export interface ContactFilters {
   tagIds: string[];
   /** Exact company match, or null for no company filter. */
   company: string | null;
+  /**
+   * Direct (1:1) vs group chats. Default `'all'` is a no-op so existing
+   * callers that omit it keep matching everything.
+   */
+  chatKind?: ChatKindFilter;
 }
 
 /**
@@ -56,7 +66,7 @@ export interface ContactFilters {
  */
 export function matchesContactFilters(
   conversation: Conversation,
-  { tagIds, company }: ContactFilters,
+  { tagIds, company, chatKind = "all" }: ContactFilters,
 ): boolean {
   if (tagIds.length > 0) {
     const contactTagIds = conversation.contact?.tags ?? [];
@@ -64,6 +74,12 @@ export function matchesContactFilters(
   }
 
   if (company !== null && conversation.contact?.company?.trim() !== company) {
+    return false;
+  }
+
+  if (
+    !matchesChatKindFilter(isGroupContact(conversation.contact), chatKind)
+  ) {
     return false;
   }
 

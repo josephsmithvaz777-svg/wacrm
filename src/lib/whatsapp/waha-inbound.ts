@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { findExistingContact, isUniqueViolation } from '@/lib/contacts/dedupe';
 import { reopenClosedConversation } from '@/lib/conversations/reopen';
 import { normalizePhone } from '@/lib/whatsapp/phone-utils';
+import { wahaPayloadIsGroup } from '@/lib/whatsapp/chat-kind';
 import {
   extractInboundDisplayName,
   extractInboundText,
@@ -333,14 +334,8 @@ export async function processWahaEvent(
           ? payload.to
           : null;
   // Groups / status / newsletters are not 1:1 inbox chats — skip quietly.
-  // For fromMe, `from` may be our own JID; don't treat that as a group skip.
-  if (
-    !fromMe &&
-    fromRaw &&
-    (fromRaw.endsWith('@g.us') ||
-      fromRaw.endsWith('@newsletter') ||
-      fromRaw === 'status@broadcast')
-  ) {
+  // Some engines put the group JID on chatId/remoteJid and the sender on from.
+  if (wahaPayloadIsGroup(payload)) {
     return;
   }
 

@@ -3,6 +3,8 @@
 // Docs: https://waha.devlike.pro/
 // ============================================================
 
+import { wahaPayloadIsGroup } from '@/lib/whatsapp/chat-kind';
+
 export type WahaSessionStatus =
   | 'STOPPED'
   | 'STARTING'
@@ -1022,7 +1024,7 @@ export async function resolveInboundChatId(
     : rawFrom || serializedRemote;
 
   if (!from) return null;
-  if (isGroupOrStatusJid(from)) {
+  if (wahaPayloadIsGroup(payload) || isGroupOrStatusJid(from)) {
     return null;
   }
 
