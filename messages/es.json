@@ -552,6 +552,8 @@
         "clickTagDesc": "Haz clic en una etiqueta para agregarla o quitarla de este contacto.",
         "noTagsAvailable": "No hay etiquetas. Créalas en Configuración."
       },
+      "openChatBtn": "Chatear",
+      "toastChatFailed": "No se pudo abrir el chat",
       "sendTemplateBtn": "Enviar plantilla",
       "saveChangesBtn": "Guardar cambios",
       "saveCustomFieldsBtn": "Guardar campos personalizados",

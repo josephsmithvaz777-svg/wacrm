@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { addContactTag, deleteContactTag } from '@/lib/contacts/tag-api';
 import { useAuth } from '@/hooks/use-auth';
@@ -39,6 +40,7 @@ import {
   X,
   DollarSign,
   LayoutTemplate,
+  MessageCircle,
 } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 
@@ -57,6 +59,7 @@ export function ContactDetailView({
 }: ContactDetailViewProps) {
   const t = useTranslations('Contacts.detailView');
   const locale = useLocale();
+  const router = useRouter();
   const supabase = createClient();
   const { accountId, defaultCurrency } = useAuth();
 
@@ -69,6 +72,11 @@ export function ContactDetailView({
   // find-or-creates the conversation, so no inbound message is required.
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [sendingTemplate, setSendingTemplate] = useState(false);
+
+  // Open chat — jumps to this contact's thread in the inbox, creating it
+  // first when the contact has never had one (added by hand, or never
+  // wrote in). Nothing is sent; the agent writes from the inbox.
+  const [openingChat, setOpeningChat] = useState(false);
 
   // Details tab
   const [editName, setEditName] = useState('');
@@ -367,6 +375,32 @@ export function ContactDetailView({
     }
   }
 
+  async function handleOpenChat() {
+    if (!contactId) return;
+    setOpeningChat(true);
+    try {
+      const res = await fetch('/api/conversations/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contact_id: contactId }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(payload?.error || t('toastChatFailed'));
+        return;
+      }
+      // Close the sheet before navigating; leaving it mounted would keep
+      // the overlay over the inbox we just opened.
+      onOpenChange(false);
+      router.push(`/inbox?c=${payload.conversation_id}`);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : 'network error';
+      toast.error(`${t('toastChatFailed')}: ${reason}`);
+    } finally {
+      setOpeningChat(false);
+    }
+  }
+
   function getInitials(name?: string | null) {
     if (!name) return '?';
     return name
@@ -433,12 +467,26 @@ export function ContactDetailView({
                   </div>
                 </div>
               </div>
-              <div className="mt-3">
+              <div className="mt-3 flex flex-wrap gap-2">
                 <Button
                   size="sm"
+                  onClick={handleOpenChat}
+                  disabled={openingChat}
+                  className="bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  {openingChat ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <MessageCircle className="size-4" />
+                  )}
+                  {t('openChatBtn')}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
                   onClick={() => setTemplatePickerOpen(true)}
                   disabled={sendingTemplate}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90"
+                  className="border-border text-muted-foreground hover:bg-muted"
                 >
                   {sendingTemplate ? (
                     <Loader2 className="size-4 animate-spin" />
