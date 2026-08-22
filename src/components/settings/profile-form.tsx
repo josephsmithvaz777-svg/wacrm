@@ -39,6 +39,7 @@ export function ProfileForm() {
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [pendingAvatar, setPendingAvatar] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
@@ -50,6 +51,7 @@ export function ProfileForm() {
     if (!profile) return;
     setFullName(profile.full_name ?? '');
     setEmail(profile.email ?? '');
+    setPhone(profile.phone ?? '');
   }, [profile]);
 
   // Cleanup object URLs to avoid leaks.
@@ -145,6 +147,7 @@ export function ProfileForm() {
         .update({
           full_name: trimmedName,
           avatar_url: nextAvatarUrl,
+          phone: phone.trim() || null,
         })
         .eq('user_id', user.id);
       if (updateError) {
@@ -194,6 +197,7 @@ export function ProfileForm() {
   const dirty =
     !!profile &&
     (fullName.trim() !== (profile.full_name ?? '') ||
+      phone.trim() !== (profile.phone ?? '') ||
       email.trim().toLowerCase() !== (profile.email ?? '').toLowerCase() ||
       pendingAvatar !== null ||
       removeAvatar);
@@ -275,6 +279,23 @@ export function ProfileForm() {
               disabled={saving}
               required
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="profile-phone" className="text-foreground">
+              {t('whatsappPhone')}
+            </Label>
+            <Input
+              id="profile-phone"
+              inputMode="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+51999111222"
+              disabled={saving}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t('whatsappPhoneHint')}
+            </p>
           </div>
 
           {/* Email */}

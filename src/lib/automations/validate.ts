@@ -146,6 +146,17 @@ function validateOne(step: StepLike, path: string, issues: ValidationIssue[]): v
     case 'close_conversation':
       // No config required.
       break
+    case 'notify_staff':
+      if (c.notify_owner === false && c.notify_assigned === false) {
+        issues.push({
+          path: `${path}.recipients`,
+          message: 'notify at least the owner or the assigned agent',
+        })
+      }
+      if (!nonEmpty(c.text)) {
+        issues.push({ path: `${path}.text`, message: 'alert text is required' })
+      }
+      break
     default:
       issues.push({ path, message: `unknown step type: ${step.step_type}` })
   }

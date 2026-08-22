@@ -40,6 +40,8 @@ export interface Profile {
   sound_notifications?: boolean | null;
   /** Play sound on inbound customer messages (migration 046). */
   sound_messages?: boolean | null;
+  /** Personal WhatsApp for staff-alert automations (migration 049). */
+  phone?: string | null;
   /**
    * Account this profile is a member of. Added by
    * `017_account_sharing.sql`; NOT NULL in the DB post-backfill.
@@ -487,7 +489,9 @@ export type AutomationStepType =
   | 'wait'
   | 'condition'
   | 'send_webhook'
-  | 'close_conversation';
+  | 'close_conversation'
+  /** WhatsApp a staff phone (owner and/or assigned agent). */
+  | 'notify_staff';
 
 export type AutomationLogStatus = 'success' | 'partial' | 'failed';
 
@@ -600,6 +604,13 @@ export interface SendWebhookStepConfig {
   body_template?: string;
 }
 
+export interface NotifyStaffStepConfig {
+  notify_owner?: boolean;
+  notify_assigned?: boolean;
+  /** Supports {{contact_name}}, {{contact_phone}}, {{message.text}}. */
+  text?: string;
+}
+
 export type AutomationStepConfig =
   | SendMessageStepConfig
   | SendButtonsStepConfig
@@ -612,6 +623,7 @@ export type AutomationStepConfig =
   | WaitStepConfig
   | ConditionStepConfig
   | SendWebhookStepConfig
+  | NotifyStaffStepConfig
   | Record<string, never>
   | Record<string, unknown>;
 

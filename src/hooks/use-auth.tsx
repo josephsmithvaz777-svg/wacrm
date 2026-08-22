@@ -39,6 +39,7 @@ interface Profile {
   ui_mode?: string | null;
   sound_notifications?: boolean | null;
   sound_messages?: boolean | null;
+  phone?: string | null;
 }
 
 interface AccountSummary {
@@ -150,7 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "id, full_name, email, avatar_url, role, beta_features, account_id, account_role, ui_theme, ui_mode, sound_notifications, sound_messages",
+          "id, full_name, email, avatar_url, role, beta_features, account_id, account_role, ui_theme, ui_mode, sound_notifications, sound_messages, phone",
         )
         .eq("user_id", userId)
         .maybeSingle();
@@ -242,6 +243,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             typeof data.sound_messages === "boolean"
               ? data.sound_messages
               : null,
+          phone: typeof data.phone === "string" ? data.phone : null,
         });
         setAccount(accountRow);
       } else {

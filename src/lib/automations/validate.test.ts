@@ -187,6 +187,33 @@ describe("validateStepsForActivation", () => {
     ]);
   });
 
+  it("requires a recipient and text on notify_staff", () => {
+    expect(
+      validateStepsForActivation([
+        {
+          step_type: "notify_staff",
+          step_config: {
+            notify_owner: false,
+            notify_assigned: false,
+            text: "",
+          },
+        },
+      ]).map((i) => i.path),
+    ).toEqual(["steps[0].recipients", "steps[0].text"]);
+    expect(
+      validateStepsForActivation([
+        {
+          step_type: "notify_staff",
+          step_config: {
+            notify_owner: true,
+            notify_assigned: false,
+            text: "Hola {{contact_name}}",
+          },
+        },
+      ]),
+    ).toEqual([]);
+  });
+
   it("reports an issue for unknown step types", () => {
     const issues = validateStepsForActivation([
       { step_type: "do_a_barrel_roll", step_config: {} },

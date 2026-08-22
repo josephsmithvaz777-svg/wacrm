@@ -17,7 +17,9 @@ import type {
   WaitStepConfig,
   CreateDealStepConfig,
   AssignConversationStepConfig,
+  NotifyStaffStepConfig,
 } from '@/types'
+import { notifyStaffViaWhatsApp } from './staff-notify'
 import { supabaseAdmin } from './admin-client'
 import { addContactTagIfAbsent } from '@/lib/contacts/tag-write'
 import { MAX_TAG_CHAIN_DEPTH, getTagChainDepth } from '@/lib/contacts/tag-chain'
@@ -607,6 +609,20 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
       })
       if (!res.ok) throw new Error(`webhook returned ${res.status}`)
       return `webhook ${res.status}`
+    }
+
+    case 'notify_staff': {
+      const cfg = step.step_config as NotifyStaffStepConfig
+      return notifyStaffViaWhatsApp({
+        db,
+        accountId: args.automation.account_id,
+        contactId: args.contactId,
+        conversationId: args.context.conversation_id,
+        notifyOwner: cfg.notify_owner !== false,
+        notifyAssigned: cfg.notify_assigned !== false,
+        textTemplate: cfg.text || '',
+        messageText: String(args.context.message_text ?? ''),
+      })
     }
 
     case 'close_conversation': {

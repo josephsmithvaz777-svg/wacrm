@@ -33,6 +33,7 @@ import {
   ArrowUp,
   MousePointerClick,
   List,
+  Bell,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -111,6 +112,7 @@ const STEP_META: Record<AutomationStepType, StepMeta> = {
   condition: { label: "condition", icon: GitBranch, border: "border-l-amber-500" },
   send_webhook: { label: "send_webhook", icon: Webhook, border: "border-l-primary" },
   close_conversation: { label: "close_conversation", icon: CircleSlash, border: "border-l-primary" },
+  notify_staff: { label: "notify_staff", icon: Bell, border: "border-l-primary" },
 }
 
 const ADDABLE_STEPS: AutomationStepType[] = [
@@ -127,6 +129,7 @@ const ADDABLE_STEPS: AutomationStepType[] = [
   "condition",
   "send_webhook",
   "close_conversation",
+  "notify_staff",
 ]
 
 const TRIGGER_OPTIONS: { value: AutomationTriggerType }[] = [
@@ -188,6 +191,12 @@ function blankConfig(type: AutomationStepType): Record<string, unknown> {
       return { url: "", headers: {}, body_template: "" }
     case "close_conversation":
       return {}
+    case "notify_staff":
+      return {
+        notify_owner: true,
+        notify_assigned: true,
+        text: "Nuevo mensaje de {{contact_name}} ({{contact_phone}}):\n{{message.text}}",
+      }
     default:
       return {}
   }
@@ -1500,6 +1509,37 @@ function StepEditor({
           {t("config.closeConversationHint", { defaultValue: "Sets the conversation status to \"closed\". No configuration needed." })}
         </p>
       )
+    case "notify_staff":
+      return (
+        <>
+          <label className="mb-2 flex items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={cfg.notify_owner !== false}
+              onChange={(e) => set({ notify_owner: e.target.checked })}
+            />
+            {t("config.notifyOwner")}
+          </label>
+          <label className="mb-2 flex items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={cfg.notify_assigned !== false}
+              onChange={(e) => set({ notify_assigned: e.target.checked })}
+            />
+            {t("config.notifyAssigned")}
+          </label>
+          <FieldBlock label={t("config.notifyText")}>
+            <Textarea
+              value={(cfg.text as string) ?? ""}
+              onChange={(e) => set({ text: e.target.value })}
+              className="min-h-24 bg-muted text-foreground"
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              {t("config.notifyTextHint")}
+            </p>
+          </FieldBlock>
+        </>
+      )
     default:
       return null
   }
@@ -1535,6 +1575,13 @@ function previewFor(step: BuilderStep): string {
       return `when ${step.step_config.subject ?? "?"}`
     case "send_webhook":
       return (step.step_config.url as string) || "no url"
+    case "notify_staff": {
+      const who = [
+        step.step_config.notify_owner !== false ? "owner" : null,
+        step.step_config.notify_assigned !== false ? "agent" : null,
+      ].filter(Boolean)
+      return who.join(" + ") || "no recipients"
+    }
     default:
       return ""
   }

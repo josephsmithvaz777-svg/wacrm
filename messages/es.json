@@ -1004,7 +1004,8 @@
         "wait": "Wait",
         "condition": "Condition (If/Else)",
         "send_webhook": "Send Webhook",
-        "close_conversation": "Close Conversation"
+        "close_conversation": "Close Conversation",
+        "notify_staff": "Avisar al equipo por WhatsApp"
       },
       "triggers": {
         "new_message_received": {
@@ -1104,6 +1105,10 @@
       "config": {
         "messageText": "Message text",
         "placeholderMessageText": "Hi! Thanks for reaching out…",
+        "notifyOwner": "Enviar al dueño de la cuenta",
+        "notifyAssigned": "Enviar al asesor asignado",
+        "notifyText": "Texto del aviso",
+        "notifyTextHint": "Variables: {{contact_name}}, {{contact_phone}}, {{message.text}}. Cada persona debe guardar su WhatsApp en Configuración → Perfil.",
         "tagLabel": "Tag",
         "modeLabel": "Mode",
         "modes": {
@@ -1722,6 +1727,8 @@
       "remove": "Quitar",
       "photoHint": "PNG, JPG, WebP o GIF. Hasta 2 MB.",
       "displayName": "Nombre para mostrar",
+      "whatsappPhone": "Número de WhatsApp",
+      "whatsappPhoneHint": "Tu número personal, con código de país. Las automatizaciones lo usan para avisarte cuando escribe un cliente.",
       "email": "Correo",
       "emailChangeHint": "Revisa la bandeja de <bold>{oldEmail}</bold> y <bold>{newEmail}</bold>: ambos deben confirmar antes de que el cambio surta efecto.",
       "accountDetails": "Detalles de la cuenta",
