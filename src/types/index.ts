@@ -1,5 +1,6 @@
 import type { AccountRole } from "@/lib/auth/roles";
 import type { InteractiveMessagePayload } from "@/lib/whatsapp/interactive";
+import type { MessageAdContext } from "@/lib/whatsapp/ad-context";
 
 export type {
   InteractiveMessagePayload,
@@ -9,6 +10,8 @@ export type {
   InteractiveListRow,
   InteractiveListSection,
 } from "@/lib/whatsapp/interactive";
+
+export type { MessageAdContext } from "@/lib/whatsapp/ad-context";
 
 export interface Profile {
   id: string;
@@ -279,6 +282,11 @@ export interface Message {
    * badge in the inbox. Migration 033.
    */
   ai_generated?: boolean;
+  /**
+   * Click-to-WhatsApp Facebook/Instagram ad the customer tapped.
+   * Only set on the first inbound message of that thread. Migration 050.
+   */
+  ad_context?: MessageAdContext | null;
 }
 
 export type ReactionActor = 'customer' | 'agent';

@@ -23,8 +23,10 @@ import {
   resolveOutboundChatId,
   type WahaClientOptions,
 } from '@/lib/whatsapp/waha-api';
+import { extractAdContext } from '@/lib/whatsapp/ad-context';
 import {
   mimeToContentType,
+  persistAdCreativeSafe,
   readMediaRef,
   uploadWahaMedia,
 } from '@/lib/whatsapp/waha-media';
@@ -192,7 +194,8 @@ export async function syncWahaConversation(params: {
     const text = extractInboundText(payload);
     const media = readMediaRef(payload);
     const hasMedia = Boolean(media?.url);
-    if (!text && !hasMedia) continue;
+    const adExtracted = extractAdContext(payload);
+    if (!text && !hasMedia && !adExtracted) continue;
 
     let contentType = 'text';
     let contentText = text;
@@ -212,8 +215,16 @@ export async function syncWahaConversation(params: {
       }
       if (!contentText) contentText = media.filename || `[${contentType}]`;
       // Without the file there is nothing to render — leave it for a
-      // later sync rather than inserting an empty bubble.
-      if (!mediaUrl) continue;
+      // later sync rather than inserting an empty bubble. An ad card
+      // still has something to show even if the attachment copy failed.
+      if (!mediaUrl && !adExtracted) continue;
+    }
+
+    const adContext = adExtracted
+      ? await persistAdCreativeSafe(accountId, adExtracted, opts)
+      : null;
+    if (!contentText && adContext) {
+      contentText = adContext.headline || adContext.body || '[Facebook ad]';
     }
 
     const ts = readTimestamp(payload);
@@ -226,6 +237,7 @@ export async function syncWahaConversation(params: {
       message_id: messageId,
       status: fromMe ? 'sent' : 'delivered',
       created_at: ts,
+      ad_context: adContext,
     });
     if (!newest || ts > newest.ts) {
       newest = { ts, text: contentText || `[${contentType}]` };

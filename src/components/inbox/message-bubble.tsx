@@ -24,6 +24,9 @@ import {
 } from "./message-media";
 import { InteractivePreview } from "@/components/interactive/interactive-preview";
 import { useTranslations } from "next-intl";
+import { useState } from "react";
+import { useMediaBlobUrl } from "@/hooks/use-media-blob-url";
+import { readStoredAdContext, type MessageAdContext } from "@/lib/whatsapp/ad-context";
 
 interface MessageBubbleProps {
   message: Message;
@@ -192,6 +195,84 @@ function MessageContent({
   }
 }
 
+function adLabel(
+  source: MessageAdContext["source"],
+  t: ReturnType<typeof useTranslations>,
+): string {
+  if (source === "instagram_ad") return t("instagramAd");
+  if (source === "ad") return t("genericAd");
+  return t("facebookAd");
+}
+
+function AdContextCard({
+  ad,
+  t,
+  onPrimary,
+  flushTop,
+}: {
+  ad: MessageAdContext;
+  t: ReturnType<typeof useTranslations>;
+  onPrimary: boolean;
+  flushTop: boolean;
+}) {
+  const { src, status } = useMediaBlobUrl(ad.image_url ?? undefined);
+  const [broken, setBroken] = useState(false);
+  const showImage = Boolean(ad.image_url) && !broken && status === "ready" && src;
+  const muted = onPrimary ? "text-primary-foreground/70" : "text-muted-foreground";
+  const href =
+    ad.source_url && /^https?:\/\//i.test(ad.source_url) ? ad.source_url : null;
+
+  return (
+    <div
+      className={cn(
+        "-mx-3 mb-2 overflow-hidden",
+        flushTop ? "-mt-2 rounded-t-2xl" : "rounded-lg",
+      )}
+    >
+      {showImage && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt={t("adImageAlt")}
+          className="max-h-52 w-full min-w-[200px] object-cover"
+          onError={() => setBroken(true)}
+        />
+      )}
+      <div
+        className={cn(
+          "px-3 py-2",
+          onPrimary ? "bg-primary-foreground/10" : "bg-background/60",
+        )}
+      >
+        <p className={cn("text-[11px] font-medium leading-none", muted)}>
+          {adLabel(ad.source, t)}
+        </p>
+        {ad.headline && (
+          <p className="mt-1.5 text-sm font-semibold leading-snug">{ad.headline}</p>
+        )}
+        {ad.body && (
+          <p className={cn("mt-0.5 line-clamp-3 text-xs leading-snug", muted)}>
+            {ad.body}
+          </p>
+        )}
+        {href && (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              "mt-1 block truncate text-[11px] underline underline-offset-2",
+              muted,
+            )}
+          >
+            {href.replace(/^https?:\/\//i, "")}
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function MessageBubble({
   message,
   reply,
@@ -204,6 +285,7 @@ export function MessageBubble({
 
   const isAgent = message.sender_type === "agent" || message.sender_type === "bot";
   const time = format(new Date(message.created_at), "HH:mm");
+  const ad = readStoredAdContext(message.ad_context);
 
   // Row alignment + width cap are owned by <MessageActions> so its hover
   // group matches the bubble's content area, not the full row.
@@ -228,6 +310,9 @@ export function MessageBubble({
             preview={reply.preview}
             onPrimary={isAgent}
           />
+        )}
+        {ad && (
+          <AdContextCard ad={ad} t={t} onPrimary={isAgent} flushTop={!reply} />
         )}
         <MessageContent message={message} t={t} onOpenMedia={onOpenMedia} />
         <div

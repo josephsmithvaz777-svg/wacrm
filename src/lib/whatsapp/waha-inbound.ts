@@ -24,7 +24,8 @@ import { runAutomationsForTrigger } from '@/lib/automations/engine';
 import { dispatchInboundToFlows } from '@/lib/flows/engine';
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply';
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver';
-import { mimeToContentType, uploadWahaMedia } from '@/lib/whatsapp/waha-media';
+import { extractAdContext } from '@/lib/whatsapp/ad-context';
+import { mimeToContentType, persistAdCreativeSafe, uploadWahaMedia } from '@/lib/whatsapp/waha-media';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _admin: any = null;
@@ -303,7 +304,7 @@ export async function processWahaEvent(
   const payload = event.payload || {};
   const fromMe = isWahaFromMe(payload);
 
-  // Ignore empty protocol/sync noise (no body, no media).
+  // Ignore empty protocol/sync noise (no body, no media, no ad card).
   const bodyText = extractInboundText(payload);
   const hasMedia = payload.hasMedia === true;
   const media =
@@ -314,7 +315,8 @@ export async function processWahaEvent(
           filename?: string | null;
         })
       : null;
-  if (!bodyText && !(hasMedia && media?.url)) {
+  const adExtracted = extractAdContext(payload);
+  if (!bodyText && !(hasMedia && media?.url) && !adExtracted) {
     if (fromMe) {
       console.warn(
         '[waha-inbound] fromMe echo ignored (no text/media)',
@@ -483,6 +485,13 @@ export async function processWahaEvent(
     if (!contentText) contentText = media.filename || `[${contentType}]`;
   }
 
+  const adContext = adExtracted
+    ? await persistAdCreativeSafe(config.account_id, adExtracted, opts)
+    : null;
+  if (!contentText && adContext) {
+    contentText = adContext.headline || adContext.body || '[Facebook ad]';
+  }
+
   const ts =
     typeof payload.timestamp === 'number'
       ? new Date(payload.timestamp * 1000).toISOString()
@@ -500,6 +509,7 @@ export async function processWahaEvent(
         message_id: messageId,
         status: fromMe ? 'sent' : 'delivered',
         created_at: ts,
+        ad_context: adContext,
       },
       {
         onConflict: 'conversation_id,message_id',

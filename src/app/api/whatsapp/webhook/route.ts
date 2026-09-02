@@ -6,6 +6,8 @@ import { normalizePhone } from '@/lib/whatsapp/phone-utils'
 import { findExistingContact, isUniqueViolation } from '@/lib/contacts/dedupe'
 import { reopenClosedConversation } from '@/lib/conversations/reopen'
 import { verifyMetaWebhookSignature } from '@/lib/whatsapp/webhook-signature'
+import { extractMetaReferral } from '@/lib/whatsapp/ad-context'
+import { persistAdCreativeSafe } from '@/lib/whatsapp/waha-media'
 import { runAutomationsForTrigger } from '@/lib/automations/engine'
 import { dispatchInboundToFlows } from '@/lib/flows/engine'
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply'
@@ -60,6 +62,21 @@ interface WhatsAppMessage {
   }
   /** Present when the customer swipe-replies to one of our messages. */
   context?: { id: string }
+  /**
+   * Click-to-WhatsApp ad / post the customer tapped. Present on the
+   * first inbound message of that thread (Cloud API `referral` object).
+   */
+  referral?: {
+    source_url?: string
+    source_type?: string
+    source_id?: string
+    headline?: string
+    body?: string
+    media_type?: string
+    image_url?: string
+    video_url?: string
+    thumbnail_url?: string
+  }
 }
 
 interface WhatsAppWebhookEntry {
@@ -629,6 +646,18 @@ async function processMessage(
   const { contentText, mediaUrl, mediaType, interactiveReplyId } =
     await parseMessageContent(message, accessToken)
 
+  const adExtracted = extractMetaReferral(
+    message as unknown as Record<string, unknown>,
+  )
+  const adContext = adExtracted
+    ? await persistAdCreativeSafe(accountId, adExtracted)
+    : null
+  const resolvedContentText =
+    contentText ||
+    adContext?.headline ||
+    adContext?.body ||
+    null
+
   // Resolve swipe-reply context if present. A missing parent is fine —
   // we just store NULL and the UI renders the message without a quote.
   let replyToInternalId: string | null = null
@@ -695,7 +724,7 @@ async function processMessage(
         conversation_id: conversation.id,
         sender_type: 'customer',
         content_type: contentType,
-        content_text: contentText,
+        content_text: resolvedContentText,
         media_url: mediaUrl,
         message_id: message.id,
         status: 'delivered',
@@ -705,6 +734,7 @@ async function processMessage(
         // the column; null for every other content_type so existing inserts
         // behave identically.
         interactive_reply_id: interactiveReplyId,
+        ad_context: adContext,
       },
       { onConflict: 'conversation_id,message_id', ignoreDuplicates: true }
     )
@@ -738,7 +768,7 @@ async function processMessage(
     'bump_conversation_on_inbound',
     {
       p_conversation_id: conversation.id,
-      p_last_message_text: contentText || `[${message.type}]`,
+      p_last_message_text: resolvedContentText || `[${message.type}]`,
     }
   )
 
