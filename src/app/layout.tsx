@@ -43,6 +43,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   themeColor: "#020617",
   colorScheme: "dark light",
+  // Keep the composer on screen when the mobile keyboard opens,
+  // instead of overlaying it (which made Send untappable).
+  interactiveWidget: "resizes-content",
 };
 
 // Inline boot script — runs before React hydrates so the user's
