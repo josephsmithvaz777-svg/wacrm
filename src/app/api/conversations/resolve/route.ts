@@ -1,23 +1,20 @@
 import { NextResponse } from 'next/server';
-import { requireRole, toErrorResponse } from '@/lib/auth/account';
+import {
+  ForbiddenError,
+  getCurrentAccount,
+  toErrorResponse,
+} from '@/lib/auth/account';
+import { hasMinRole } from '@/lib/auth/roles';
 import { findOrCreateConversation } from '@/lib/conversations/find-or-create';
 
 // POST /api/conversations/resolve — { contact_id } → { conversation_id }
 //
-// Backs the "open chat" action in the Contacts UI, which needs a
-// conversation id to deep-link into the inbox (`/inbox?c=<id>`). A
-// contact added by hand — or one that never wrote in — has no thread
-// yet, so it is created on demand through the same find-or-create the
-// send route uses, keeping one thread per contact.
-//
-// Creating nothing but an empty thread is deliberate: the agent lands in
-// the inbox and types there, so no message is sent by opening a chat.
+// Opening an existing thread is a read. Anyone who can see the contact
+// (viewer+) may deep-link into it. Creating a thread is a write, so
+// that path still requires agent+.
 export async function POST(request: Request) {
   try {
-    // 'agent' matches `canSendMessages` and the conversations_insert RLS
-    // policy — a viewer must not be able to open (and thereby create) a
-    // thread.
-    const { supabase, accountId, userId } = await requireRole('agent');
+    const { supabase, accountId, userId, role } = await getCurrentAccount();
 
     const body = await request.json().catch(() => ({}));
     const contactId =
@@ -29,10 +26,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Scope to the caller's account before touching conversations, so a
-    // guessed id can't open a thread against another account's contact.
-    // Under agent contact restrictions RLS narrows this further to the
-    // contacts this agent may read.
     const { data: contact, error } = await supabase
       .from('contacts')
       .select('id')
@@ -42,6 +35,23 @@ export async function POST(request: Request) {
 
     if (error || !contact) {
       return NextResponse.json({ error: 'Contact not found' }, { status: 404 });
+    }
+
+    const { data: existing } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('account_id', accountId)
+      .eq('contact_id', contactId)
+      .maybeSingle();
+
+    if (existing?.id) {
+      return NextResponse.json({ conversation_id: existing.id });
+    }
+
+    if (!hasMinRole(role, 'agent')) {
+      throw new ForbiddenError(
+        'Solo un asesor puede iniciar un chat nuevo con este contacto',
+      );
     }
 
     const conversationId = await findOrCreateConversation(

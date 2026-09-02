@@ -379,6 +379,20 @@ export function ContactDetailView({
     if (!contactId) return;
     setOpeningChat(true);
     try {
+      // Assigned leads already have a thread. Opening it is a read, so
+      // go straight to the inbox when RLS lets us see the row — don't
+      // wait on the create-conversation API (that path is agent-only).
+      const { data: existing } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('contact_id', contactId)
+        .maybeSingle();
+      if (existing?.id) {
+        onOpenChange(false);
+        router.push(`/inbox?c=${existing.id}`);
+        return;
+      }
+
       const res = await fetch('/api/conversations/resolve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -389,8 +403,6 @@ export function ContactDetailView({
         toast.error(payload?.error || t('toastChatFailed'));
         return;
       }
-      // Close the sheet before navigating; leaving it mounted would keep
-      // the overlay over the inbox we just opened.
       onOpenChange(false);
       router.push(`/inbox?c=${payload.conversation_id}`);
     } catch (err) {
