@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { decrypt } from '@/lib/whatsapp/encryption';
 import { sendTextMessage } from '@/lib/whatsapp/meta-api';
 import {
+  isRealMobilePhone,
   isValidE164,
   sanitizePhoneForMeta,
 } from '@/lib/whatsapp/phone-utils';
@@ -34,8 +35,7 @@ export function staffPhoneDigits(phone: string | null | undefined): string {
  * 38323993190459); real E.164 mobiles we care about are shorter.
  */
 export function isUsableStaffPhone(phone: string | null | undefined): boolean {
-  const digits = staffPhoneDigits(phone);
-  return digits.length >= 8 && digits.length <= 13;
+  return isRealMobilePhone(phone);
 }
 
 export function renderStaffAlert(

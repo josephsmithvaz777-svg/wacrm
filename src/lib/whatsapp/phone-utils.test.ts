@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   isRecipientNotAllowedError,
+  isLikelyWhatsAppLid,
+  isRealMobilePhone,
   isValidE164,
   normalizePhone,
   phoneVariants,
@@ -136,6 +138,20 @@ describe("phoneVariants", () => {
   });
 });
 
+describe("isRealMobilePhone / isLikelyWhatsAppLid", () => {
+  it("treats 8–13 digit numbers as real mobiles", () => {
+    expect(isRealMobilePhone("+51988694053")).toBe(true);
+    expect(isRealMobilePhone("123")).toBe(false);
+    expect(isRealMobilePhone(null)).toBe(false);
+  });
+
+  it("treats 14+ digit blobs and @lid as Linked IDs", () => {
+    expect(isLikelyWhatsAppLid("38323993190459")).toBe(true);
+    expect(isLikelyWhatsAppLid("184086660382908@lid")).toBe(true);
+    expect(isRealMobilePhone("38323993190459")).toBe(false);
+    expect(isLikelyWhatsAppLid("51988694053")).toBe(false);
+  });
+});
 describe("isRecipientNotAllowedError", () => {
   it("matches Meta error code 131030", () => {
     expect(

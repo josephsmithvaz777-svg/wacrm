@@ -497,6 +497,16 @@ export async function processWahaEvent(
       ? new Date(payload.timestamp * 1000).toISOString()
       : new Date().toISOString();
 
+  let isFirstInboundMessage = false;
+  if (!fromMe) {
+    const { count: priorCustomerMsgCount } = await admin()
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('conversation_id', convResult.conversation.id)
+      .eq('sender_type', 'customer');
+    isFirstInboundMessage = (priorCustomerMsgCount ?? 0) === 0;
+  }
+
   const { data: insertedRows, error: msgError } = await admin()
     .from('messages')
     .upsert(
@@ -569,7 +579,7 @@ export async function processWahaEvent(
       | 'keyword_match'
     > = ['new_message_received', 'keyword_match'];
     if (contactOutcome.wasCreated) automationTriggers.unshift('new_contact_created');
-    automationTriggers.push('first_inbound_message');
+    if (isFirstInboundMessage) automationTriggers.push('first_inbound_message');
 
     for (const triggerType of automationTriggers) {
       await runAutomationsForTrigger({

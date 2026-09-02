@@ -1092,6 +1092,7 @@
         "notifyText": "알림 문구",
         "notifyTextHint": "자리 표시자: {{contact_name}}, {{contact_phone}}, {{message.text}}. 각자 설정 → 프로필에 왓츠앱 번호를 저장해야 합니다.",
         "placeholderMessageText": "안녕하세요! 문의해주셔서 감사합니다…",
+        "messageVarsHint": "{{greeting}}, {{agent.name}}, {{contact.name}}, {{contact.phone}}, {{message.text}}",
         "tagLabel": "태그",
         "modeLabel": "모드",
         "modes": {
@@ -1115,7 +1116,8 @@
           "tag_presence": "태그 존재 여부",
           "contact_field": "연락처 필드",
           "message_content": "메시지 내용",
-          "time_of_day": "시간대"
+          "time_of_day": "시간대",
+          "has_phone": "연락처에 전화번호가 있음"
         },
         "operandLabel": "피연산자",
         "placeholderTime": "HH:mm-HH:mm",

@@ -10,6 +10,7 @@ export type TemplateSlug =
   | 'out_of_office'
   | 'lead_qualifier'
   | 'follow_up_reminder'
+  | 'lead_handoff'
 
 export interface TemplateStepSeed {
   step_type: AutomationStepType
@@ -122,6 +123,51 @@ export const AUTOMATION_TEMPLATES: Record<TemplateSlug, AutomationTemplateDefini
           text:
             "Just circling back — did you have any other questions for us? Happy to help!",
         },
+      },
+    ],
+  },
+  lead_handoff: {
+    slug: 'lead_handoff',
+    name: 'Aviso al asesor y saludo al lead',
+    description:
+      'En el primer mensaje: avisa al asesor por WhatsApp, saluda al cliente, o pide su número si llegó solo con usuario.',
+    trigger_type: 'first_inbound_message',
+    trigger_config: {},
+    steps: [
+      {
+        step_type: 'assign_conversation',
+        step_config: { mode: 'round_robin' },
+      },
+      {
+        step_type: 'notify_staff',
+        step_config: {
+          notify_owner: false,
+          notify_assigned: true,
+          text:
+            'Nuevo lead de {{contact_name}} ({{contact_phone}}):\n{{message.text}}',
+        },
+      },
+      {
+        step_type: 'condition',
+        step_config: { subject: 'has_phone' },
+      },
+      {
+        step_type: 'send_message',
+        step_config: {
+          text:
+            '{{greeting}}, en un momento el asesor {{agent.name}} se comunicará con usted.',
+        },
+        parent_index: 2,
+        branch: 'yes',
+      },
+      {
+        step_type: 'send_message',
+        step_config: {
+          text:
+            '{{greeting}}. ¿Nos puede brindar su número de teléfono para darle toda la información?',
+        },
+        parent_index: 2,
+        branch: 'no',
       },
     ],
   },

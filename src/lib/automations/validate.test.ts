@@ -29,6 +29,14 @@ describe("validateStepsForActivation", () => {
     expect(issues).toEqual([]);
   });
 
+  it("allows has_phone conditions without an operand", () => {
+    expect(
+      validateStepsForActivation([
+        { step_type: "condition", step_config: { subject: "has_phone" } },
+      ]),
+    ).toEqual([]);
+  });
+
   it("flags every required field that is missing", () => {
     const issues = validateStepsForActivation([
       { step_type: "send_message", step_config: { text: "  " } },

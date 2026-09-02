@@ -26,6 +26,11 @@ import { MAX_TAG_CHAIN_DEPTH, getTagChainDepth } from '@/lib/contacts/tag-chain'
 import { engineSendText, engineSendTemplate, engineSendInteractive } from './meta-send'
 import { validateInteractivePayload } from '@/lib/whatsapp/interactive'
 import { isDeliverableUrl } from '@/lib/webhooks/ssrf'
+import { isRealMobilePhone } from '@/lib/whatsapp/phone-utils'
+import {
+  fillAutomationPlaceholders,
+  greetingForInstant,
+} from './template-vars'
 
 // ------------------------------------------------------------
 // Public API
@@ -364,7 +369,7 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
     case 'send_message': {
       const cfg = step.step_config as SendMessageStepConfig
       if (!args.contactId) throw new Error('send_message needs a contact')
-      const text = interpolate(cfg.text, args)
+      const text = await interpolate(cfg.text, args)
       if (!text.trim()) throw new Error('send_message has empty text')
       const conversationId = await resolveConversationId(args)
       const { whatsapp_message_id } = await engineSendText({
@@ -374,7 +379,7 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
         contactId: args.contactId,
         text,
       })
-      return `sent via Meta (${whatsapp_message_id})`
+      return `sent (${whatsapp_message_id})`
     }
 
     case 'send_buttons':
@@ -485,6 +490,16 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
     case 'assign_conversation': {
       const cfg = step.step_config as AssignConversationStepConfig
       if (!args.contactId) throw new Error('assign_conversation needs a contact')
+      const conversationId = await resolveConversationId(args)
+      const { data: existing } = await db
+        .from('conversations')
+        .select('assigned_agent_id')
+        .eq('id', conversationId)
+        .eq('account_id', args.automation.account_id)
+        .maybeSingle()
+      if (existing?.assigned_agent_id) {
+        return `already assigned to ${existing.assigned_agent_id}`
+      }
       let agentId = cfg.agent_id
       if (cfg.mode === 'round_robin') {
         const { pickRoundRobinAgent } = await import(
@@ -511,7 +526,7 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
       if (!args.contactId) throw new Error('update_contact_field needs a contact')
       // Resolve workflow variables ({{ vars.* }}, {{ message.text }}) so custom
       // values can be populated dynamically from the triggering context.
-      const value = interpolate(cfg.value, args)
+      const value = await interpolate(cfg.value, args)
 
       // Custom fields are encoded as `custom:<custom_field_id>`; anything else
       // is a built-in contact column.
@@ -578,7 +593,7 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
         pipeline_id: cfg.pipeline_id,
         stage_id: cfg.stage_id,
         contact_id: args.contactId,
-        title: interpolate(cfg.title, args),
+        title: await interpolate(cfg.title, args),
         value: cfg.value ?? 0,
         currency: acct?.default_currency ?? 'USD',
         status: 'open',
@@ -596,7 +611,9 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
       if (!(await isDeliverableUrl(cfg.url))) {
         throw new Error('send_webhook: destination not allowed')
       }
-      const body = cfg.body_template ? interpolate(cfg.body_template, args) : JSON.stringify(args.context)
+      const body = cfg.body_template
+        ? await interpolate(cfg.body_template, args)
+        : JSON.stringify(args.context)
       const res = await fetch(cfg.url, {
         method: 'POST',
         headers: { 'content-type': 'application/json', ...(cfg.headers ?? {}) },
@@ -796,6 +813,18 @@ async function evaluateCondition(cfg: ConditionStepConfig, args: ExecuteArgs): P
       const t = parse(to)
       return f <= t ? mins >= f && mins < t : mins >= f || mins < t
     }
+    case 'has_phone': {
+      if (!args.contactId) return false
+      const { data } = await db
+        .from('contacts')
+        .select('phone')
+        .eq('id', args.contactId)
+        .eq('account_id', args.automation.account_id)
+        .maybeSingle()
+      return isRealMobilePhone(
+        (data?.phone as string | null | undefined) ?? null,
+      )
+    }
     default:
       return false
   }
@@ -806,13 +835,60 @@ function waitMs(cfg: WaitStepConfig): number {
   return Math.max(1_000, cfg.amount * unitMs)
 }
 
-function interpolate(s: string, args: ExecuteArgs): string {
-  return s.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, key) => {
-    const [ns, prop] = String(key).split('.')
-    if (ns === 'message' && prop === 'text') return String(args.context.message_text ?? '')
-    if (ns === 'vars' && prop) return String(args.context.vars?.[prop] ?? '')
-    return ''
-  })
+async function interpolate(s: string, args: ExecuteArgs): Promise<string> {
+  const vars: Record<string, string> = {
+    'message.text': String(args.context.message_text ?? ''),
+    greeting: greetingForInstant(),
+  }
+  if (args.context.vars) {
+    for (const [key, value] of Object.entries(args.context.vars)) {
+      vars[`vars.${key}`] = String(value ?? '')
+    }
+  }
+
+  const db = supabaseAdmin()
+  if (args.contactId) {
+    const { data: contact } = await db
+      .from('contacts')
+      .select('name, phone')
+      .eq('id', args.contactId)
+      .eq('account_id', args.automation.account_id)
+      .maybeSingle()
+    const name = (contact?.name as string | null | undefined)?.trim() || ''
+    const phone = (contact?.phone as string | null | undefined) || ''
+    vars['contact.name'] = name || phone || 'contacto'
+    vars['contact_name'] = vars['contact.name']
+    vars['contact.phone'] = phone
+    vars['contact_phone'] = phone
+  }
+
+  const conversationId = args.context.conversation_id
+  if (conversationId) {
+    const { data: conv } = await db
+      .from('conversations')
+      .select('assigned_agent_id')
+      .eq('id', conversationId)
+      .eq('account_id', args.automation.account_id)
+      .maybeSingle()
+    const agentId = conv?.assigned_agent_id as string | null | undefined
+    if (agentId) {
+      const { data: agent } = await db
+        .from('profiles')
+        .select('full_name')
+        .eq('user_id', agentId)
+        .maybeSingle()
+      const agentName =
+        (agent?.full_name as string | null | undefined)?.trim() || ''
+      vars['agent.name'] = agentName || 'un asesor'
+      vars['agent_name'] = vars['agent.name']
+    }
+  }
+  if (!vars['agent.name']) {
+    vars['agent.name'] = 'un asesor'
+    vars['agent_name'] = 'un asesor'
+  }
+
+  return fillAutomationPlaceholders(s, vars)
 }
 
 async function appendResults(

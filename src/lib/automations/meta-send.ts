@@ -11,6 +11,8 @@ import {
   phoneVariants,
   isRecipientNotAllowedError,
 } from '@/lib/whatsapp/phone-utils'
+import { sendWahaText, type WahaClientOptions } from '@/lib/whatsapp/waha-api'
+import { isUniqueViolation } from '@/lib/contacts/dedupe'
 import { supabaseAdmin } from './admin-client'
 
 // ------------------------------------------------------------
@@ -126,11 +128,6 @@ async function sendViaMeta(input: SendInput): Promise<{ whatsapp_message_id: str
     throw new Error('contact not found for this account')
   }
 
-  const sanitized = sanitizePhoneForMeta(contact.phone)
-  if (!isValidE164(sanitized)) {
-    throw new Error(`contact phone invalid: ${contact.phone}`)
-  }
-
   const { data: config, error: configErr } = await db
     .from('whatsapp_config')
     .select('*')
@@ -138,6 +135,24 @@ async function sendViaMeta(input: SendInput): Promise<{ whatsapp_message_id: str
     .single()
   if (configErr || !config) {
     throw new Error('WhatsApp not configured for this account')
+  }
+
+  const provider = (config.provider as string | undefined) || 'meta'
+  if (provider === 'waha') {
+    if (input.kind === 'template') {
+      throw new Error('WAHA cannot send Meta message templates')
+    }
+    return sendViaWaha({
+      db,
+      config,
+      input,
+      toPhone: contact.phone as string,
+    })
+  }
+
+  const sanitized = sanitizePhoneForMeta(contact.phone)
+  if (!isValidE164(sanitized)) {
+    throw new Error(`contact phone invalid: ${contact.phone}`)
   }
 
   const accessToken = decrypt(config.access_token)
@@ -221,4 +236,52 @@ async function sendViaMeta(input: SendInput): Promise<{ whatsapp_message_id: str
     .eq('id', input.conversationId)
 
   return { whatsapp_message_id: waMessageId }
+}
+
+async function sendViaWaha(args: {
+  db: ReturnType<typeof supabaseAdmin>
+  config: Record<string, unknown>
+  input: SendInput
+  toPhone: string
+}): Promise<{ whatsapp_message_id: string }> {
+  const { db, config, input, toPhone } = args
+  if (!config.waha_base_url) {
+    throw new Error('WAHA base URL is missing')
+  }
+  if (input.kind !== 'text') {
+    throw new Error('WAHA cannot send Meta message templates')
+  }
+  const accessToken = config.access_token
+    ? decrypt(config.access_token as string)
+    : ''
+  const opts: WahaClientOptions = {
+    baseUrl: config.waha_base_url as string,
+    apiKey: accessToken || null,
+    session: (config.waha_session as string) || 'default',
+  }
+  const { messageId } = await sendWahaText(opts, toPhone, input.text)
+
+  const { error: msgErr } = await db.from('messages').insert({
+    conversation_id: input.conversationId,
+    sender_type: 'bot',
+    content_type: 'text',
+    content_text: input.text,
+    template_name: null,
+    message_id: messageId,
+    status: 'sent',
+  })
+  if (msgErr && !isUniqueViolation(msgErr)) {
+    throw new Error(`sent to WAHA but DB insert failed: ${msgErr.message}`)
+  }
+
+  await db
+    .from('conversations')
+    .update({
+      last_message_text: input.text,
+      last_message_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', input.conversationId)
+
+  return { whatsapp_message_id: messageId }
 }

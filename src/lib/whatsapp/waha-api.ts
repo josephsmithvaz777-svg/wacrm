@@ -87,8 +87,15 @@ export async function resolveOutboundChatId(
   toPhone: string,
 ): Promise<string> {
   const digits = toPhone.replace(/\D/g, '');
-  // E.164 max is 15 digits. Longer values are almost always Linked IDs
-  // wrongly stored as phones — WEBJS then fails with "No LID for user".
+  if (toPhone.trim().toLowerCase().endsWith('@lid') && digits.length >= 8) {
+    const trimmed = toPhone.trim();
+    return trimmed.includes('@') ? trimmed : `${digits}@lid`;
+  }
+  // Linked IDs stored as "phones" are 14+ digits. Treating them as
+  // @c.us makes WEBJS throw "No LID for user".
+  if (digits.length >= 14) {
+    return `${digits}@lid`;
+  }
   if (digits.length < 8 || digits.length > 15) {
     throw new WahaApiError(
       400,
@@ -1103,6 +1110,11 @@ export async function resolveInboundChatId(
       }
     }
     console.warn('[waha] could not resolve LID to phone:', from);
+    const lidDigits = from.replace(/\D/g, '');
+    if (lidDigits.length >= 8) {
+      const chatId = from.includes('@') ? from : `${lidDigits}@lid`;
+      return { chatId, phone: lidDigits };
+    }
     return null;
   }
 

@@ -41,6 +41,24 @@ export function isValidE164(phone: string): boolean {
 }
 
 /**
+ * True for a personal mobile we can message as E.164 (8–13 digits).
+ * WhatsApp Linked IDs / usernames land as 14+ digit blobs (or `@lid`)
+ * and are not dialable numbers.
+ */
+export function isRealMobilePhone(phone: string | null | undefined): boolean {
+  const digits = (phone ?? '').replace(/\D/g, '')
+  return digits.length >= 8 && digits.length <= 13
+}
+
+/** True when the stored "phone" is a WhatsApp Linked ID, not E.164. */
+export function isLikelyWhatsAppLid(phone: string | null | undefined): boolean {
+  if (!phone) return false
+  if (/@lid/i.test(phone)) return true
+  const digits = phone.replace(/\D/g, '')
+  return digits.length >= 14
+}
+
+/**
  * Generate plausible phone number variants for retry when Meta's
  * sandbox rejects a number with error #131030 ("not in allowed list").
  *

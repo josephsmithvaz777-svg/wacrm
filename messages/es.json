@@ -1109,6 +1109,7 @@
       "config": {
         "messageText": "Message text",
         "placeholderMessageText": "Hi! Thanks for reaching out…",
+        "messageVarsHint": "{{greeting}}, {{agent.name}}, {{contact.name}}, {{contact.phone}}, {{message.text}}",
         "notifyOwner": "Enviar al dueño de la cuenta",
         "notifyAssigned": "Enviar al asesor asignado",
         "notifyText": "Texto del aviso",
@@ -1136,7 +1137,8 @@
           "tag_presence": "Tag presence",
           "contact_field": "Contact field",
           "message_content": "Message content",
-          "time_of_day": "Time of day"
+          "time_of_day": "Time of day",
+          "has_phone": "El contacto tiene número de WhatsApp"
         },
         "operandLabel": "Operand",
         "placeholderTime": "HH:mm-HH:mm",

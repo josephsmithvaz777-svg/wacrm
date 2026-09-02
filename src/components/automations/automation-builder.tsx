@@ -1313,6 +1313,9 @@ function StepEditor({
             placeholder={t("config.placeholderMessageText")}
             className="min-h-24 bg-muted text-foreground"
           />
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {t("config.messageVarsHint")}
+          </p>
         </FieldBlock>
       )
     case "send_buttons":
@@ -1455,8 +1458,10 @@ function StepEditor({
               <option value="contact_field">{t("config.subjects.contact_field")}</option>
               <option value="message_content">{t("config.subjects.message_content")}</option>
               <option value="time_of_day">{t("config.subjects.time_of_day")}</option>
+              <option value="has_phone">{t("config.subjects.has_phone")}</option>
             </select>
           </FieldBlock>
+          {cfg.subject !== "has_phone" && (
           <FieldBlock label={t("config.operandLabel")}>
             <Input
               placeholder={
@@ -1473,6 +1478,7 @@ function StepEditor({
               className="bg-muted text-foreground"
             />
           </FieldBlock>
+          )}
           {(cfg.subject === "contact_field" || cfg.subject === "message_content") && (
             <FieldBlock label="Value">
               <Input

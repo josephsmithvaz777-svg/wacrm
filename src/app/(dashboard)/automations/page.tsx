@@ -15,6 +15,7 @@ import {
   Clock,
   Users,
   PhoneCall,
+  Bell,
   Loader2,
 } from "lucide-react"
 
@@ -45,6 +46,7 @@ import { triggerMeta, formatRelative } from "@/lib/automations/trigger-meta"
 import { cn } from "@/lib/utils"
 
 const TEMPLATE_ORDER: TemplateSlug[] = [
+  "lead_handoff",
   "welcome_message",
   "out_of_office",
   "lead_qualifier",
@@ -52,6 +54,7 @@ const TEMPLATE_ORDER: TemplateSlug[] = [
 ]
 
 const TEMPLATE_ICON: Record<TemplateSlug, typeof Zap> = {
+  lead_handoff: Bell,
   welcome_message: MessageCircle,
   out_of_office: Clock,
   lead_qualifier: Users,
