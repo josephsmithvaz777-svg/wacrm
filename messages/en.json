@@ -1092,7 +1092,7 @@
         "notifyOwner": "Send to the account owner",
         "notifyAssigned": "Send to the assigned agent",
         "notifyText": "Alert text",
-        "notifyTextHint": "Placeholders: {{contact_name}}, {{contact_phone}}, {{message.text}}. Each person must save their WhatsApp number in Settings → Profile.",
+        "notifyTextHint": "Placeholders: {{contact_name}}, {{contact_phone}}, {{time}}, {{message.text}}. Alerts are sent from the same WhatsApp number that receives leads. Each person must save their number in Settings → Profile.",
         "tagLabel": "Tag",
         "modeLabel": "Mode",
         "modes": {

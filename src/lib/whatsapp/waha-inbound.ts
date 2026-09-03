@@ -447,6 +447,7 @@ export async function processWahaEvent(
     return;
   }
 
+  let assignedNow: string | null = null;
   if (convResult.created) {
     await dispatchWebhookEvent(admin(), config.account_id, 'conversation.created', {
       conversation_id: convResult.conversation.id,
@@ -456,12 +457,15 @@ export async function processWahaEvent(
       const { maybeRoundRobinAssignNewConversation } = await import(
         '@/lib/assignments/round-robin'
       );
-      await maybeRoundRobinAssignNewConversation(admin(), {
+      assignedNow = await maybeRoundRobinAssignNewConversation(admin(), {
         accountId: config.account_id,
         contactId: contactOutcome.contact.id,
         conversationId: convResult.conversation.id,
         alreadyAssigned: convResult.conversation.assigned_agent_id ?? null,
       });
+      if (assignedNow) {
+        convResult.conversation.assigned_agent_id = assignedNow;
+      }
     } catch (err) {
       console.warn('[waha-inbound] round-robin assign failed:', err);
     }
@@ -577,9 +581,11 @@ export async function processWahaEvent(
       | 'first_inbound_message'
       | 'new_message_received'
       | 'keyword_match'
+      | 'conversation_assigned'
     > = ['new_message_received', 'keyword_match'];
     if (contactOutcome.wasCreated) automationTriggers.unshift('new_contact_created');
     if (isFirstInboundMessage) automationTriggers.push('first_inbound_message');
+    if (assignedNow) automationTriggers.push('conversation_assigned');
 
     for (const triggerType of automationTriggers) {
       await runAutomationsForTrigger({
@@ -589,6 +595,7 @@ export async function processWahaEvent(
         context: {
           message_text: inboundText,
           conversation_id: convResult.conversation.id,
+          agent_id: assignedNow ?? undefined,
         },
       });
     }

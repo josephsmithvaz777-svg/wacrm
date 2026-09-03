@@ -942,30 +942,23 @@ export function MessageThread({
     async (agentId: string | null) => {
       if (!conversation) return;
 
-      const supabase = createClient();
-      const { error } = await supabase
-        .from("conversations")
-        .update({ assigned_agent_id: agentId })
-        .eq("id", conversation.id);
-
-      if (error) {
-        console.error("Failed to update assignment:", error);
+      try {
+        const res = await fetch(
+          `/api/conversations/${conversation.id}/assign`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ agent_id: agentId }),
+          },
+        );
+        if (!res.ok) {
+          const payload = await res.json().catch(() => ({}));
+          throw new Error(payload?.error || `HTTP ${res.status}`);
+        }
+      } catch (err) {
+        console.error("Failed to update assignment:", err);
         toast.error("Failed to update assignment");
         return;
-      }
-
-      // Keep contact.assigned_to in sync so agent contact-scope RLS works.
-      if (conversation.contact_id) {
-        const { error: contactErr } = await supabase
-          .from("contacts")
-          .update({
-            assigned_to: agentId,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", conversation.contact_id);
-        if (contactErr) {
-          console.warn("[inbox] contact assigned_to sync failed:", contactErr);
-        }
       }
 
       onAssignChange(conversation.id, agentId);

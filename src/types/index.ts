@@ -616,7 +616,7 @@ export interface SendWebhookStepConfig {
 export interface NotifyStaffStepConfig {
   notify_owner?: boolean;
   notify_assigned?: boolean;
-  /** Supports {{contact_name}}, {{contact_phone}}, {{message.text}}. */
+  /** Supports {{contact_name}}, {{contact_phone}}, {{time}}, {{message.text}}. */
   text?: string;
 }
 

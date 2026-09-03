@@ -449,6 +449,20 @@ async function executeHandoff(
       .update(convUpdate)
       .eq("id", run.conversation_id);
   }
+  if (cfg.assign_to && run.conversation_id && run.contact_id) {
+    const { runAutomationsForTrigger } = await import(
+      "@/lib/automations/engine"
+    );
+    await runAutomationsForTrigger({
+      accountId: run.account_id,
+      triggerType: "conversation_assigned",
+      contactId: run.contact_id,
+      context: {
+        conversation_id: run.conversation_id,
+        agent_id: cfg.assign_to,
+      },
+    });
+  }
   await logEvent(db, run.id, "handoff", node.node_key, {
     note: cfg.note ?? null,
     assigned_to: cfg.assign_to ?? null,

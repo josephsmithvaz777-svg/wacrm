@@ -1113,7 +1113,7 @@
         "notifyOwner": "Enviar al dueño de la cuenta",
         "notifyAssigned": "Enviar al asesor asignado",
         "notifyText": "Texto del aviso",
-        "notifyTextHint": "Variables: {{contact_name}}, {{contact_phone}}, {{message.text}}. Cada persona debe guardar su WhatsApp en Configuración → Perfil.",
+        "notifyTextHint": "Variables: {{contact_name}}, {{contact_phone}}, {{time}}, {{message.text}}. El aviso sale del mismo WhatsApp que recibe los leads. Cada asesor debe guardar su número en Configuración → Perfil.",
         "tagLabel": "Tag",
         "modeLabel": "Mode",
         "modes": {

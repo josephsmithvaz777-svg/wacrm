@@ -1,5 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { engineSendText } from '@/lib/automations/meta-send';
+import {
+  formatAlertClock,
+  formatAlertDateTime,
+} from '@/lib/automations/template-vars';
+import { findExistingContact, isUniqueViolation } from '@/lib/contacts/dedupe';
+import { findOrCreateConversation } from '@/lib/conversations/find-or-create';
 import { decrypt } from '@/lib/whatsapp/encryption';
 import { sendTextMessage } from '@/lib/whatsapp/meta-api';
 import {
@@ -10,7 +17,7 @@ import {
 import { sendWahaText, type WahaClientOptions } from '@/lib/whatsapp/waha-api';
 
 export const DEFAULT_STAFF_ALERT_TEXT =
-  'Nuevo mensaje de {{contact_name}} ({{contact_phone}}):\n{{message.text}}';
+  'Nuevo lead asignado\nNombre: {{contact_name}}\nNúmero: {{contact_phone}}\nHora: {{time}}\n{{message.text}}';
 
 export type StaffNotifyRole = 'owner' | 'assigned_agent';
 
@@ -75,6 +82,7 @@ export async function notifyStaffViaWhatsApp(params: {
   accountId: string;
   contactId: string | null | undefined;
   conversationId: string | null | undefined;
+  assignedAgentId?: string | null;
   notifyOwner: boolean;
   notifyAssigned: boolean;
   textTemplate: string;
@@ -85,6 +93,7 @@ export async function notifyStaffViaWhatsApp(params: {
     accountId,
     contactId,
     conversationId,
+    assignedAgentId,
     notifyOwner,
     notifyAssigned,
     textTemplate,
@@ -109,6 +118,7 @@ export async function notifyStaffViaWhatsApp(params: {
   }
 
   const candidates: StaffNotifyCandidate[] = [];
+  const skipReasons: string[] = [];
 
   if (notifyOwner) {
     const { data: account } = await db
@@ -123,33 +133,52 @@ export async function notifyStaffViaWhatsApp(params: {
         .select('user_id, phone, full_name')
         .eq('user_id', ownerId)
         .maybeSingle();
+      const phone = (owner?.phone as string | null | undefined) ?? null;
+      if (!isUsableStaffPhone(phone)) {
+        skipReasons.push(
+          'owner has no WhatsApp number in Settings → Profile',
+        );
+      }
       candidates.push({
         userId: ownerId,
         role: 'owner',
-        phone: (owner?.phone as string | null | undefined) ?? null,
+        phone,
         name: (owner?.full_name as string | null | undefined) ?? null,
       });
     }
   }
 
-  if (notifyAssigned && conversationId) {
-    const { data: conv } = await db
-      .from('conversations')
-      .select('assigned_agent_id')
-      .eq('id', conversationId)
-      .eq('account_id', accountId)
-      .maybeSingle();
-    const agentId = conv?.assigned_agent_id as string | null | undefined;
-    if (agentId) {
+
+  if (notifyAssigned) {
+    let agentId = assignedAgentId ?? null;
+    if (conversationId) {
+      const { data: conv } = await db
+        .from('conversations')
+        .select('assigned_agent_id')
+        .eq('id', conversationId)
+        .eq('account_id', accountId)
+        .maybeSingle();
+      agentId =
+        (conv?.assigned_agent_id as string | null | undefined) ?? agentId;
+    }
+    if (!agentId) {
+      skipReasons.push('conversation has no assigned agent');
+    } else {
       const { data: agent } = await db
         .from('profiles')
         .select('user_id, phone, full_name')
         .eq('user_id', agentId)
         .maybeSingle();
+      const phone = (agent?.phone as string | null | undefined) ?? null;
+      if (!isUsableStaffPhone(phone)) {
+        skipReasons.push(
+          'assigned agent has no WhatsApp number in Settings → Profile',
+        );
+      }
       candidates.push({
         userId: agentId,
         role: 'assigned_agent',
-        phone: (agent?.phone as string | null | undefined) ?? null,
+        phone,
         name: (agent?.full_name as string | null | undefined) ?? null,
       });
     }
@@ -157,15 +186,22 @@ export async function notifyStaffViaWhatsApp(params: {
 
   const targets = pickStaffNotifyTargets(candidates, contactPhone);
   if (!targets.length) {
-    return 'skipped: no staff WhatsApp numbers to notify';
+    const extra = skipReasons.length ? skipReasons.join('; ') : 'no staff WhatsApp numbers to notify';
+    return `skipped: ${extra}`;
   }
 
+  const now = new Date();
+  const time = formatAlertDateTime(now);
+  const clock = formatAlertClock(now);
   const text = renderStaffAlert(textTemplate || DEFAULT_STAFF_ALERT_TEXT, {
     'contact_name': contactName || contactPhone || 'contacto',
     'contact_phone': contactPhone || '',
     'message.text': messageText || '',
     'agent_name':
       targets.find((row) => row.role === 'assigned_agent')?.name || '',
+    time,
+    hora: clock,
+    received_at: time,
   }).trim();
   if (!text) throw new Error('notify_staff has empty text');
 
@@ -173,7 +209,12 @@ export async function notifyStaffViaWhatsApp(params: {
   const errors: string[] = [];
   for (const target of targets) {
     try {
-      await sendStaffWhatsApp(db, accountId, target.phone, text);
+      await sendStaffWhatsApp(db, {
+        accountId,
+        toPhone: target.phone,
+        toName: target.name,
+        text,
+      });
       sent.push(target.role);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
@@ -188,27 +229,73 @@ export async function notifyStaffViaWhatsApp(params: {
   return errors.length ? `${summary} (${errors.join('; ')})` : summary;
 }
 
+/**
+ * The inbox line that receives leads. If WAHA is wired we always send
+ * from that session — leftover Meta Cloud credentials must not become
+ * a second "from" number.
+ */
+export function staffAlertChannel(config: {
+  provider?: string | null;
+  waha_base_url?: string | null;
+}): 'waha' | 'meta' {
+  if (config.waha_base_url) return 'waha';
+  return (config.provider as string | undefined) === 'waha' ? 'waha' : 'meta';
+}
+
 async function sendStaffWhatsApp(
   db: SupabaseClient,
-  accountId: string,
-  toPhone: string,
-  text: string,
+  args: {
+    accountId: string;
+    toPhone: string;
+    toName: string | null;
+    text: string;
+  },
 ): Promise<void> {
+  const { accountId, toPhone, toName, text } = args;
   const { data: config, error } = await db
     .from('whatsapp_config')
-    .select('provider, waha_base_url, waha_session, access_token, phone_number_id')
+    .select(
+      'provider, waha_base_url, waha_session, access_token, phone_number_id, user_id',
+    )
     .eq('account_id', accountId)
     .maybeSingle();
   if (error || !config) {
     throw new Error('WhatsApp is not configured');
   }
 
-  const provider = (config.provider as string | undefined) || 'meta';
+  const ownerUserId = config.user_id as string | undefined;
+  if (ownerUserId) {
+    const contactId = await ensureStaffContact(
+      db,
+      accountId,
+      ownerUserId,
+      toPhone,
+      toName,
+    );
+    const conversationId = await findOrCreateConversation(
+      db,
+      accountId,
+      ownerUserId,
+      contactId,
+    );
+    if (conversationId) {
+      await engineSendText({
+        accountId,
+        userId: ownerUserId,
+        conversationId,
+        contactId,
+        text,
+      });
+      return;
+    }
+  }
+
+  // Fallback if we cannot open a thread: still send from the same
+  // WAHA session / Meta phone that receives inbound leads.
   const accessToken = config.access_token
     ? decrypt(config.access_token as string)
     : '';
-
-  if (provider === 'waha') {
+  if (staffAlertChannel(config) === 'waha') {
     if (!config.waha_base_url) {
       throw new Error('WAHA base URL is missing');
     }
@@ -222,7 +309,7 @@ async function sendStaffWhatsApp(
   }
 
   if (!config.phone_number_id || !accessToken) {
-    throw new Error('Meta WhatsApp is not configured');
+    throw new Error('WhatsApp inbox number is not configured');
   }
   const sanitized = sanitizePhoneForMeta(toPhone);
   if (!isValidE164(sanitized)) {
@@ -234,4 +321,35 @@ async function sendStaffWhatsApp(
     to: sanitized,
     text,
   });
+}
+
+async function ensureStaffContact(
+  db: SupabaseClient,
+  accountId: string,
+  ownerUserId: string,
+  phone: string,
+  name: string | null,
+): Promise<string> {
+  const existing = await findExistingContact(db, accountId, phone);
+  if (existing?.id) return existing.id as string;
+
+  const label = (name ?? '').trim() || phone;
+  const { data, error } = await db
+    .from('contacts')
+    .insert({
+      account_id: accountId,
+      user_id: ownerUserId,
+      phone,
+      name: label,
+    })
+    .select('id')
+    .single();
+  if (data?.id) return data.id as string;
+  if (error && isUniqueViolation(error)) {
+    const raced = await findExistingContact(db, accountId, phone);
+    if (raced?.id) return raced.id as string;
+  }
+  throw new Error(
+    error?.message || 'could not open a chat with the advisor number',
+  );
 }

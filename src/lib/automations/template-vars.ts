@@ -6,6 +6,35 @@
 
 export const AUTOMATION_GREETING_TZ = 'America/Lima';
 
+/** Date + time in the workspace TZ, e.g. "02/09/2026, 21:15". */
+export function formatAlertDateTime(
+  now: Date = new Date(),
+  timeZone: string = AUTOMATION_GREETING_TZ,
+): string {
+  return new Intl.DateTimeFormat('es-PE', {
+    timeZone,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(now)
+}
+
+/** Clock only, e.g. "21:15". */
+export function formatAlertClock(
+  now: Date = new Date(),
+  timeZone: string = AUTOMATION_GREETING_TZ,
+): string {
+  return new Intl.DateTimeFormat('es-PE', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(now)
+}
+
 export function greetingForInstant(
   now: Date = new Date(),
   timeZone: string = AUTOMATION_GREETING_TZ,

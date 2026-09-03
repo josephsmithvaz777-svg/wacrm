@@ -144,7 +144,7 @@ export const AUTOMATION_TEMPLATES: Record<TemplateSlug, AutomationTemplateDefini
           notify_owner: false,
           notify_assigned: true,
           text:
-            'Nuevo lead de {{contact_name}} ({{contact_phone}}):\n{{message.text}}',
+            'Nuevo lead asignado\nNombre: {{contact_name}}\nNúmero: {{contact_phone}}\nHora: {{time}}\n{{message.text}}',
         },
       },
       {
@@ -164,7 +164,7 @@ export const AUTOMATION_TEMPLATES: Record<TemplateSlug, AutomationTemplateDefini
         step_type: 'send_message',
         step_config: {
           text:
-            '{{greeting}}. ¿Nos puede brindar su número de teléfono para darle toda la información?',
+            '{{greeting}}. ¿Nos puede brindar su número para que un asesor se pueda comunicar con usted y darle toda la información?',
         },
         parent_index: 2,
         branch: 'no',

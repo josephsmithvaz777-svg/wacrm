@@ -29,6 +29,8 @@ import { isDeliverableUrl } from '@/lib/webhooks/ssrf'
 import { isRealMobilePhone } from '@/lib/whatsapp/phone-utils'
 import {
   fillAutomationPlaceholders,
+  formatAlertClock,
+  formatAlertDateTime,
   greetingForInstant,
 } from './template-vars'
 
@@ -516,7 +518,18 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
       await assignConversationToAgent(db, {
         accountId: args.automation.account_id,
         contactId: args.contactId,
+        conversationId,
         agentId,
+      })
+      await runAutomationsForTrigger({
+        accountId: args.automation.account_id,
+        triggerType: 'conversation_assigned',
+        contactId: args.contactId,
+        context: {
+          ...args.context,
+          conversation_id: conversationId,
+          agent_id: agentId,
+        },
       })
       return `assigned to ${agentId}`
     }
@@ -635,6 +648,7 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
         accountId: args.automation.account_id,
         contactId: args.contactId,
         conversationId: args.context.conversation_id,
+        assignedAgentId: args.context.agent_id,
         notifyOwner: cfg.notify_owner !== false,
         notifyAssigned: cfg.notify_assigned !== false,
         textTemplate: cfg.text || '',
@@ -836,9 +850,14 @@ function waitMs(cfg: WaitStepConfig): number {
 }
 
 async function interpolate(s: string, args: ExecuteArgs): Promise<string> {
+  const now = new Date()
+  const time = formatAlertDateTime(now)
   const vars: Record<string, string> = {
     'message.text': String(args.context.message_text ?? ''),
-    greeting: greetingForInstant(),
+    greeting: greetingForInstant(now),
+    time,
+    hora: formatAlertClock(now),
+    received_at: time,
   }
   if (args.context.vars) {
     for (const [key, value] of Object.entries(args.context.vars)) {

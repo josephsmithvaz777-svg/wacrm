@@ -9,6 +9,7 @@ import { logAiUsage } from './usage'
 import { latestUserMessage } from './query'
 import { engineSendText } from '@/lib/flows/meta-send'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { runAutomationsForTrigger } from '@/lib/automations/engine'
 
 interface DispatchArgs {
   /** Tenancy key — drives config, contact, and whatsapp_config lookups. */
@@ -154,6 +155,19 @@ export async function dispatchInboundToAiReply(
         update.assigned_agent_id = config.handoffAgentId
       }
       await db.from('conversations').update(update).eq('id', conversationId)
+      const handedTo = update.assigned_agent_id as string | undefined
+      if (handedTo) {
+        await runAutomationsForTrigger({
+          accountId,
+          triggerType: 'conversation_assigned',
+          contactId,
+          context: {
+            conversation_id: conversationId,
+            agent_id: handedTo,
+            message_text: latestUserMessage(messages) ?? '',
+          },
+        })
+      }
       return
     }
 

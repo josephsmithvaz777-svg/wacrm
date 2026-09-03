@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   fillAutomationPlaceholders,
+  formatAlertClock,
+  formatAlertDateTime,
   greetingForInstant,
 } from './template-vars';
 
@@ -32,5 +34,13 @@ describe('fillAutomationPlaceholders', () => {
         },
       ),
     ).toBe('Buenos días, el asesor Isaac (51999111222)');
+  });
+});
+
+describe('formatAlertDateTime / formatAlertClock', () => {
+  it('formats in America/Lima', () => {
+    const noonUtc = new Date('2026-09-02T17:00:00.000Z'); // 12:00 Lima
+    expect(formatAlertClock(noonUtc)).toBe('12:00');
+    expect(formatAlertDateTime(noonUtc)).toMatch(/02\/09\/2026.*12:00/);
   });
 });

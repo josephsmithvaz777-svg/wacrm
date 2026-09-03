@@ -614,6 +614,7 @@ async function processMessage(
   // the reaction short-circuit below — so a conversation first opened by
   // a reaction still fires the event, and a subscriber always sees the
   // thread open before its first message.received.
+  let assignedNow: string | null = null
   if (convResult.created) {
     await dispatchWebhookEvent(supabaseAdmin(), accountId, 'conversation.created', {
       conversation_id: conversation.id,
@@ -623,12 +624,15 @@ async function processMessage(
       const { maybeRoundRobinAssignNewConversation } = await import(
         '@/lib/assignments/round-robin'
       )
-      await maybeRoundRobinAssignNewConversation(supabaseAdmin(), {
+      assignedNow = await maybeRoundRobinAssignNewConversation(supabaseAdmin(), {
         accountId,
         contactId: contactRecord.id,
         conversationId: conversation.id,
         alreadyAssigned: conversation.assigned_agent_id ?? null,
       })
+      if (assignedNow) {
+        conversation.assigned_agent_id = assignedNow
+      }
     } catch (err) {
       console.warn('[webhook] round-robin assign failed:', err)
     }
@@ -840,6 +844,7 @@ async function processMessage(
     | 'new_message_received'
     | 'keyword_match'
     | 'interactive_reply'
+    | 'conversation_assigned'
   )[] = []
   // Content-level triggers are suppressed when a flow consumed the
   // message — see the comment block above.
@@ -861,6 +866,7 @@ async function processMessage(
   // listens to only one trigger runs only when that trigger matches.
   if (contactOutcome.wasCreated) automationTriggers.unshift('new_contact_created')
   if (isFirstInboundMessage) automationTriggers.unshift('first_inbound_message')
+  if (assignedNow) automationTriggers.push('conversation_assigned')
   // Awaited — not fire-and-forget. We're inside the route's `after()`
   // block, which only keeps the function alive for promises it can see, so
   // a detached dispatch can be frozen part-way through: the log row is
@@ -877,6 +883,7 @@ async function processMessage(
       context: {
         message_text: inboundText,
         conversation_id: conversation.id,
+        agent_id: assignedNow ?? undefined,
         // Only set on interactive taps; drives the interactive_reply
         // trigger's exact-id match.
         interactive_reply_id: interactiveReplyId ?? undefined,

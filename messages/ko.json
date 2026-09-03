@@ -1090,7 +1090,7 @@
         "notifyOwner": "계정 소유자에게 보내기",
         "notifyAssigned": "담당 상담원에게 보내기",
         "notifyText": "알림 문구",
-        "notifyTextHint": "자리 표시자: {{contact_name}}, {{contact_phone}}, {{message.text}}. 각자 설정 → 프로필에 왓츠앱 번호를 저장해야 합니다.",
+        "notifyTextHint": "자리 표시자: {{contact_name}}, {{contact_phone}}, {{time}}, {{message.text}}. 알림은 리드를 받는 것과 같은 왓츠앱 번호에서 발송됩니다. 각자 설정 → 프로필에 번호를 저장해야 합니다.",
         "placeholderMessageText": "안녕하세요! 문의해주셔서 감사합니다…",
         "messageVarsHint": "{{greeting}}, {{agent.name}}, {{contact.name}}, {{contact.phone}}, {{message.text}}",
         "tagLabel": "태그",

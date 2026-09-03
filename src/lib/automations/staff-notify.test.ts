@@ -4,6 +4,7 @@ import {
   isUsableStaffPhone,
   pickStaffNotifyTargets,
   renderStaffAlert,
+  staffAlertChannel,
   staffPhoneDigits,
 } from './staff-notify';
 
@@ -90,5 +91,28 @@ describe('pickStaffNotifyTargets', () => {
       '51933333333',
     );
     expect(targets.map((row) => row.role)).toEqual(['owner', 'assigned_agent']);
+  });
+});
+
+describe('staffAlertChannel', () => {
+  it('sends from the WAHA inbox session even if a Meta phone id is leftover', () => {
+    expect(
+      staffAlertChannel({
+        provider: 'waha',
+        waha_base_url: 'https://waha.example',
+      }),
+    ).toBe('waha');
+    expect(
+      staffAlertChannel({
+        provider: 'meta',
+        waha_base_url: 'https://waha.example',
+      }),
+    ).toBe('waha');
+  });
+
+  it('uses Meta only when WAHA is not configured', () => {
+    expect(
+      staffAlertChannel({ provider: 'meta', waha_base_url: null }),
+    ).toBe('meta');
   });
 });
