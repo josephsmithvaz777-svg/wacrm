@@ -11,6 +11,7 @@ export type TemplateSlug =
   | 'lead_qualifier'
   | 'follow_up_reminder'
   | 'lead_handoff'
+  | 'manual_assignment_alert'
 
 export interface TemplateStepSeed {
   step_type: AutomationStepType
@@ -167,6 +168,25 @@ export const AUTOMATION_TEMPLATES: Record<TemplateSlug, AutomationTemplateDefini
         },
         parent_index: 2,
         branch: 'no',
+      },
+    ],
+  },
+  manual_assignment_alert: {
+    slug: 'manual_assignment_alert',
+    name: 'Aviso al asesor al asignar manualmente',
+    description:
+      'Cuando se asigna un lead de forma manual, envía un mensaje de WhatsApp al asesor asignado con los datos del contacto.',
+    trigger_type: 'conversation_assigned',
+    trigger_config: {},
+    steps: [
+      {
+        step_type: 'notify_staff',
+        step_config: {
+          notify_owner: false,
+          notify_assigned: true,
+          text:
+            'Se te asignó un nuevo lead\nNombre: {{contact_name}}\nNúmero: {{contact_phone}}\nHora: {{time}}\n{{message.text}}',
+        },
       },
     ],
   },

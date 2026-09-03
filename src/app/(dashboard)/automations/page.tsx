@@ -49,6 +49,7 @@ import { cn } from "@/lib/utils"
 
 const TEMPLATE_ORDER: TemplateSlug[] = [
   "lead_handoff",
+  "manual_assignment_alert",
   "welcome_message",
   "out_of_office",
   "lead_qualifier",
@@ -57,6 +58,7 @@ const TEMPLATE_ORDER: TemplateSlug[] = [
 
 const TEMPLATE_ICON: Record<TemplateSlug, typeof Zap> = {
   lead_handoff: Bell,
+  manual_assignment_alert: Users,
   welcome_message: MessageCircle,
   out_of_office: Clock,
   lead_qualifier: Users,
