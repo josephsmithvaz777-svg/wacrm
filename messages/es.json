@@ -974,6 +974,23 @@
         "deleteError": "Failed to delete"
       }
     },
+    "leadHandoff": {
+      "title": "Avisos de leads",
+      "description": "Activa o desactiva el aviso al asesor y edita los mensajes que se envían por WhatsApp. Solo administradores.",
+      "enabled": "Activar avisos",
+      "enabledDesc": "En el primer mensaje de un lead: avisa al asesor asignado y responde al cliente.",
+      "customerMessage": "Mensaje al cliente",
+      "customerMessageHint": "Se envía cuando el lead ya tiene un número. Variables: {{greeting}}, {{agent.name}}, {{contact.name}}.",
+      "askPhoneMessage": "Si el lead no tiene número",
+      "askPhoneMessageHint": "Se envía cuando WhatsApp no trae un teléfono real (por ejemplo un usuario/LID).",
+      "staffMessage": "Mensaje al asesor",
+      "staffMessageHint": "Variables: {{contact_name}}, {{contact_phone}}, {{time}}, {{message.text}}. El aviso sale del mismo WhatsApp que recibe los leads. Cada asesor debe guardar su número en Perfil.",
+      "save": "Guardar",
+      "saving": "Guardando…",
+      "saved": "Avisos actualizados",
+      "saveError": "No se pudieron guardar los avisos",
+      "loadError": "No se pudieron cargar los avisos"
+    },
     "edit": {
       "loading": "Loading...",
       "loadError": "Failed to load ({status})",
@@ -1807,7 +1824,21 @@
       "preview": "Probar sonido",
       "previewPlayed": "Sonido reproducido",
       "hintOn": "Sonido activo",
-      "hintOff": "Silenciado"
+      "hintOff": "Silenciado",
+      "accountSound": "Sonido de la cuenta",
+      "accountSoundDesc": "Solo administradores. Activa o silencia el aviso para todo el equipo y sube un MP3 si quieres cambiar el tono.",
+      "accountSoundOn": "Sonido de notificaciones activado",
+      "accountSoundOff": "Sonido de notificaciones silenciado para el equipo",
+      "uploadSound": "Subir MP3",
+      "customSoundActive": "Usando un archivo personalizado.",
+      "defaultSoundActive": "Usando el sonido predeterminado.",
+      "restoreDefault": "Usar sonido predeterminado",
+      "restoredDefault": "Volviste al sonido predeterminado",
+      "uploadSuccess": "Sonido actualizado",
+      "uploadFailed": "No se pudo subir el audio",
+      "unsupportedAudio": "Usa un archivo MP3, WAV, OGG o M4A.",
+      "fileTooLarge": "El audio no puede superar 2 MB.",
+      "saveFailed": "No se pudo guardar"
     },
     "activity": {
       "title": "Logs",

@@ -953,6 +953,23 @@
         "deleteError": "삭제하지 못했습니다"
       }
     },
+    "leadHandoff": {
+      "title": "리드 알림",
+      "description": "상담원 왓츠앱 알림을 켜거나 끄고 메시지를 수정합니다. 관리자 전용.",
+      "enabled": "알림 사용",
+      "enabledDesc": "리드의 첫 메시지에서 배정된 상담원에게 알리고 고객에게 답장합니다.",
+      "customerMessage": "고객에게 보낼 메시지",
+      "customerMessageHint": "리드에게 전화번호가 있을 때 전송됩니다. 변수: {{greeting}}, {{agent.name}}, {{contact.name}}.",
+      "askPhoneMessage": "번호가 없는 경우",
+      "askPhoneMessageHint": "WhatsApp이 실제 전화번호를 주지 않을 때 전송됩니다(예: 사용자/LID).",
+      "staffMessage": "상담원에게 보낼 메시지",
+      "staffMessageHint": "변수: {{contact_name}}, {{contact_phone}}, {{time}}, {{message.text}}. 알림은 리드를 받는 것과 같은 왓츠앱에서 발송됩니다. 각 상담원은 프로필에 번호를 저장해야 합니다.",
+      "save": "저장",
+      "saving": "저장 중…",
+      "saved": "알림이 업데이트되었습니다",
+      "saveError": "알림을 저장하지 못했습니다",
+      "loadError": "알림을 불러오지 못했습니다"
+    },
     "edit": {
       "loading": "불러오는 중...",
       "loadError": "불러오지 못했습니다 ({status})",
@@ -1779,7 +1796,21 @@
       "preview": "소리 미리듣기",
       "previewPlayed": "소리를 재생했습니다",
       "hintOn": "소리 켜짐",
-      "hintOff": "음소거"
+      "hintOff": "음소거",
+      "accountSound": "워크스페이스 알림음",
+      "accountSoundDesc": "관리자 전용. 팀 전체 배정 알림음을 끄거나 MP3를 올려 기본 소리를 바꿀 수 있습니다.",
+      "accountSoundOn": "알림음이 켜졌습니다",
+      "accountSoundOff": "팀 전체 알림음이 꺼졌습니다",
+      "uploadSound": "MP3 올리기",
+      "customSoundActive": "사용자 지정 파일을 사용 중입니다.",
+      "defaultSoundActive": "기본 알림음을 사용 중입니다.",
+      "restoreDefault": "기본 소리로",
+      "restoredDefault": "기본 소리로 되돌렸습니다",
+      "uploadSuccess": "소리가 업데이트되었습니다",
+      "uploadFailed": "오디오를 올리지 못했습니다",
+      "unsupportedAudio": "MP3, WAV, OGG, M4A 파일을 사용하세요.",
+      "fileTooLarge": "오디오는 2MB 이하여야 합니다.",
+      "saveFailed": "저장하지 못했습니다"
     },
     "activity": {
       "title": "로그",

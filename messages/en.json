@@ -953,6 +953,23 @@
         "deleteError": "Failed to delete"
       }
     },
+    "leadHandoff": {
+      "title": "Lead alerts",
+      "description": "Turn the advisor WhatsApp alert on or off and edit the messages. Admins only.",
+      "enabled": "Enable alerts",
+      "enabledDesc": "On a lead’s first message: notify the assigned advisor and reply to the customer.",
+      "customerMessage": "Message to the customer",
+      "customerMessageHint": "Sent when the lead already has a phone number. Variables: {{greeting}}, {{agent.name}}, {{contact.name}}.",
+      "askPhoneMessage": "If the lead has no number",
+      "askPhoneMessageHint": "Sent when WhatsApp does not provide a real phone (for example a user/LID).",
+      "staffMessage": "Message to the advisor",
+      "staffMessageHint": "Variables: {{contact_name}}, {{contact_phone}}, {{time}}, {{message.text}}. The alert is sent from the same WhatsApp that receives leads. Each advisor must save their number in Profile.",
+      "save": "Save",
+      "saving": "Saving…",
+      "saved": "Alerts updated",
+      "saveError": "Could not save alerts",
+      "loadError": "Could not load alerts"
+    },
     "edit": {
       "loading": "Loading...",
       "loadError": "Failed to load ({status})",
@@ -1779,7 +1796,21 @@
       "preview": "Preview sound",
       "previewPlayed": "Sound played",
       "hintOn": "Sound on",
-      "hintOff": "Muted"
+      "hintOff": "Muted",
+      "accountSound": "Workspace sound",
+      "accountSoundDesc": "Admins only. Mute assignment chimes for everyone, or upload an MP3 to replace the default tone.",
+      "accountSoundOn": "Notification sound enabled",
+      "accountSoundOff": "Notification sound muted for the team",
+      "uploadSound": "Upload MP3",
+      "customSoundActive": "Using a custom file.",
+      "defaultSoundActive": "Using the default chime.",
+      "restoreDefault": "Use default sound",
+      "restoredDefault": "Restored the default sound",
+      "uploadSuccess": "Sound updated",
+      "uploadFailed": "Could not upload the audio",
+      "unsupportedAudio": "Use an MP3, WAV, OGG, or M4A file.",
+      "fileTooLarge": "Audio must be 2 MB or smaller.",
+      "saveFailed": "Could not save"
     },
     "activity": {
       "title": "Logs",

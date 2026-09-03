@@ -56,6 +56,10 @@ interface AccountSummary {
   restrict_agent_contacts: boolean;
   /** When true, new inbound chats rotate across agents (migration 041). */
   round_robin_enabled: boolean;
+  /** Assignment chime for the whole workspace (migration 051). */
+  notification_sound_enabled: boolean;
+  /** Custom notification sound URL, or null for the built-in chime. */
+  notification_sound_url: string | null;
 }
 
 interface AuthContextValue {
@@ -185,7 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // default_currency added in migration 021; narrowed to the
             // USD fallback below for older schemas where it reads null.
             .select(
-              "id, name, default_currency, logo_url, login_branding, restrict_agent_contacts, round_robin_enabled",
+              "id, name, default_currency, logo_url, login_branding, restrict_agent_contacts, round_robin_enabled, notification_sound_enabled, notification_sound_url",
             )
             .eq("id", data.account_id)
             .maybeSingle();
@@ -206,6 +210,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               login_branding: Boolean(account.login_branding),
               restrict_agent_contacts: Boolean(account.restrict_agent_contacts),
               round_robin_enabled: Boolean(account.round_robin_enabled),
+              notification_sound_enabled:
+                account.notification_sound_enabled !== false,
+              notification_sound_url:
+                typeof account.notification_sound_url === "string" &&
+                account.notification_sound_url.trim()
+                  ? account.notification_sound_url
+                  : null,
             };
           }
         }

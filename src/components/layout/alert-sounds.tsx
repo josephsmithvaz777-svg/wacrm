@@ -18,10 +18,14 @@ const MESSAGE_THROTTLE_MS = 1600;
  * for new notifications and inbound customer messages when enabled.
  */
 export function AlertSounds() {
-  const { user, accountId } = useAuth();
+  const { user, accountId, account } = useAuth();
   const { soundNotifications, soundMessages } = useSoundPrefs();
   const soundNotificationsRef = useRef(soundNotifications);
   const soundMessagesRef = useRef(soundMessages);
+  const accountSoundEnabledRef = useRef(
+    account?.notification_sound_enabled !== false,
+  );
+  const accountSoundUrlRef = useRef(account?.notification_sound_url ?? null);
   const lastMessageSoundAt = useRef(0);
   const userIdRef = useRef<string | null>(null);
 
@@ -29,6 +33,12 @@ export function AlertSounds() {
     soundNotificationsRef.current = soundNotifications;
     soundMessagesRef.current = soundMessages;
   }, [soundNotifications, soundMessages]);
+
+  useEffect(() => {
+    accountSoundEnabledRef.current =
+      account?.notification_sound_enabled !== false;
+    accountSoundUrlRef.current = account?.notification_sound_url ?? null;
+  }, [account?.notification_sound_enabled, account?.notification_sound_url]);
 
   useEffect(() => {
     userIdRef.current = user?.id ?? null;
@@ -57,7 +67,10 @@ export function AlertSounds() {
           const row = payload.new as Notification;
           if (row.user_id !== userIdRef.current) return;
           unlockAudio();
-          playNotificationSound();
+          playNotificationSound({
+            enabled: accountSoundEnabledRef.current,
+            url: accountSoundUrlRef.current,
+          });
         },
       )
       .on(
@@ -72,6 +85,28 @@ export function AlertSounds() {
           lastMessageSoundAt.current = now;
           unlockAudio();
           playMessageSound();
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "accounts",
+          filter: `id=eq.${accountId}`,
+        },
+        (payload) => {
+          const row = payload.new as {
+            notification_sound_enabled?: boolean | null;
+            notification_sound_url?: string | null;
+          };
+          accountSoundEnabledRef.current =
+            row.notification_sound_enabled !== false;
+          accountSoundUrlRef.current =
+            typeof row.notification_sound_url === "string" &&
+            row.notification_sound_url.trim()
+              ? row.notification_sound_url
+              : null;
         },
       )
       .subscribe();

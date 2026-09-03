@@ -1,10 +1,41 @@
-/**
- * Short UI chimes via Web Audio (no asset files). Browsers require a
- * prior user gesture before audio can play — call `unlockAudio()` from
- * a pointer/keydown handler once per session.
- */
+export const NOTIFICATION_SOUND_MAX_BYTES = 2 * 1024 * 1024;
+
+const ALLOWED_EXT = /\.(mp3|wav|ogg|m4a|aac|webm)$/i;
+
+const ALLOWED_MIME = new Set([
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/ogg",
+  "audio/webm",
+  "audio/mp4",
+  "audio/aac",
+  "audio/x-m4a",
+  "audio/m4a",
+]);
+
+export function isNotificationSoundFile(file: {
+  name: string;
+  type: string;
+  size: number;
+}): boolean {
+  if (file.size <= 0 || file.size > NOTIFICATION_SOUND_MAX_BYTES) return false;
+  if (file.type && ALLOWED_MIME.has(file.type.toLowerCase())) return true;
+  return ALLOWED_EXT.test(file.name);
+}
+
+export function notificationSoundSource(opts: {
+  enabled: boolean;
+  url?: string | null;
+}): "silent" | "custom" | "default" {
+  if (!opts.enabled) return "silent";
+  const url = opts.url?.trim();
+  return url ? "custom" : "default";
+}
 
 let sharedCtx: AudioContext | null = null;
+let fileAudio: HTMLAudioElement | null = null;
 
 function getCtx(): AudioContext | null {
   if (typeof window === "undefined") return null;
@@ -60,8 +91,34 @@ function tone(
   }
 }
 
-/** Soft two-note chime for assignment / in-app notifications. */
-export function playNotificationSound(): void {
+function playFile(url: string): void {
+  if (typeof window === "undefined") return;
+  if (!fileAudio) fileAudio = new Audio();
+  fileAudio.src = url;
+  fileAudio.currentTime = 0;
+  void fileAudio.play().catch(() => {
+    // Autoplay blocked until a gesture; unlockAudio handles the next one.
+  });
+}
+
+export type NotificationSoundOpts = {
+  /** Account-wide mute. Defaults to playing. */
+  enabled?: boolean;
+  /** Custom file URL. Empty/null uses the built-in chime. */
+  url?: string | null;
+};
+
+/** Assignment / in-app notification chime. */
+export function playNotificationSound(opts: NotificationSoundOpts = {}): void {
+  const source = notificationSoundSource({
+    enabled: opts.enabled !== false,
+    url: opts.url,
+  });
+  if (source === "silent") return;
+  if (source === "custom" && opts.url) {
+    playFile(opts.url.trim());
+    return;
+  }
   tone([880, 1175], { duration: 0.1, gain: 0.07, gap: 0.05 });
 }
 

@@ -21,6 +21,7 @@ import {
 
 import { createClient } from "@/lib/supabase/client"
 import { useCan } from "@/hooks/use-can"
+import { useAuth } from "@/hooks/use-auth"
 import { useTranslations } from "next-intl"
 import type { Automation } from "@/types"
 import { Button } from "@/components/ui/button"
@@ -42,6 +43,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { AUTOMATION_TEMPLATES, type TemplateSlug } from "@/lib/automations/templates"
+import { LeadHandoffPanel } from "@/components/automations/lead-handoff-panel"
 import { triggerMeta, formatRelative } from "@/lib/automations/trigger-meta"
 import { cn } from "@/lib/utils"
 
@@ -64,6 +66,7 @@ const TEMPLATE_ICON: Record<TemplateSlug, typeof Zap> = {
 export default function AutomationsPage() {
   const router = useRouter()
   const canCreate = useCan("send-messages")
+  const { canManageMembers } = useAuth()
   const t = useTranslations("Automations.list")
   const [automations, setAutomations] = useState<Automation[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -180,6 +183,8 @@ export default function AutomationsPage() {
           {t("create")}
         </GatedButton>
       </div>
+
+      {canManageMembers ? <LeadHandoffPanel onSaved={() => void load()} /> : null}
 
       {showTemplates && (
         <section>

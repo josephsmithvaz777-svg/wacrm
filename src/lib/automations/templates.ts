@@ -154,8 +154,7 @@ export const AUTOMATION_TEMPLATES: Record<TemplateSlug, AutomationTemplateDefini
       {
         step_type: 'send_message',
         step_config: {
-          text:
-            '{{greeting}}, en un momento el asesor {{agent.name}} se comunicará con usted.',
+          text: 'Un asesor te contactará para darte todos los detalles',
         },
         parent_index: 2,
         branch: 'yes',
