@@ -685,6 +685,7 @@ export interface AutomationLog {
   error_message?: string | null;
   created_at: string;
   contact?: Contact;
+  automation?: { id: string; name: string } | null;
 }
 
 // ============================================================

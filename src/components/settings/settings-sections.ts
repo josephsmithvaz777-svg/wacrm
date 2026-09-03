@@ -75,7 +75,7 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   members: { id: 'members', label: 'Team members', icon: UsersRound, group: 'workspace' },
   activity: {
     id: 'activity',
-    label: 'Activity',
+    label: 'Logs',
     icon: ScrollText,
     group: 'workspace',
     adminOnly: true,
