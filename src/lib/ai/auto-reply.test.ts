@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
     claim: true as boolean,
     updatePayload: null as Record<string, unknown> | null,
     rpcCalls: [] as { name: string; args: unknown }[],
+    handoffAgentRole: 'agent' as string,
   },
 }))
 
@@ -36,6 +37,18 @@ vi.mock('./admin-client', () => ({
           in: () => chain,
           limit: () =>
             Promise.resolve({ data: h.state.autoResponders, error: null }),
+        }
+        return chain
+      }
+      if (table === 'profiles') {
+        const chain = {
+          select: () => chain,
+          eq: () => chain,
+          maybeSingle: () =>
+            Promise.resolve({
+              data: { account_role: h.state.handoffAgentRole },
+              error: null,
+            }),
         }
         return chain
       }
@@ -94,6 +107,7 @@ beforeEach(() => {
   h.state.claim = true
   h.state.updatePayload = null
   h.state.rpcCalls = []
+  h.state.handoffAgentRole = 'agent'
   h.loadAiConfig.mockResolvedValue(aiConfig())
   h.buildConversationContext.mockResolvedValue([{ role: 'user', content: 'hi' }])
   h.retrieveKnowledge.mockResolvedValue([])
@@ -211,5 +225,14 @@ describe('dispatchInboundToAiReply — handoff', () => {
       ai_autoreply_disabled: true,
       assigned_agent_id: 'agent-7',
     })
+  })
+
+  it('does not assign a viewer even if they are the configured handoff target', async () => {
+    h.state.handoffAgentRole = 'viewer'
+    h.loadAiConfig.mockResolvedValue(aiConfig({ handoffAgentId: 'viewer-1' }))
+    h.generateReply.mockResolvedValue({ text: '', handoff: true })
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.state.updatePayload).toMatchObject({ ai_autoreply_disabled: true })
+    expect(h.state.updatePayload).not.toHaveProperty('assigned_agent_id')
   })
 })

@@ -62,6 +62,7 @@ import {
   blankListPayload,
 } from "@/components/interactive/interactive-builder"
 import { interactivePayloadPreviewText } from "@/lib/whatsapp/interactive"
+import { assignableMembers } from "@/lib/account/members"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 
@@ -422,6 +423,7 @@ function AgentSelect({
   t: ReturnType<typeof useTranslations>
 }) {
   const { members } = useResources()
+  const options = assignableMembers(members)
   if (members.length === 0) {
     return (
       <Input
@@ -440,13 +442,17 @@ function AgentSelect({
       className={SELECT_CLASS}
     >
       <option value="">{t("agents.select")}</option>
-      {members.map((m) => (
+      {options.map((m) => (
         <option key={m.user_id} value={m.user_id}>
           {m.full_name || m.email || m.user_id}
         </option>
       ))}
-      {value && !selected && (
-        <option value={value}>{t("agents.unknown", { id: value })}</option>
+      {value && !options.some((m) => m.user_id === value) && (
+        <option value={value}>
+          {selected
+            ? selected.full_name || selected.email || selected.user_id
+            : t("agents.unknown", { id: value })}
+        </option>
       )}
     </select>
   )

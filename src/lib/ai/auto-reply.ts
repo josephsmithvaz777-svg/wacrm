@@ -10,6 +10,7 @@ import { latestUserMessage } from './query'
 import { engineSendText } from '@/lib/flows/meta-send'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { runAutomationsForTrigger } from '@/lib/automations/engine'
+import { agentCanReceiveLeads } from '@/lib/assignments/round-robin'
 
 interface DispatchArgs {
   /** Tenancy key — drives config, contact, and whatsapp_config lookups. */
@@ -151,8 +152,17 @@ export async function dispatchInboundToAiReply(
       }
       // Only set the assignee when a target is configured AND the thread
       // isn't already owned — never stomp an existing human assignment.
+      // Viewers must never receive the lead even if they were saved as
+      // the handoff target before this guard existed.
       if (config.handoffAgentId && !conv.assigned_agent_id) {
-        update.assigned_agent_id = config.handoffAgentId
+        const eligible = await agentCanReceiveLeads(
+          db,
+          accountId,
+          config.handoffAgentId,
+        )
+        if (eligible) {
+          update.assigned_agent_id = config.handoffAgentId
+        }
       }
       await db.from('conversations').update(update).eq('id', conversationId)
       const handedTo = update.assigned_agent_id as string | undefined

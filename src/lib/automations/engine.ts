@@ -512,9 +512,12 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
           undefined
       }
       if (!agentId) return 'no agent resolved'
-      const { assignConversationToAgent } = await import(
+      const { agentCanReceiveLeads, assignConversationToAgent } = await import(
         '@/lib/assignments/round-robin'
       )
+      if (!(await agentCanReceiveLeads(db, args.automation.account_id, agentId))) {
+        return 'agent cannot receive leads'
+      }
       await assignConversationToAgent(db, {
         accountId: args.automation.account_id,
         contactId: args.contactId,

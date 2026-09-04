@@ -90,6 +90,15 @@ export function canSendMessages(role: AccountRole): boolean {
 }
 
 /**
+ * Owner / admin / agent: may be assigned a conversation or contact
+ * (inbox, round-robin, automations, AI handoff). Viewers can watch
+ * the inbox but must never sit in the assignment pool.
+ */
+export function canReceiveLeads(role: AccountRole): boolean {
+  return hasMinRole(role, "agent");
+}
+
+/**
  * Viewer: read-only across everything. Provided as a positive
  * predicate so UI gates read naturally (`if (canViewOnly(role))`
  * shows the "Read-only" tooltip without inverting `canSendMessages`).

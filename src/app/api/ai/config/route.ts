@@ -4,6 +4,7 @@ import {
   requireRole,
   toErrorResponse,
 } from '@/lib/auth/account'
+import { canReceiveLeads, isAccountRole } from '@/lib/auth/roles'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
 import { encrypt, decrypt } from '@/lib/whatsapp/encryption'
 import { validateAiCredentials } from '@/lib/ai/validate'
@@ -106,11 +107,17 @@ export async function POST(request: Request) {
     if (rawHandoff) {
       const { data: member } = await supabase
         .from('profiles')
-        .select('user_id')
+        .select('user_id, account_role')
         .eq('account_id', accountId)
         .eq('user_id', rawHandoff)
         .maybeSingle()
       if (!member) return bad('handoff_agent_id must be a member of this account')
+      if (
+        !isAccountRole(member.account_role) ||
+        !canReceiveLeads(member.account_role)
+      ) {
+        return bad('handoff_agent_id cannot be a viewer')
+      }
       handoffAgentId = rawHandoff
     }
 
