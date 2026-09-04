@@ -134,9 +134,32 @@ export async function assignConversationToAgent(
   return !convErr;
 }
 
+async function clearConversationAssignment(
+  db: Db,
+  opts: { accountId: string; contactId: string; conversationId: string },
+): Promise<void> {
+  await db
+    .from('conversations')
+    .update({ assigned_agent_id: null })
+    .eq('id', opts.conversationId)
+    .eq('account_id', opts.accountId);
+  await db
+    .from('contacts')
+    .update({
+      assigned_to: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', opts.contactId)
+    .eq('account_id', opts.accountId);
+}
+
 /**
  * If the account has round_robin_enabled and the conversation is new /
  * unassigned, pick the next agent and assign.
+ *
+ * Also reassigns when the current assignee is a viewer (or otherwise
+ * ineligible). Leaving those threads in place kept sending WhatsApp
+ * alerts to people who can only watch the inbox.
  */
 export async function maybeRoundRobinAssignNewConversation(
   db: Db,
@@ -147,7 +170,11 @@ export async function maybeRoundRobinAssignNewConversation(
     alreadyAssigned?: string | null;
   },
 ): Promise<string | null> {
-  if (opts.alreadyAssigned) return null;
+  const current = opts.alreadyAssigned ?? null;
+  if (current) {
+    const eligible = await agentCanReceiveLeads(db, opts.accountId, current);
+    if (eligible) return null;
+  }
 
   const { data: account } = await db
     .from('accounts')
@@ -155,10 +182,20 @@ export async function maybeRoundRobinAssignNewConversation(
     .eq('id', opts.accountId)
     .maybeSingle();
 
-  if (!account?.round_robin_enabled) return null;
+  if (!account?.round_robin_enabled) {
+    if (current) {
+      await clearConversationAssignment(db, opts);
+    }
+    return null;
+  }
 
   const agentId = await pickRoundRobinAgent(db, opts.accountId);
-  if (!agentId) return null;
+  if (!agentId) {
+    if (current) {
+      await clearConversationAssignment(db, opts);
+    }
+    return null;
+  }
 
   await assignConversationToAgent(db, {
     accountId: opts.accountId,

@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { canReceiveLeads, isAccountRole } from '@/lib/auth/roles';
+
 import { engineSendText } from '@/lib/automations/meta-send';
 import {
   formatAlertClock,
@@ -148,7 +150,6 @@ export async function notifyStaffViaWhatsApp(params: {
     }
   }
 
-
   if (notifyAssigned) {
     let agentId = assignedAgentId ?? null;
     if (conversationId) {
@@ -166,21 +167,26 @@ export async function notifyStaffViaWhatsApp(params: {
     } else {
       const { data: agent } = await db
         .from('profiles')
-        .select('user_id, phone, full_name')
+        .select('user_id, phone, full_name, account_role')
         .eq('user_id', agentId)
         .maybeSingle();
-      const phone = (agent?.phone as string | null | undefined) ?? null;
-      if (!isUsableStaffPhone(phone)) {
-        skipReasons.push(
-          'assigned agent has no WhatsApp number in Settings → Profile',
-        );
+      const role = agent?.account_role;
+      if (!isAccountRole(role) || !canReceiveLeads(role)) {
+        skipReasons.push('assigned agent is a viewer and cannot receive leads');
+      } else {
+        const phone = (agent?.phone as string | null | undefined) ?? null;
+        if (!isUsableStaffPhone(phone)) {
+          skipReasons.push(
+            'assigned agent has no WhatsApp number in Settings → Profile',
+          );
+        }
+        candidates.push({
+          userId: agentId,
+          role: 'assigned_agent',
+          phone,
+          name: (agent?.full_name as string | null | undefined) ?? null,
+        });
       }
-      candidates.push({
-        userId: agentId,
-        role: 'assigned_agent',
-        phone,
-        name: (agent?.full_name as string | null | undefined) ?? null,
-      });
     }
   }
 

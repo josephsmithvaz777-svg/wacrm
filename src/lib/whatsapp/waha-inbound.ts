@@ -453,6 +453,8 @@ export async function processWahaEvent(
       conversation_id: convResult.conversation.id,
       contact_id: contactOutcome.contact.id,
     });
+  }
+  if (convResult.created || convResult.conversation.assigned_agent_id) {
     try {
       const { maybeRoundRobinAssignNewConversation } = await import(
         '@/lib/assignments/round-robin'
