@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { canReceiveLeads } from "@/lib/auth/roles";
 import { usePresence } from "@/hooks/use-presence";
 import { PresenceDot } from "@/components/presence/presence-dot";
 import { presenceLabel } from "@/lib/presence";
@@ -957,7 +958,9 @@ export function MessageThread({
         }
       } catch (err) {
         console.error("Failed to update assignment:", err);
-        toast.error("Failed to update assignment");
+        toast.error(
+          err instanceof Error ? err.message : "Failed to update assignment",
+        );
         return;
       }
 
@@ -992,6 +995,10 @@ export function MessageThread({
   );
   const assignedAgentId = conversation.assigned_agent_id ?? null;
   const currentAssignee = profiles.find((p) => p.user_id === assignedAgentId);
+  const assignableProfiles = profiles.filter((p) => {
+    if (p.user_id === assignedAgentId) return true;
+    return !p.account_role || canReceiveLeads(p.account_role);
+  });
   const assignLabel = assignedAgentId
     ? (currentAssignee?.full_name ?? t("assigned"))
     : t("assign");
@@ -1134,12 +1141,12 @@ export function MessageThread({
               align="end"
               className="border-border bg-popover"
             >
-              {profiles.length === 0 ? (
+              {assignableProfiles.length === 0 ? (
                 <DropdownMenuItem disabled className="text-sm text-muted-foreground">
                   {t("noTeammates")}
                 </DropdownMenuItem>
               ) : (
-                profiles.map((p) => {
+                assignableProfiles.map((p) => {
                   const isSelected = p.user_id === assignedAgentId;
                   const presence = getPresence(p.user_id);
                   return (

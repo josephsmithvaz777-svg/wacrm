@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server';
 
 import { runAutomationsForTrigger } from '@/lib/automations/engine';
 import { supabaseAdmin } from '@/lib/automations/admin-client';
-import { assignConversationToAgent } from '@/lib/assignments/round-robin';
+import {
+  agentCanReceiveLeads,
+  assignConversationToAgent,
+} from '@/lib/assignments/round-robin';
 import { getCurrentAccount, toErrorResponse } from '@/lib/auth/account';
 import { hasMinRole } from '@/lib/auth/roles';
 
@@ -79,6 +82,13 @@ export async function POST(
     }
 
     const admin = supabaseAdmin();
+    if (!(await agentCanReceiveLeads(admin, accountId, agentId))) {
+      return NextResponse.json(
+        { error: 'Los visores no pueden recibir leads' },
+        { status: 400 },
+      );
+    }
+
     await assignConversationToAgent(admin, {
       accountId,
       contactId,

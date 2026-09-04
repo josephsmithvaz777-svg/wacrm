@@ -442,14 +442,23 @@ async function executeHandoff(
     status: "pending",
     updated_at: new Date().toISOString(),
   };
-  if (cfg.assign_to) convUpdate.assigned_agent_id = cfg.assign_to;
+  let assignTo = cfg.assign_to || null;
+  if (assignTo) {
+    const { agentCanReceiveLeads } = await import(
+      "@/lib/assignments/round-robin"
+    );
+    if (!(await agentCanReceiveLeads(db, run.account_id, assignTo))) {
+      assignTo = null;
+    }
+  }
+  if (assignTo) convUpdate.assigned_agent_id = assignTo;
   if (run.conversation_id) {
     await db
       .from("conversations")
       .update(convUpdate)
       .eq("id", run.conversation_id);
   }
-  if (cfg.assign_to && run.conversation_id && run.contact_id) {
+  if (assignTo && run.conversation_id && run.contact_id) {
     const { runAutomationsForTrigger } = await import(
       "@/lib/automations/engine"
     );
@@ -459,13 +468,13 @@ async function executeHandoff(
       contactId: run.contact_id,
       context: {
         conversation_id: run.conversation_id,
-        agent_id: cfg.assign_to,
+        agent_id: assignTo,
       },
     });
   }
   await logEvent(db, run.id, "handoff", node.node_key, {
     note: cfg.note ?? null,
-    assigned_to: cfg.assign_to ?? null,
+    assigned_to: assignTo,
   });
   await endRun(db, run.id, "handed_off", "handoff_node");
 }

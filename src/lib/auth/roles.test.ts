@@ -5,6 +5,7 @@ import {
   canDeleteAccount,
   canEditSettings,
   canManageMembers,
+  canReceiveLeads,
   canSendMessages,
   canTransferOwnership,
   canViewOnly,
@@ -105,6 +106,13 @@ describe("capability predicates", () => {
     expect(canSendMessages("admin")).toBe(true);
     expect(canSendMessages("agent")).toBe(true);
     expect(canSendMessages("viewer")).toBe(false);
+  });
+
+  it("canReceiveLeads: agent+ only (viewers are never assigned)", () => {
+    expect(canReceiveLeads("owner")).toBe(true);
+    expect(canReceiveLeads("admin")).toBe(true);
+    expect(canReceiveLeads("agent")).toBe(true);
+    expect(canReceiveLeads("viewer")).toBe(false);
   });
 
   it("canViewOnly: viewer only", () => {

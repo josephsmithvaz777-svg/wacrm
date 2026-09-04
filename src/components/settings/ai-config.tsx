@@ -29,7 +29,7 @@ import { AiKnowledgeCard } from './ai-knowledge';
 import { AI_PROVIDER_DEFAULT_MODEL } from '@/lib/ai/defaults';
 import type { AiProvider } from '@/lib/ai/types';
 import type { AccountMember } from '@/types';
-import { fetchAccountMembers, memberLabel } from '@/lib/account/members';
+import { fetchAccountMembers, memberLabel, assignableMembers } from '@/lib/account/members';
 import { useTranslations } from 'next-intl';
 
 const MASKED_KEY = '••••••••••••••••';
@@ -462,7 +462,14 @@ export function AiConfig() {
                 {t('handoffToDesc')}
               </p>
               <Select
-                value={handoffAgentId || HANDOFF_QUEUE}
+                value={
+                  handoffAgentId &&
+                  assignableMembers(members).some(
+                    (m) => m.user_id === handoffAgentId,
+                  )
+                    ? handoffAgentId
+                    : HANDOFF_QUEUE
+                }
                 onValueChange={(v) =>
                   setHandoffAgentId(!v || v === HANDOFF_QUEUE ? '' : v)
                 }
@@ -475,7 +482,7 @@ export function AiConfig() {
                   <SelectItem value={HANDOFF_QUEUE}>
                     {t('handoffQueue')}
                   </SelectItem>
-                  {members.map((m) => (
+                  {assignableMembers(members).map((m) => (
                     <SelectItem key={m.user_id} value={m.user_id}>
                       {memberLabel(m)}
                     </SelectItem>

@@ -620,6 +620,8 @@ async function processMessage(
       conversation_id: conversation.id,
       contact_id: contactRecord.id,
     })
+  }
+  if (convResult.created || conversation.assigned_agent_id) {
     try {
       const { maybeRoundRobinAssignNewConversation } = await import(
         '@/lib/assignments/round-robin'

@@ -1,4 +1,5 @@
 import type { AccountMember } from '@/types';
+import { canReceiveLeads } from '@/lib/auth/roles';
 
 /**
  * Fetch the current account's members from the API (which applies the
@@ -22,4 +23,9 @@ export async function fetchAccountMembers(): Promise<AccountMember[]> {
 /** Display label for a member: full name → email → raw id. */
 export function memberLabel(m: AccountMember): string {
   return m.full_name || m.email || m.user_id;
+}
+
+/** Members who may own a conversation. Viewers stay out of assignment pickers. */
+export function assignableMembers(members: AccountMember[]): AccountMember[] {
+  return members.filter((m) => canReceiveLeads(m.role));
 }
