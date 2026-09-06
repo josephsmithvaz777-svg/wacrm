@@ -51,6 +51,21 @@ function pickString(
   return trimmed || null;
 }
 
+/**
+ * Catalog / Advantage+ ads often arrive with unresolved Mustache
+ * tokens (`{{product.name}}`) instead of the real headline. WhatsApp
+ * fills those on the phone; the webhook still has the template. Treat
+ * them as missing copy so the inbox does not show the raw `{{…}}`.
+ */
+export function sanitizeAdCopy(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!trimmed.includes('{{')) return trimmed;
+  const withoutTokens = trimmed.replace(/\{\{\s*[\w.]+\s*\}\}/g, '').trim();
+  return withoutTokens || null;
+}
+
 function looksLikeAdReply(obj: Record<string, unknown>): boolean {
   const sourceUrl = pickString(obj, ['sourceUrl', 'source_url']);
   const sourceType = pick(obj, ['sourceType', 'source_type']);
@@ -72,14 +87,42 @@ function looksLikeAdReply(obj: Record<string, unknown>): boolean {
   return Boolean(title && thumb);
 }
 
+function bytesToBase64(bytes: number[] | Uint8Array): string | null {
+  if (bytes.length < 80 || bytes.length > 5 * 1024 * 1024) return null;
+  const B = (
+    globalThis as {
+      Buffer?: { from: (d: number[] | Uint8Array) => { toString: (e: string) => string } };
+    }
+  ).Buffer;
+  if (!B) return null;
+  return B.from(bytes).toString('base64');
+}
+
+/**
+ * WAHA/WEBJS serialises `jpegThumbnail` as a Node Buffer JSON
+ * (`{ type: "Buffer", data: [255, 216, …] }`) more often than as
+ * a base64 string — catalog ads in particular omit `thumbnailUrl`
+ * and only send those bytes.
+ */
 function readThumbnailBase64(obj: Record<string, unknown>): string | null {
-  const raw = pick(obj, ['jpegThumbnail', 'JPEGThumbnail', 'thumbnail']);
+  const raw = pick(obj, [
+    'jpegThumbnail',
+    'JPEGThumbnail',
+    'thumbnail',
+    'Thumbnail',
+    'jpeg_thumbnail',
+  ]);
   if (typeof raw === 'string' && raw.length > 80) return raw;
-  const rec = asRecord(raw);
-  if (rec) {
-    const nested = pickString(rec, ['data', 'bytes']);
-    if (nested && nested.length > 80) return nested;
+  if (Array.isArray(raw) && raw.every((n) => typeof n === 'number')) {
+    return bytesToBase64(raw as number[]);
   }
+  const rec = asRecord(raw);
+  if (!rec) return null;
+  if (Array.isArray(rec.data) && rec.data.every((n) => typeof n === 'number')) {
+    return bytesToBase64(rec.data as number[]);
+  }
+  const nested = pickString(rec, ['data', 'bytes']);
+  if (nested && nested.length > 80) return nested;
   return null;
 }
 
@@ -97,9 +140,14 @@ function fromAdReply(obj: Record<string, unknown>): ExtractedAdContext | null {
       'imageUrl',
       'image_url',
     ]) || null;
-  const headline = pickString(obj, ['title', 'headline']);
-  const body = pickString(obj, ['body', 'caption', 'description']);
-  if (!headline && !body && !imageUrl && !sourceUrl) return null;
+  const headline = sanitizeAdCopy(pickString(obj, ['title', 'headline']));
+  const body = sanitizeAdCopy(
+    pickString(obj, ['body', 'caption', 'description']),
+  );
+  const thumbnailBase64 = readThumbnailBase64(obj);
+  if (!headline && !body && !imageUrl && !sourceUrl && !thumbnailBase64) {
+    return null;
+  }
 
   let source: MessageAdContext['source'] = 'facebook_ad';
   const blob = `${sourceUrl ?? ''} ${headline ?? ''}`.toLowerCase();
@@ -112,7 +160,62 @@ function fromAdReply(obj: Record<string, unknown>): ExtractedAdContext | null {
     body,
     image_url: imageUrl,
     source_url: sourceUrl,
-    thumbnailBase64: readThumbnailBase64(obj),
+    thumbnailBase64,
+  };
+}
+
+function mergeAdContext(
+  a: ExtractedAdContext | null,
+  b: ExtractedAdContext | null,
+): ExtractedAdContext | null {
+  if (!a) return b;
+  if (!b) return a;
+  return {
+    source: a.source !== 'ad' ? a.source : b.source,
+    headline: a.headline || b.headline,
+    body: a.body || b.body,
+    image_url: a.image_url || b.image_url,
+    source_url: a.source_url || b.source_url,
+    thumbnailBase64: a.thumbnailBase64 || b.thumbnailBase64,
+  };
+}
+
+function adCardComplete(ctx: ExtractedAdContext | null): boolean {
+  if (!ctx) return false;
+  return Boolean(
+    (ctx.headline || ctx.body) &&
+      (ctx.image_url || ctx.thumbnailBase64),
+  );
+}
+
+function fromProductNode(obj: Record<string, unknown>): ExtractedAdContext | null {
+  const product = asRecord(pick(obj, ['product', 'Product'])) || obj;
+  const headline = sanitizeAdCopy(
+    pickString(product, ['title', 'productTitle', 'product_title']),
+  );
+  const body = sanitizeAdCopy(
+    pickString(product, ['description', 'productDescription', 'product_description']),
+  );
+  const image =
+    asRecord(pick(product, ['productImage', 'image', 'product_image'])) ||
+    product;
+  const imageUrl = pickString(image, [
+    'url',
+    'imageUrl',
+    'image_url',
+    'thumbnailUrl',
+    'thumbnail_url',
+  ]);
+  const thumbnailBase64 =
+    readThumbnailBase64(image) || readThumbnailBase64(product);
+  if (!headline && !body && !imageUrl && !thumbnailBase64) return null;
+  return {
+    source: 'facebook_ad',
+    headline,
+    body,
+    image_url: imageUrl,
+    source_url: null,
+    thumbnailBase64,
   };
 }
 
@@ -127,7 +230,7 @@ export function extractAdContext(
   let found: ExtractedAdContext | null = null;
   const seen = new Set<unknown>();
   const visit = (node: unknown, depth: number) => {
-    if (found || depth > 10 || !node) return;
+    if (adCardComplete(found) || depth > 10 || !node) return;
     if (typeof node !== 'object') return;
     if (seen.has(node)) return;
     seen.add(node);
@@ -143,22 +246,34 @@ export function extractAdContext(
       'hydratedAdReply',
     ]);
     if (asRecord(nestedAd)) {
-      found = fromAdReply(asRecord(nestedAd)!);
-      if (found) return;
+      found = mergeAdContext(found, fromAdReply(asRecord(nestedAd)!));
+      if (adCardComplete(found)) return;
     }
-    const direct = fromAdReply(rec);
-    if (direct) {
-      found = direct;
-      return;
+    const productMsg = pick(rec, [
+      'productMessage',
+      'ProductMessage',
+      'product_message',
+    ]);
+    if (asRecord(productMsg)) {
+      found = mergeAdContext(found, fromProductNode(asRecord(productMsg)!));
+      if (adCardComplete(found)) return;
     }
+    found = mergeAdContext(found, fromAdReply(rec));
+    if (adCardComplete(found)) return;
     for (const [key, child] of Object.entries(rec)) {
-      if (/ad|context|^message$|_data|extended|quoted/i.test(key)) {
+      if (/ad|context|^message$|_data|extended|quoted|product|media|thumb|image/i.test(key)) {
         visit(child, depth + 1);
-        if (found) return;
+        if (adCardComplete(found)) return;
       }
     }
   };
   visit(payload, 0);
+
+  if (found && !found.image_url && !found.thumbnailBase64) {
+    const media = asRecord(payload.media);
+    const mediaUrl = media ? pickString(media, ['url', 'link', 'href']) : null;
+    if (mediaUrl) found = { ...found, image_url: mediaUrl };
+  }
   return found;
 }
 
@@ -171,8 +286,8 @@ export function extractMetaReferral(
   if (!referral) return null;
   const sourceType = pickString(referral, ['source_type', 'sourceType']);
   const sourceUrl = pickString(referral, ['source_url', 'sourceUrl']);
-  const headline = pickString(referral, ['headline', 'title']);
-  const body = pickString(referral, ['body']);
+  const headline = sanitizeAdCopy(pickString(referral, ['headline', 'title']));
+  const body = sanitizeAdCopy(pickString(referral, ['body', 'description']));
   const mediaType = pickString(referral, ['media_type']);
   const imageUrl =
     (mediaType && /video/i.test(mediaType)
@@ -213,8 +328,10 @@ export function readStoredAdContext(value: unknown): MessageAdContext | null {
     sourceRaw === 'instagram_ad' || sourceRaw === 'ad' || sourceRaw === 'facebook_ad'
       ? sourceRaw
       : 'facebook_ad';
-  const headline = typeof rec.headline === 'string' ? rec.headline : null;
-  const body = typeof rec.body === 'string' ? rec.body : null;
+  const headline = sanitizeAdCopy(
+    typeof rec.headline === 'string' ? rec.headline : null,
+  );
+  const body = sanitizeAdCopy(typeof rec.body === 'string' ? rec.body : null);
   const image_url = typeof rec.image_url === 'string' ? rec.image_url : null;
   const source_url = typeof rec.source_url === 'string' ? rec.source_url : null;
   if (!headline && !body && !image_url && !source_url) return null;

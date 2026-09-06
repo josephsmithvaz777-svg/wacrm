@@ -53,9 +53,55 @@ describe('extractAdContext', () => {
     expect(ctx?.source_url).toContain('facebook.com');
   });
 
-  it('returns null when there is no ad card', () => {
-    expect(extractAdContext({ body: 'hola' })).toBeNull();
-    expect(extractAdContext(null)).toBeNull();
+  it('ignores unresolved catalog placeholders and keeps the source URL', () => {
+    const ctx = extractAdContext({
+      _data: {
+        contextInfo: {
+          externalAdReply: {
+            title: '{{product.name}}',
+            body: '{{product.description}}',
+            sourceUrl: 'https://fb.me/5F6qwk9PK',
+            showAdAttribution: true,
+          },
+        },
+      },
+    });
+    expect(ctx?.headline).toBeNull();
+    expect(ctx?.body).toBeNull();
+    expect(ctx?.source_url).toBe('https://fb.me/5F6qwk9PK');
+  });
+
+  it('reads a WEBJS Buffer jpeg thumbnail when there is no thumbnailUrl', () => {
+    const jpeg = Array.from({ length: 120 }, (_, i) => (i < 2 ? [0xff, 0xd8][i] : 1));
+    const ctx = extractAdContext({
+      contextInfo: {
+        externalAdReply: {
+          title: '{{product.name}}',
+          sourceUrl: 'https://fb.me/x',
+          showAdAttribution: true,
+          jpegThumbnail: { type: 'Buffer', data: jpeg },
+        },
+      },
+    });
+    expect(ctx?.headline).toBeNull();
+    expect(ctx?.thumbnailBase64).toBeTruthy();
+    expect(ctx?.thumbnailBase64!.length).toBeGreaterThan(40);
+  });
+
+  it('uses payload.media.url when the ad card has no image', () => {
+    const ctx = extractAdContext({
+      media: { url: 'http://waha.local/files/ad.jpg', mimetype: 'image/jpeg' },
+      _data: {
+        contextInfo: {
+          externalAdReply: {
+            title: '{{product.name}}',
+            sourceUrl: 'https://fb.me/x',
+            showAdAttribution: true,
+          },
+        },
+      },
+    });
+    expect(ctx?.image_url).toBe('http://waha.local/files/ad.jpg');
   });
 });
 
@@ -110,5 +156,23 @@ describe('toStoredAdContext / readStoredAdContext', () => {
     });
     expect(stored).not.toHaveProperty('thumbnailBase64');
     expect(readStoredAdContext(stored)?.headline).toBe('Hola');
+  });
+
+  it('hides unresolved {{product.*}} tokens already stored on a row', () => {
+    expect(
+      readStoredAdContext({
+        source: 'facebook_ad',
+        headline: '{{product.name}}',
+        body: '{{product.description}}',
+        image_url: null,
+        source_url: 'https://fb.me/5F6qwk9PK',
+      }),
+    ).toEqual({
+      source: 'facebook_ad',
+      headline: null,
+      body: null,
+      image_url: null,
+      source_url: 'https://fb.me/5F6qwk9PK',
+    });
   });
 });
