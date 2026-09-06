@@ -11,8 +11,7 @@ import { listAiMediaAssets } from './media-assets'
 import { engineSendText } from '@/lib/flows/meta-send'
 import { sendMessageToConversation } from '@/lib/whatsapp/send-message'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
-import { runAutomationsForTrigger } from '@/lib/automations/engine'
-import { agentCanReceiveLeads } from '@/lib/assignments/round-robin'
+import { performAiHandoff } from './perform-handoff'
 
 interface DispatchArgs {
   /** Tenancy key — drives config, contact, and whatsapp_config lookups. */
@@ -140,48 +139,21 @@ export async function dispatchInboundToAiReply(
 
     if (handoff || (!text && !mediaAssetId)) {
       // The model can't (or shouldn't) answer — stop auto-replying on
-      // this thread and hand it to a human. We (a) pause the bot here
-      // (sticky until re-enabled), (b) route the conversation to the
-      // configured handoff agent — null leaves it in the shared queue —
-      // and (c) leave a short internal note so whoever picks it up has
-      // context. Assigning fires the `on_conversation_assigned` trigger,
-      // which notifies the agent.
-      const summary = buildHandoffSummary({
-        messages,
-        replyCount: conv.ai_reply_count ?? 0,
+      // this thread and hand it to a human. Prefer the configured
+      // handoff agent; otherwise round-robin. Assigning fires
+      // `conversation_assigned`, which notifies the advisor.
+      await performAiHandoff(db, {
+        accountId,
+        conversationId,
+        contactId,
+        handoffAgentId: config.handoffAgentId,
+        alreadyAssigned: (conv.assigned_agent_id as string | null) ?? null,
+        summary: buildHandoffSummary({
+          messages,
+          replyCount: conv.ai_reply_count ?? 0,
+        }),
+        messageText: latestUserMessage(messages) ?? '',
       })
-      const update: Record<string, unknown> = {
-        ai_autoreply_disabled: true,
-        ai_handoff_summary: summary,
-      }
-      // Only set the assignee when a target is configured AND the thread
-      // isn't already owned — never stomp an existing human assignment.
-      // Viewers must never receive the lead even if they were saved as
-      // the handoff target before this guard existed.
-      if (config.handoffAgentId && !conv.assigned_agent_id) {
-        const eligible = await agentCanReceiveLeads(
-          db,
-          accountId,
-          config.handoffAgentId,
-        )
-        if (eligible) {
-          update.assigned_agent_id = config.handoffAgentId
-        }
-      }
-      await db.from('conversations').update(update).eq('id', conversationId)
-      const handedTo = update.assigned_agent_id as string | undefined
-      if (handedTo) {
-        await runAutomationsForTrigger({
-          accountId,
-          triggerType: 'conversation_assigned',
-          contactId,
-          context: {
-            conversation_id: conversationId,
-            agent_id: handedTo,
-            message_text: latestUserMessage(messages) ?? '',
-          },
-        })
-      }
       return
     }
 

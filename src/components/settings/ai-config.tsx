@@ -77,6 +77,7 @@ export function AiConfig() {
   const [maxPerConversation, setMaxPerConversation] = useState(3);
   // Empty string = leave unassigned (shared queue).
   const [handoffAgentId, setHandoffAgentId] = useState('');
+  const [silenceHandoffMinutes, setSilenceHandoffMinutes] = useState(5);
   const [members, setMembers] = useState<AccountMember[]>([]);
 
   // Guard keyed on the account (not a bare boolean) so an in-place
@@ -103,6 +104,11 @@ export function AiConfig() {
         setAutoReplyEnabled(data.auto_reply_enabled);
         setMaxPerConversation(data.auto_reply_max_per_conversation ?? 3);
         setHandoffAgentId(data.handoff_agent_id ?? '');
+        setSilenceHandoffMinutes(
+          typeof data.silence_handoff_minutes === 'number'
+            ? data.silence_handoff_minutes
+            : 5,
+        );
         setHasStoredKey(Boolean(data.has_key));
         setApiKey(data.has_key ? MASKED_KEY : '');
         setKeyEdited(false);
@@ -152,6 +158,7 @@ export function AiConfig() {
     is_active: isActive,
     auto_reply_enabled: autoReplyEnabled,
     auto_reply_max_per_conversation: maxPerConversation,
+    silence_handoff_minutes: silenceHandoffMinutes,
     handoff_agent_id: handoffAgentId || null,
   });
 
@@ -451,6 +458,29 @@ export function AiConfig() {
                 onChange={(e) =>
                   setMaxPerConversation(
                     Math.min(20, Math.max(1, Number(e.target.value) || 1)),
+                  )
+                }
+                disabled={disabled || !autoReplyEnabled}
+                className="w-20"
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label htmlFor="ai-silence">{t('silenceHandoff')}</Label>
+                <p className="text-xs text-muted-foreground">
+                  {t('silenceHandoffDesc')}
+                </p>
+              </div>
+              <Input
+                id="ai-silence"
+                type="number"
+                min={0}
+                max={30}
+                value={silenceHandoffMinutes}
+                onChange={(e) =>
+                  setSilenceHandoffMinutes(
+                    Math.min(30, Math.max(0, Number(e.target.value) || 0)),
                   )
                 }
                 disabled={disabled || !autoReplyEnabled}

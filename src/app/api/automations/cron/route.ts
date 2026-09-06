@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/automations/admin-client'
 import { resumePendingExecution } from '@/lib/automations/engine'
 import type { AutomationContext } from '@/lib/automations/engine'
 import { sendDueTaskReminders } from '@/lib/tasks/reminders'
+import { sweepSilentAiConversations } from '@/lib/ai/silence-handoff'
 
 /**
  * Drain due `automation_pending_executions` rows. Meant to be hit
@@ -33,6 +34,7 @@ export async function GET(request: Request) {
 
   const admin = supabaseAdmin()
   const reminders = await sendDueTaskReminders(admin)
+  const silence = await sweepSilentAiConversations(admin)
 
   const { data: due, error } = await admin
     .from('automation_pending_executions')
@@ -44,7 +46,7 @@ export async function GET(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!due || due.length === 0) {
-    return NextResponse.json({ processed: 0, reminders })
+    return NextResponse.json({ processed: 0, reminders, silence })
   }
 
   let processed = 0
@@ -75,5 +77,5 @@ export async function GET(request: Request) {
     processed++
   }
 
-  return NextResponse.json({ processed, reminders })
+  return NextResponse.json({ processed, reminders, silence })
 }

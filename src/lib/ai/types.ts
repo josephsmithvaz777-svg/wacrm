@@ -30,6 +30,9 @@ export interface AiConfig {
    *  agent's `auth.users.id`, or null to leave it unassigned (drop into
    *  the shared queue). */
   handoffAgentId: string | null
+  /** Minutes to wait after the bot's last message with no customer
+   *  reply before handing the thread to an advisor. 0 disables. */
+  silenceHandoffMinutes: number
   /** Optional OpenAI-compatible key for embeddings. When set, the
    *  knowledge base is embedded and semantic retrieval turns on; when
    *  null, retrieval falls back to lexical full-text search. */

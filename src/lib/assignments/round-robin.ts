@@ -154,8 +154,62 @@ async function clearConversationAssignment(
 }
 
 /**
+ * True when the account's AI assistant is live and will auto-reply.
+ * New inbound threads should stay unassigned in that case so the bot
+ * can qualify the lead; round-robin (or a specific handoff agent)
+ * runs later, on [[HANDOFF]].
+ */
+export async function accountHasActiveAiAutoReply(
+  db: Db,
+  accountId: string,
+): Promise<boolean> {
+  const { data, error } = await db
+    .from('ai_configs')
+    .select('is_active, auto_reply_enabled, api_key')
+    .eq('account_id', accountId)
+    .maybeSingle();
+  if (error) {
+    console.warn('[round-robin] load ai_configs failed:', error);
+    return false;
+  }
+  return Boolean(data?.is_active && data?.auto_reply_enabled && data?.api_key);
+}
+
+/**
+ * Who should own the thread when the AI hands off. Prefers the
+ * configured handoff agent; if that person is missing or ineligible
+ * and the account uses round-robin, picks the next advisor instead.
+ * Null means leave the chat in the shared queue.
+ */
+export async function resolveHandoffAssignee(
+  db: Db,
+  accountId: string,
+  preferredAgentId: string | null,
+): Promise<string | null> {
+  if (preferredAgentId) {
+    const eligible = await agentCanReceiveLeads(
+      db,
+      accountId,
+      preferredAgentId,
+    );
+    if (eligible) return preferredAgentId;
+  }
+
+  const { data: account } = await db
+    .from('accounts')
+    .select('round_robin_enabled')
+    .eq('id', accountId)
+    .maybeSingle();
+  if (!account?.round_robin_enabled) return null;
+  return pickRoundRobinAgent(db, accountId);
+}
+
+/**
  * If the account has round_robin_enabled and the conversation is new /
  * unassigned, pick the next agent and assign.
+ *
+ * Skips assignment when AI auto-reply is on: the bot owns the first
+ * stretch of the chat, and the advisor is assigned on handoff.
  *
  * Also reassigns when the current assignee is a viewer (or otherwise
  * ineligible). Leaving those threads in place kept sending WhatsApp
@@ -174,6 +228,13 @@ export async function maybeRoundRobinAssignNewConversation(
   if (current) {
     const eligible = await agentCanReceiveLeads(db, opts.accountId, current);
     if (eligible) return null;
+  }
+
+  if (await accountHasActiveAiAutoReply(db, opts.accountId)) {
+    if (current) {
+      await clearConversationAssignment(db, opts);
+    }
+    return null;
   }
 
   const { data: account } = await db
