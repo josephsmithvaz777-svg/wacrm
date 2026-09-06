@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { CalendarDays, ListTodo, MessageSquare } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 
 import { TaskCalendar } from "@/components/tasks/task-calendar";
 import { Button } from "@/components/ui/button";
@@ -59,6 +60,28 @@ export default function TasksPage() {
       await load();
     },
     [canEdit, load],
+  );
+
+  const remindTask = useCallback(
+    async (task: LeadTask) => {
+      const res = await fetch(`/api/tasks/${task.id}/remind`, { method: "POST" });
+      const body = (await res.json().catch(() => ({}))) as {
+        whatsapp?: boolean;
+        email?: boolean;
+        errors?: string[];
+      };
+      if (!res.ok) {
+        toast.error(t("reminderSendFailed"));
+        return;
+      }
+      if (body.whatsapp || body.email) {
+        toast.success(t("reminderSendOk"));
+      } else {
+        toast.error(body.errors?.[0] || t("reminderSendFailed"));
+      }
+      await load();
+    },
+    [load, t],
   );
 
   const toggleDone = useCallback(
@@ -141,6 +164,7 @@ export default function TasksPage() {
               canEdit={canEdit}
               accountName={account?.name}
               onComplete={completeTask}
+              onRemind={remindTask}
             />
           )
         ) : tasks.length === 0 ? (

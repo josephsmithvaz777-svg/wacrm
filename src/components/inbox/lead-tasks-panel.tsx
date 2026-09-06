@@ -7,8 +7,8 @@ import { toast } from "sonner";
 
 import { TaskIconPicker } from "@/components/inbox/task-icon-picker";
 import { Button } from "@/components/ui/button";
-import { formatAlertDateTime } from "@/lib/automations/template-vars";
-import { combineLocalDateAndTime } from "@/lib/datetime/zoned";
+import { AUTOMATION_GREETING_TZ, formatAlertDateTime } from "@/lib/automations/template-vars";
+import { calendarDateInZone, combineLocalDateAndTime } from "@/lib/datetime/zoned";
 import { createClient } from "@/lib/supabase/client";
 import { taskTone } from "@/lib/tasks/calendar";
 import { cn } from "@/lib/utils";
@@ -81,20 +81,33 @@ export function LeadTasksPanel({
     }
     if (!assignedTo) assignedTo = user?.id ?? null;
 
-    const { error } = await supabase.from("lead_tasks").insert({
-      account_id: accountId,
-      contact_id: contactId,
-      conversation_id: conversationId ?? null,
-      created_by: user?.id ?? null,
-      assigned_to: assignedTo,
-      title: trimmed,
-      icon: icon || null,
-      due_at: combineLocalDateAndTime(dueDate, dueTime),
-    });
+    const dueIso = combineLocalDateAndTime(dueDate, dueTime);
+    const { data: created, error } = await supabase
+      .from("lead_tasks")
+      .insert({
+        account_id: accountId,
+        contact_id: contactId,
+        conversation_id: conversationId ?? null,
+        created_by: user?.id ?? null,
+        assigned_to: assignedTo,
+        title: trimmed,
+        icon: icon || null,
+        due_at: dueIso,
+      })
+      .select("id, due_at")
+      .single();
     setSaving(false);
     if (error) {
       toast.error(t("toastSaveFailed"));
       return;
+    }
+    if (created?.id && created.due_at) {
+      const due = new Date(created.due_at);
+      const today = calendarDateInZone(new Date(), AUTOMATION_GREETING_TZ);
+      const dueDay = calendarDateInZone(due, AUTOMATION_GREETING_TZ);
+      if (dueDay <= today) {
+        void fetch(`/api/tasks/${created.id}/remind`, { method: "POST" });
+      }
     }
     setTitle("");
     setIcon("");

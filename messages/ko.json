@@ -676,7 +676,10 @@
       "reminderWhatsAppMissing": "WhatsApp: 미발송",
       "reminderEmailSent": "이메일 발송 · {time}",
       "reminderEmailMissing": "이메일: 미발송",
-      "reminderPendingHint": "알림은 마감일 크론이 돌 때 발송됩니다. 정확한 시각이 아닙니다."
+      "reminderPendingHint": "알림은 마감일 크론이 돌 때 발송됩니다. 정확한 시각이 아닙니다.",
+      "sendReminderNow": "지금 알림 보내기",
+      "reminderSendOk": "담당자에게 알림을 보냈습니다",
+      "reminderSendFailed": "알림을 보내지 못했습니다"
     },
     "panel": {
       "title": "작업",

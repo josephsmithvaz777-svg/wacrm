@@ -33,6 +33,7 @@ export function TaskEventChip({
   accountName,
   canEdit,
   onComplete,
+  onRemind,
   className,
 }: {
   task: LeadTask;
@@ -40,11 +41,13 @@ export function TaskEventChip({
   accountName?: string | null;
   canEdit: boolean;
   onComplete: (task: LeadTask, result: string) => Promise<void>;
+  onRemind?: (task: LeadTask) => Promise<void>;
   className?: string;
 }) {
   const t = useTranslations("Tasks.page");
   const [result, setResult] = useState(task.result ?? "");
   const [saving, setSaving] = useState(false);
+  const [reminding, setReminding] = useState(false);
   const tone = taskTone(task);
   const name = leadLabel(task, fallbackLead);
 
@@ -136,6 +139,20 @@ export function TaskEventChip({
             <p className="mt-1">{t("reminderPendingHint")}</p>
           ) : null}
         </div>
+        {canEdit && onRemind && (!task.reminder_whatsapp_at || !task.reminder_email_at) ? (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 w-full"
+            disabled={reminding}
+            onClick={() => {
+              setReminding(true);
+              void onRemind(task).finally(() => setReminding(false));
+            }}
+          >
+            {t("sendReminderNow")}
+          </Button>
+        ) : null}
         {tone === "done" && task.result ? (
           <p className="rounded-md bg-muted px-2 py-1.5 text-xs text-muted-foreground">
             {task.result}

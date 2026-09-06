@@ -698,7 +698,10 @@
       "reminderWhatsAppMissing": "WhatsApp: no enviado",
       "reminderEmailSent": "Correo enviado · {time}",
       "reminderEmailMissing": "Correo: no enviado",
-      "reminderPendingHint": "El aviso sale el día de la tarea, cuando corre el cron — no a la hora exacta."
+      "reminderPendingHint": "El aviso sale el día de la tarea, cuando corre el cron — no a la hora exacta.",
+      "sendReminderNow": "Enviar aviso ahora",
+      "reminderSendOk": "Aviso enviado al asesor",
+      "reminderSendFailed": "No se pudo enviar el aviso"
     },
     "panel": {
       "title": "Tareas",

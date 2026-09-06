@@ -20,7 +20,7 @@ export interface TaskReminderSummary {
   errors: string[];
 }
 
-type DueTaskRow = {
+export type DueTaskRow = {
   id: string;
   account_id: string;
   contact_id: string;
@@ -30,6 +30,9 @@ type DueTaskRow = {
   due_at: string;
   assigned_to: string | null;
   created_by: string | null;
+  reminder_sent_at?: string | null;
+  reminder_whatsapp_at?: string | null;
+  reminder_email_at?: string | null;
 };
 
 function reminderCopy(task: DueTaskRow, contactLabel: string): {
@@ -75,24 +78,126 @@ async function contactLabel(
   return name || phone || "un lead";
 }
 
+export async function sendReminderForTask(
+  db: SupabaseClient,
+  task: DueTaskRow,
+  now: Date = new Date(),
+): Promise<{ whatsapp: boolean; email: boolean; errors: string[] }> {
+  const errors: string[] = [];
+  let whatsapp = Boolean(task.reminder_whatsapp_at);
+  let emailSent = Boolean(task.reminder_email_at);
+
+  if (!task.reminder_sent_at) {
+    await db
+      .from("lead_tasks")
+      .update({ reminder_sent_at: now.toISOString() })
+      .eq("id", task.id)
+      .is("reminder_sent_at", null);
+  }
+
+  const advisorId = task.assigned_to || task.created_by;
+  if (!advisorId) {
+    return { whatsapp, email: emailSent, errors: ["no advisor"] };
+  }
+
+  const lead = await contactLabel(db, task.account_id, task.contact_id);
+  const copy = reminderCopy(task, lead);
+
+  const { data: profile } = await db
+    .from("profiles")
+    .select("user_id, phone, email, full_name")
+    .eq("user_id", advisorId)
+    .maybeSingle();
+
+  const phone = (profile?.phone as string | null | undefined) ?? null;
+  const email = (profile?.email as string | null | undefined)?.trim() || "";
+  const name = (profile?.full_name as string | null | undefined) ?? null;
+
+  if (!task.reminder_sent_at) {
+    try {
+      await db.from("notifications").insert({
+        account_id: task.account_id,
+        user_id: advisorId,
+        type: "task_reminder",
+        conversation_id: task.conversation_id,
+        contact_id: task.contact_id,
+        title: copy.title,
+        body: copy.body,
+      });
+    } catch (err) {
+      errors.push(
+        `notification: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  if (!whatsapp) {
+    if (!isUsableStaffPhone(phone)) {
+      errors.push("advisor has no usable WhatsApp number");
+    } else {
+      try {
+        await sendStaffWhatsApp(db, {
+          accountId: task.account_id,
+          toPhone: staffPhoneDigits(phone) || (phone as string),
+          toName: name,
+          text: copy.whatsapp,
+        });
+        await db
+          .from("lead_tasks")
+          .update({ reminder_whatsapp_at: now.toISOString() })
+          .eq("id", task.id);
+        whatsapp = true;
+      } catch (err) {
+        errors.push(
+          `whatsapp: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+  }
+
+  if (!emailSent) {
+    if (!email) {
+      errors.push("advisor has no email");
+    } else {
+      const mail = await sendPlainEmail({
+        to: email,
+        subject: copy.emailSubject,
+        text: copy.emailText,
+      });
+      if (mail.ok) {
+        await db
+          .from("lead_tasks")
+          .update({ reminder_email_at: now.toISOString() })
+          .eq("id", task.id);
+        emailSent = true;
+      } else if (mail.skipped) {
+        errors.push("email skipped: RESEND_API_KEY not set");
+      } else {
+        errors.push(`email: ${mail.error ?? "failed"}`);
+      }
+    }
+  }
+
+  return { whatsapp, email: emailSent, errors };
+}
+
 /**
  * Send WhatsApp + email + in-app notification for open tasks due
- * today (America/Lima). Marks reminder_sent_at first so overlapping
- * cron hits cannot double-send.
+ * today or already overdue (America/Lima).
  */
 export async function sendDueTaskReminders(
   db: SupabaseClient = supabaseAdmin(),
   now: Date = new Date(),
 ): Promise<TaskReminderSummary> {
-  const { start, end } = zonedDayRange(now, AUTOMATION_GREETING_TZ);
+  const { end } = zonedDayRange(now, AUTOMATION_GREETING_TZ);
   const { data, error } = await db
     .from("lead_tasks")
     .select(
-      "id, account_id, contact_id, conversation_id, title, icon, due_at, assigned_to, created_by",
+      "id, account_id, contact_id, conversation_id, title, icon, due_at, assigned_to, created_by, reminder_sent_at, reminder_whatsapp_at, reminder_email_at",
     )
     .is("completed_at", null)
     .is("reminder_sent_at", null)
-    .gte("due_at", start.toISOString())
+    .not("due_at", "is", null)
     .lt("due_at", end.toISOString())
     .limit(100);
 
@@ -109,89 +214,12 @@ export async function sendDueTaskReminders(
   };
 
   for (const task of tasks) {
-    const { data: claim } = await db
-      .from("lead_tasks")
-      .update({ reminder_sent_at: now.toISOString() })
-      .eq("id", task.id)
-      .is("reminder_sent_at", null)
-      .select("id")
-      .maybeSingle();
-    if (!claim) {
-      summary.skipped += 1;
-      continue;
-    }
-
-    const advisorId = task.assigned_to || task.created_by;
-    if (!advisorId) {
-      summary.skipped += 1;
-      continue;
-    }
-
-    const lead = await contactLabel(db, task.account_id, task.contact_id);
-    const copy = reminderCopy(task, lead);
-
-    const { data: profile } = await db
-      .from("profiles")
-      .select("user_id, phone, email, full_name")
-      .eq("user_id", advisorId)
-      .maybeSingle();
-
-    const phone = (profile?.phone as string | null | undefined) ?? null;
-    const email = (profile?.email as string | null | undefined)?.trim() || "";
-    const name = (profile?.full_name as string | null | undefined) ?? null;
-
-    try {
-      await db.from("notifications").insert({
-        account_id: task.account_id,
-        user_id: advisorId,
-        type: "task_reminder",
-        conversation_id: task.conversation_id,
-        contact_id: task.contact_id,
-        title: copy.title,
-        body: copy.body,
-      });
-    } catch (err) {
-      summary.errors.push(
-        `${task.id} notification: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-
-    if (isUsableStaffPhone(phone)) {
-      try {
-        await sendStaffWhatsApp(db, {
-          accountId: task.account_id,
-          toPhone: staffPhoneDigits(phone) || (phone as string),
-          toName: name,
-          text: copy.whatsapp,
-        });
-        await db
-          .from("lead_tasks")
-          .update({ reminder_whatsapp_at: now.toISOString() })
-          .eq("id", task.id);
-      } catch (err) {
-        summary.errors.push(
-          `${task.id} whatsapp: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-    }
-
-    if (email) {
-      const mail = await sendPlainEmail({
-        to: email,
-        subject: copy.emailSubject,
-        text: copy.emailText,
-      });
-      if (mail.ok) {
-        await db
-          .from("lead_tasks")
-          .update({ reminder_email_at: now.toISOString() })
-          .eq("id", task.id);
-      } else if (!mail.skipped) {
-        summary.errors.push(`${task.id} email: ${mail.error ?? "failed"}`);
-      }
-    }
-
-    summary.sent += 1;
+    const result = await sendReminderForTask(db, task, now);
+    if (result.whatsapp || result.email) summary.sent += 1;
+    else summary.skipped += 1;
+    summary.errors.push(
+      ...result.errors.map((reason) => `${task.id} ${reason}`),
+    );
   }
 
   return summary;

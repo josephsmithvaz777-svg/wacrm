@@ -32,6 +32,7 @@ export function TaskCalendar({
   canEdit,
   accountName,
   onComplete,
+  onRemind,
 }: {
   tasks: LeadTask[];
   view: "day" | "week" | "month";
@@ -40,6 +41,7 @@ export function TaskCalendar({
   canEdit: boolean;
   accountName?: string | null;
   onComplete: (task: LeadTask, result: string) => Promise<void>;
+  onRemind?: (task: LeadTask) => Promise<void>;
 }) {
   const t = useTranslations("Tasks.page");
   const locale = useLocale();
@@ -132,6 +134,7 @@ export function TaskCalendar({
                       accountName={accountName}
                       canEdit={canEdit}
                       onComplete={onComplete}
+                      onRemind={onRemind}
                     />
                   ))}
                   {extra > 0 ? (
@@ -225,6 +228,7 @@ export function TaskCalendar({
                           accountName={accountName}
                           canEdit={canEdit}
                           onComplete={onComplete}
+                          onRemind={onRemind}
                           className="h-full"
                         />
                       </div>
