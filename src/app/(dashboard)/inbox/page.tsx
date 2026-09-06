@@ -673,6 +673,7 @@ function InboxPageInner() {
           <div className="hidden lg:block">
             <ContactSidebar
               contact={activeContact}
+              conversationId={activeConversation?.id}
               onContactUpdated={handleContactUpdated}
             />
           </div>

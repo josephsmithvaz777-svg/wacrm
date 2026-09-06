@@ -105,6 +105,7 @@
     "inbox": "Bandeja",
     "notifications": "Notificaciones",
     "contacts": "Contactos",
+    "tasks": "Tareas",
     "pipelines": "Embudos",
     "broadcasts": "Difusiones",
     "automations": "Automatizaciones",
@@ -132,6 +133,7 @@
     "notifications": "Notificaciones",
     "notificationsWithCount": "{count} notificaciones sin leer",
     "contacts": "Contactos",
+    "tasks": "Tareas",
     "pipelines": "Embudos",
     "broadcasts": "Difusiones",
     "automations": "Automatizaciones",
@@ -390,6 +392,7 @@
       "notes": "Notas",
       "deals": "Deals",
       "pipeline": "Embudo",
+      "tasks": "Tareas",
       "noTags": "Sin etiquetas",
       "noDeals": "Sin deals",
       "addNotePlaceholder": "Agregar una nota…",
@@ -517,6 +520,7 @@
         "details": "Detalles",
         "activity": "Actividad",
         "notes": "Notas",
+        "tasks": "Tareas",
         "custom": "Campos personalizados",
         "deals": "Deals",
         "tags": "Etiquetas",
@@ -647,6 +651,34 @@
       "toastUpdated": "Contacto actualizado",
       "toastUpdateFailed": "No se pudo actualizar el contacto",
       "toastCustomFieldsSaved": "Campos personalizados guardados"
+    }
+  },
+  "Tasks": {
+    "page": {
+      "title": "Tareas",
+      "subtitle": "Pendientes de cada lead. Créalas desde el chat o la ficha del contacto.",
+      "loading": "Cargando tareas…",
+      "emptyTitle": "No hay tareas abiertas",
+      "emptyBody": "Abre un chat y agrega una tarea en el panel del contacto.",
+      "showDone": "Ver hechas",
+      "hideDone": "Ocultar hechas",
+      "unknownLead": "Lead",
+      "due": "Vence {date}",
+      "openChat": "Chat",
+      "markDone": "Marcar hecha",
+      "markOpen": "Marcar pendiente"
+    },
+    "panel": {
+      "title": "Tareas",
+      "placeholder": "Nueva tarea…",
+      "dueDate": "Fecha",
+      "due": "Vence {date}",
+      "empty": "Sin tareas",
+      "delete": "Eliminar",
+      "markDone": "Marcar hecha",
+      "markOpen": "Marcar pendiente",
+      "toastSaveFailed": "No se pudo guardar la tarea",
+      "toastDeleteFailed": "No se pudo eliminar la tarea"
     }
   },
   "Pipelines": {

@@ -105,6 +105,7 @@
     "inbox": "인박스",
     "notifications": "알림",
     "contacts": "연락처",
+    "tasks": "작업",
     "pipelines": "파이프라인",
     "broadcasts": "브로드캐스트",
     "automations": "자동화",
@@ -132,6 +133,7 @@
     "notifications": "알림",
     "notificationsWithCount": "읽지 않은 알림 {count}개",
     "contacts": "연락처",
+    "tasks": "작업",
     "pipelines": "파이프라인",
     "broadcasts": "브로드캐스트",
     "automations": "자동화",
@@ -507,6 +509,7 @@
         "details": "상세 정보",
         "activity": "활동",
         "notes": "메모",
+        "tasks": "작업",
         "custom": "커스텀 필드",
         "deals": "딜",
         "tags": "태그",
@@ -626,6 +629,34 @@
       "toastRenameFailed": "필드 이름을 변경할 수 없습니다.",
       "toastDeleteFailed": "필드를 삭제할 수 없습니다.",
       "toastDeleted": "\"{name}\"을(를) 삭제했습니다."
+    }
+  },
+  "Tasks": {
+    "page": {
+      "title": "작업",
+      "subtitle": "리드별 할 일. 채팅이나 연락처에서 추가하세요.",
+      "loading": "작업 불러오는 중…",
+      "emptyTitle": "열린 작업 없음",
+      "emptyBody": "채팅을 열고 연락처 패널에서 작업을 추가하세요.",
+      "showDone": "완료 보기",
+      "hideDone": "완료 숨기기",
+      "unknownLead": "리드",
+      "due": "마감 {date}",
+      "openChat": "채팅",
+      "markDone": "완료로 표시",
+      "markOpen": "미완료로 표시"
+    },
+    "panel": {
+      "title": "작업",
+      "placeholder": "새 작업…",
+      "dueDate": "마감일",
+      "due": "마감 {date}",
+      "empty": "작업 없음",
+      "delete": "삭제",
+      "markDone": "완료로 표시",
+      "markOpen": "미완료로 표시",
+      "toastSaveFailed": "작업을 저장하지 못했습니다",
+      "toastDeleteFailed": "작업을 삭제하지 못했습니다"
     }
   },
   "Pipelines": {

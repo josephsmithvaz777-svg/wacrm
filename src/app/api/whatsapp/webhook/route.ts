@@ -782,6 +782,21 @@ async function processMessage(
     console.error('Error updating conversation:', convError)
   }
 
+  try {
+    const { ensureInboundLeadInFunnel } = await import(
+      '@/lib/pipelines/inbound-deal'
+    )
+    await ensureInboundLeadInFunnel(supabaseAdmin(), {
+      accountId,
+      contactId: contactRecord.id,
+      conversationId: conversation.id,
+      assignedAgentId: conversation.assigned_agent_id ?? assignedNow ?? null,
+      actorUserId: configOwnerUserId,
+    })
+  } catch (err) {
+    console.warn('[webhook] inbound funnel deal failed:', err)
+  }
+
   // A customer writing again re-opens the thread (issue #409). Kept as a
   // separate conditional statement rather than a `status` field on the
   // update above so the write can be gated on the row's CURRENT status in

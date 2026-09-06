@@ -105,6 +105,7 @@
     "inbox": "Inbox",
     "notifications": "Notifications",
     "contacts": "Contacts",
+    "tasks": "Tasks",
     "pipelines": "Pipelines",
     "broadcasts": "Broadcasts",
     "automations": "Automations",
@@ -132,6 +133,7 @@
     "notifications": "Notifications",
     "notificationsWithCount": "{count} unread notifications",
     "contacts": "Contacts",
+    "tasks": "Tasks",
     "pipelines": "Pipelines",
     "broadcasts": "Broadcasts",
     "automations": "Automations",
@@ -390,6 +392,7 @@
       "notes": "Notes",
       "deals": "Deals",
       "pipeline": "Pipeline",
+      "tasks": "Tasks",
       "noTags": "No tags",
       "noDeals": "No deals",
       "addNotePlaceholder": "Add a note...",
@@ -507,6 +510,7 @@
         "details": "Details",
         "activity": "Activity",
         "notes": "Notes",
+        "tasks": "Tasks",
         "custom": "Custom Fields",
         "deals": "Deals",
         "tags": "Tags",
@@ -626,6 +630,34 @@
       "toastRenameFailed": "Could not rename field.",
       "toastDeleteFailed": "Could not delete field.",
       "toastDeleted": "Deleted \"{name}\"."
+    }
+  },
+  "Tasks": {
+    "page": {
+      "title": "Tasks",
+      "subtitle": "To-dos for each lead. Add them from a chat or the contact sheet.",
+      "loading": "Loading tasks…",
+      "emptyTitle": "No open tasks",
+      "emptyBody": "Open a chat and add a task in the contact panel.",
+      "showDone": "Show done",
+      "hideDone": "Hide done",
+      "unknownLead": "Lead",
+      "due": "Due {date}",
+      "openChat": "Chat",
+      "markDone": "Mark done",
+      "markOpen": "Mark open"
+    },
+    "panel": {
+      "title": "Tasks",
+      "placeholder": "New task…",
+      "dueDate": "Due date",
+      "due": "Due {date}",
+      "empty": "No tasks",
+      "delete": "Delete",
+      "markDone": "Mark done",
+      "markOpen": "Mark open",
+      "toastSaveFailed": "Couldn’t save the task",
+      "toastDeleteFailed": "Couldn’t delete the task"
     }
   },
   "Pipelines": {

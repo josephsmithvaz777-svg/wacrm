@@ -172,6 +172,20 @@ export interface ContactNote {
   created_at: string;
 }
 
+export interface LeadTask {
+  id: string;
+  account_id: string;
+  contact_id: string;
+  conversation_id?: string | null;
+  created_by?: string | null;
+  title: string;
+  due_at?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+  updated_at?: string;
+  contact?: Pick<Contact, "id" | "name" | "phone">;
+}
+
 export type ConversationStatus = 'open' | 'pending' | 'closed';
 
 export interface Conversation {

@@ -543,6 +543,24 @@ export async function processWahaEvent(
   }
   if (!insertedRows || insertedRows.length === 0) return;
 
+  if (!fromMe) {
+    try {
+      const { ensureInboundLeadInFunnel } = await import(
+        '@/lib/pipelines/inbound-deal'
+      );
+      await ensureInboundLeadInFunnel(admin(), {
+        accountId: config.account_id,
+        contactId: contactOutcome.contact.id,
+        conversationId: convResult.conversation.id,
+        assignedAgentId:
+          convResult.conversation.assigned_agent_id ?? assignedNow ?? null,
+        actorUserId: config.user_id,
+      });
+    } catch (err) {
+      console.warn('[waha-inbound] inbound funnel deal failed:', err);
+    }
+  }
+
   const convUpdate: Record<string, unknown> = {
     last_message_text: contentText || `[${contentType}]`,
     last_message_at: ts,

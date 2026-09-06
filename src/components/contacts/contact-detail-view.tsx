@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { addContactTag, deleteContactTag } from '@/lib/contacts/tag-api';
 import { useAuth } from '@/hooks/use-auth';
+import { LeadTasksPanel } from '@/components/inbox/lead-tasks-panel';
+import { useCan } from '@/hooks/use-can';
 import { formatCurrency } from '@/lib/currency';
 import { toast } from 'sonner';
 import type { Contact, Tag, ContactTag, ContactNote, CustomField, ContactCustomValue, Deal, MessageTemplate } from '@/types';
@@ -62,6 +64,7 @@ export function ContactDetailView({
   const router = useRouter();
   const supabase = createClient();
   const { accountId, defaultCurrency } = useAuth();
+  const canEdit = useCan('send-messages');
 
   const [contact, setContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(false);
@@ -532,6 +535,12 @@ export function ContactDetailView({
                   {t('tabs.notes')}
                 </TabsTrigger>
                 <TabsTrigger
+                  value="tasks"
+                  className="data-active:bg-muted data-active:text-primary text-muted-foreground"
+                >
+                  {t('tabs.tasks')}
+                </TabsTrigger>
+                <TabsTrigger
                   value="custom"
                   className="data-active:bg-muted data-active:text-primary text-muted-foreground"
                 >
@@ -700,6 +709,16 @@ export function ContactDetailView({
                     ))
                   )}
                 </div>
+              </TabsContent>
+
+              <TabsContent value="tasks" className="flex-1 overflow-y-auto px-4 py-3">
+                {contact ? (
+                  <LeadTasksPanel
+                    contactId={contact.id}
+                    accountId={accountId}
+                    canEdit={canEdit}
+                  />
+                ) : null}
               </TabsContent>
 
               {/* Custom Fields Tab */}

@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/client";
 import { addContactTag, deleteContactTag } from "@/lib/contacts/tag-api";
 import { useAuth } from "@/hooks/use-auth";
 import { DealForm } from "@/components/pipelines/deal-form";
+import { LeadTasksPanel } from "@/components/inbox/lead-tasks-panel";
+import { useCan } from "@/hooks/use-can";
 import type {
   Contact,
   Deal,
@@ -41,18 +43,21 @@ import { toast } from "sonner";
 
 interface ContactSidebarProps {
   contact: Contact | null;
+  conversationId?: string | null;
   /** Called after name/details/tags are saved so the Inbox list + thread header refresh. */
   onContactUpdated?: (contact: Contact) => void;
 }
 
 export function ContactSidebar({
   contact,
+  conversationId,
   onContactUpdated,
 }: ContactSidebarProps) {
   const tSidebar = useTranslations("Inbox.sidebar");
   const tThread = useTranslations("Inbox.messageThread");
 
   const { accountId } = useAuth();
+  const canEdit = useCan("send-messages");
   const [copied, setCopied] = useState(false);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [notes, setNotes] = useState<ContactNote[]>([]);
@@ -634,6 +639,18 @@ export function ContactSidebar({
               )}
             </div>
           </div>
+
+          <div className="my-4 border-t border-border" />
+
+          {contact ? (
+            <LeadTasksPanel
+              contactId={contact.id}
+              accountId={accountId}
+              conversationId={conversationId}
+              canEdit={canEdit}
+              compact
+            />
+          ) : null}
 
           <div className="my-4 border-t border-border" />
 
