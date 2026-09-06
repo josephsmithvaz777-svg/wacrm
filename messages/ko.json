@@ -653,7 +653,17 @@
       "due": "마감 {date}",
       "openChat": "채팅",
       "markDone": "완료로 표시",
-      "markOpen": "미완료로 표시"
+      "markOpen": "미완료로 표시",
+      "viewList": "목록",
+      "viewDay": "일",
+      "viewWeek": "주",
+      "viewMonth": "월",
+      "today": "오늘",
+      "prev": "이전",
+      "next": "다음",
+      "moreCount": "+{count}개 더",
+      "emptyCalendarTitle": "날짜가 있는 작업 없음",
+      "emptyCalendarBody": "채팅에서 작업을 만들 때 날짜와 시간을 지정하면 캘린더에 표시됩니다."
     },
     "panel": {
       "title": "작업",

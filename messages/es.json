@@ -675,7 +675,17 @@
       "due": "Vence {date}",
       "openChat": "Chat",
       "markDone": "Marcar hecha",
-      "markOpen": "Marcar pendiente"
+      "markOpen": "Marcar pendiente",
+      "viewList": "Lista",
+      "viewDay": "Día",
+      "viewWeek": "Semana",
+      "viewMonth": "Mes",
+      "today": "Hoy",
+      "prev": "Anterior",
+      "next": "Siguiente",
+      "moreCount": "+{count} más",
+      "emptyCalendarTitle": "No hay tareas con fecha",
+      "emptyCalendarBody": "Pon fecha y hora al crear la tarea en el chat para verla en el calendario."
     },
     "panel": {
       "title": "Tareas",

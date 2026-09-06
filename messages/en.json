@@ -654,7 +654,17 @@
       "due": "Due {date}",
       "openChat": "Chat",
       "markDone": "Mark done",
-      "markOpen": "Mark open"
+      "markOpen": "Mark open",
+      "viewList": "List",
+      "viewDay": "Day",
+      "viewWeek": "Week",
+      "viewMonth": "Month",
+      "today": "Today",
+      "prev": "Previous",
+      "next": "Next",
+      "moreCount": "+{count} more",
+      "emptyCalendarTitle": "No dated tasks",
+      "emptyCalendarBody": "Set a date and time when you create the task in chat to see it on the calendar."
     },
     "panel": {
       "title": "Tasks",
