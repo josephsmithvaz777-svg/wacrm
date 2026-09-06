@@ -671,7 +671,12 @@
       "daysOverdue": "({count}일)",
       "forAccount": "{name}",
       "resultPlaceholder": "결과 추가",
-      "completeTask": "작업 완료"
+      "completeTask": "작업 완료",
+      "reminderWhatsAppSent": "WhatsApp 발송 · {time}",
+      "reminderWhatsAppMissing": "WhatsApp: 미발송",
+      "reminderEmailSent": "이메일 발송 · {time}",
+      "reminderEmailMissing": "이메일: 미발송",
+      "reminderPendingHint": "알림은 마감일 크론이 돌 때 발송됩니다. 정확한 시각이 아닙니다."
     },
     "panel": {
       "title": "작업",

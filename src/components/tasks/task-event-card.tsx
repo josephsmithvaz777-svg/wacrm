@@ -10,6 +10,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { formatAlertDateTime } from "@/lib/automations/template-vars";
 import {
   dueRelativeParts,
   taskTone,
@@ -112,6 +113,29 @@ export function TaskEventChip({
             {task.title}
           </span>
         </p>
+        <div className="rounded-md bg-muted/70 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
+          {task.reminder_whatsapp_at ? (
+            <p>
+              {t("reminderWhatsAppSent", {
+                time: formatAlertDateTime(new Date(task.reminder_whatsapp_at)),
+              })}
+            </p>
+          ) : (
+            <p>{t("reminderWhatsAppMissing")}</p>
+          )}
+          {task.reminder_email_at ? (
+            <p>
+              {t("reminderEmailSent", {
+                time: formatAlertDateTime(new Date(task.reminder_email_at)),
+              })}
+            </p>
+          ) : (
+            <p>{t("reminderEmailMissing")}</p>
+          )}
+          {!task.reminder_sent_at && !task.reminder_whatsapp_at && !task.reminder_email_at ? (
+            <p className="mt-1">{t("reminderPendingHint")}</p>
+          ) : null}
+        </div>
         {tone === "done" && task.result ? (
           <p className="rounded-md bg-muted px-2 py-1.5 text-xs text-muted-foreground">
             {task.result}

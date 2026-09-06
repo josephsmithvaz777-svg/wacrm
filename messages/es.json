@@ -693,7 +693,12 @@
       "daysOverdue": "({count, plural, one {# día} other {# días}})",
       "forAccount": "para {name}",
       "resultPlaceholder": "Agregar resultado",
-      "completeTask": "Completar una tarea"
+      "completeTask": "Completar una tarea",
+      "reminderWhatsAppSent": "WhatsApp enviado · {time}",
+      "reminderWhatsAppMissing": "WhatsApp: no enviado",
+      "reminderEmailSent": "Correo enviado · {time}",
+      "reminderEmailMissing": "Correo: no enviado",
+      "reminderPendingHint": "El aviso sale el día de la tarea, cuando corre el cron — no a la hora exacta."
     },
     "panel": {
       "title": "Tareas",

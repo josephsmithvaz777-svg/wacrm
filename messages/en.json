@@ -672,7 +672,12 @@
       "daysOverdue": "({count, plural, one {# day} other {# days}})",
       "forAccount": "for {name}",
       "resultPlaceholder": "Add result",
-      "completeTask": "Complete task"
+      "completeTask": "Complete task",
+      "reminderWhatsAppSent": "WhatsApp sent · {time}",
+      "reminderWhatsAppMissing": "WhatsApp: not sent",
+      "reminderEmailSent": "Email sent · {time}",
+      "reminderEmailMissing": "Email: not sent",
+      "reminderPendingHint": "The reminder goes out on the due day when cron runs — not at the exact time."
     },
     "panel": {
       "title": "Tasks",

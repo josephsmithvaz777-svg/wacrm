@@ -164,6 +164,10 @@ export async function sendDueTaskReminders(
           toName: name,
           text: copy.whatsapp,
         });
+        await db
+          .from("lead_tasks")
+          .update({ reminder_whatsapp_at: now.toISOString() })
+          .eq("id", task.id);
       } catch (err) {
         summary.errors.push(
           `${task.id} whatsapp: ${err instanceof Error ? err.message : String(err)}`,
@@ -177,7 +181,12 @@ export async function sendDueTaskReminders(
         subject: copy.emailSubject,
         text: copy.emailText,
       });
-      if (!mail.ok && !mail.skipped) {
+      if (mail.ok) {
+        await db
+          .from("lead_tasks")
+          .update({ reminder_email_at: now.toISOString() })
+          .eq("id", task.id);
+      } else if (!mail.skipped) {
         summary.errors.push(`${task.id} email: ${mail.error ?? "failed"}`);
       }
     }
