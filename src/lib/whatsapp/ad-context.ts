@@ -268,13 +268,18 @@ export function extractAdContext(
     }
   };
   visit(payload, 0);
+  return attachPayloadMedia(found, payload);
+}
 
-  if (found && !found.image_url && !found.thumbnailBase64) {
-    const media = asRecord(payload.media);
-    const mediaUrl = media ? pickString(media, ['url', 'link', 'href']) : null;
-    if (mediaUrl) found = { ...found, image_url: mediaUrl };
-  }
-  return found;
+function attachPayloadMedia(
+  card: ExtractedAdContext | null,
+  payload: Record<string, unknown>,
+): ExtractedAdContext | null {
+  if (!card || card.image_url || card.thumbnailBase64) return card;
+  const media = asRecord(payload.media);
+  const mediaUrl = media ? pickString(media, ['url', 'link', 'href']) : null;
+  if (!mediaUrl) return card;
+  return { ...card, image_url: mediaUrl };
 }
 
 /** Meta Cloud API `messages[].referral` on Click-to-WhatsApp ads. */
