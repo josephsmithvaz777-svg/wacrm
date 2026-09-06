@@ -48,6 +48,7 @@ import {
   ChevronRight,
   SlidersHorizontal,
   Filter,
+  UserRound,
   X,
 } from 'lucide-react';
 import { ContactForm } from '@/components/contacts/contact-form';
@@ -66,6 +67,11 @@ interface ContactWithTags extends Contact {
   latestNote?: string | null;
 }
 
+interface AgentOption {
+  user_id: string;
+  label: string;
+}
+
 export default function ContactsPage() {
   const t = useTranslations('Contacts.page');
   const supabase = createClient();
@@ -79,6 +85,11 @@ export default function ContactsPage() {
   const [totalCount, setTotalCount] = useState(0);
   // Tag filter — contacts shown must have ANY of these tags (OR).
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  // Agent filter — contacts assigned to ANY selected agent, plus
+  // optionally unassigned. Admins use this to review a teammate's book.
+  const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
+  const [includeUnassigned, setIncludeUnassigned] = useState(false);
+  const [agents, setAgents] = useState<AgentOption[]>([]);
 
   // Modals
   const [formOpen, setFormOpen] = useState(false);
@@ -120,6 +131,24 @@ export default function ContactsPage() {
     }
   }, [supabase]);
 
+  const fetchAgents = useCallback(async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('user_id, full_name, email')
+      .order('full_name');
+    if (!data) return;
+    const options: AgentOption[] = data.map((p) => ({
+      user_id: p.user_id as string,
+      label: ((p.full_name || p.email || '') as string).trim() || p.user_id,
+    }));
+    setAgents(options);
+    const known = new Set(options.map((a) => a.user_id));
+    setSelectedAgentIds((prev) => {
+      const pruned = prev.filter((id) => known.has(id));
+      return pruned.length === prev.length ? prev : pruned;
+    });
+  }, [supabase]);
+
   const fetchContacts = useCallback(async () => {
     const seq = ++fetchSeq.current;
     setLoading(true);
@@ -135,13 +164,18 @@ export default function ContactsPage() {
     let contactRows: Contact[];
     let count: number;
 
-    if (selectedTagIds.length > 0) {
-      // Tag filter active — resolve it server-side (join + distinct +
-      // windowed total count + pagination) so a tag covering many
-      // contacts can't silently truncate the result or overflow an IN
-      // clause. See migration 025_filter_contacts_by_tags.
-      const { data, error } = await supabase.rpc('filter_contacts_by_tags', {
-        p_tag_ids: selectedTagIds,
+    const hasTagFilter = selectedTagIds.length > 0;
+    const hasAssigneeFilter =
+      selectedAgentIds.length > 0 || includeUnassigned;
+
+    if (hasTagFilter || hasAssigneeFilter) {
+      // Server-side join + distinct + windowed total + pagination so
+      // tag/agent filters cannot silently truncate or overflow an IN
+      // clause. See migrations 025 and 052.
+      const { data, error } = await supabase.rpc('filter_contacts', {
+        p_tag_ids: hasTagFilter ? selectedTagIds : null,
+        p_assigned_to: selectedAgentIds.length ? selectedAgentIds : null,
+        p_include_unassigned: includeUnassigned,
         p_search: term || null,
         p_limit: PAGE_SIZE,
         p_offset: from,
@@ -245,7 +279,16 @@ export default function ContactsPage() {
 
     setContacts(enriched);
     setLoading(false);
-  }, [supabase, page, search, selectedTagIds, tagsMap, t]);
+  }, [
+    supabase,
+    page,
+    search,
+    selectedTagIds,
+    selectedAgentIds,
+    includeUnassigned,
+    tagsMap,
+    t,
+  ]);
 
   // Load-once-on-mount-ish data fetches. Each setter inside runs
   // inside an async promise completion (Supabase await), not
@@ -254,7 +297,8 @@ export default function ContactsPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchTags();
-  }, [fetchTags]);
+    fetchAgents();
+  }, [fetchTags, fetchAgents]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -361,7 +405,12 @@ export default function ContactsPage() {
   const allTags = Object.values(tagsMap).sort((a, b) =>
     a.name.localeCompare(b.name)
   );
-  const hasActiveFilters = search.trim().length > 0 || selectedTagIds.length > 0;
+  const assigneeFilterCount =
+    selectedAgentIds.length + (includeUnassigned ? 1 : 0);
+  const hasActiveFilters =
+    search.trim().length > 0 ||
+    selectedTagIds.length > 0 ||
+    assigneeFilterCount > 0;
 
   function toggleTagFilter(tagId: string) {
     setSelectedTagIds((prev) =>
@@ -375,6 +424,31 @@ export default function ContactsPage() {
   function clearTagFilters() {
     setSelectedTagIds([]);
     setPage(0);
+  }
+
+  function toggleAgentFilter(agentId: string) {
+    setSelectedAgentIds((prev) =>
+      prev.includes(agentId)
+        ? prev.filter((id) => id !== agentId)
+        : [...prev, agentId]
+    );
+    setPage(0);
+  }
+
+  function toggleUnassignedFilter() {
+    setIncludeUnassigned((prev) => !prev);
+    setPage(0);
+  }
+
+  function clearAgentFilters() {
+    setSelectedAgentIds([]);
+    setIncludeUnassigned(false);
+    setPage(0);
+  }
+
+  function clearAllFilters() {
+    clearTagFilters();
+    clearAgentFilters();
   }
 
   return (
@@ -420,7 +494,7 @@ export default function ContactsPage() {
         </div>
       </div>
 
-      {/* Search + tag filter */}
+      {/* Search + tag/agent filters */}
       <div className="space-y-2">
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative w-full max-w-sm">
@@ -498,10 +572,77 @@ export default function ContactsPage() {
               )}
             </PopoverContent>
           </Popover>
+
+          <Popover>
+            <PopoverTrigger
+              render={
+                <Button
+                  variant="outline"
+                  className="border-border text-muted-foreground hover:bg-muted shrink-0"
+                />
+              }
+            >
+              <UserRound className="size-4" />
+              {t('filterByAgent')}
+              {assigneeFilterCount > 0 && (
+                <span className="ml-1 inline-flex items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                  {assigneeFilterCount}
+                </span>
+              )}
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-64 p-0">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+                <span className="text-sm font-medium text-popover-foreground">
+                  {t('filterByAgent')}
+                </span>
+                {assigneeFilterCount > 0 && (
+                  <button
+                    onClick={clearAgentFilters}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    {t('clearAll')}
+                  </button>
+                )}
+              </div>
+              <div className="max-h-64 overflow-y-auto py-1">
+                <label className="flex items-center gap-2.5 px-3 py-1.5 cursor-pointer hover:bg-muted/50">
+                  <Checkbox
+                    checked={includeUnassigned}
+                    onCheckedChange={toggleUnassignedFilter}
+                    aria-label={t('unassigned')}
+                  />
+                  <span className="text-sm text-popover-foreground truncate">
+                    {t('unassigned')}
+                  </span>
+                </label>
+                {agents.length === 0 ? (
+                  <p className="px-3 py-4 text-sm text-muted-foreground text-center">
+                    {t('noAgentsYet')}
+                  </p>
+                ) : (
+                  agents.map((agent) => (
+                    <label
+                      key={agent.user_id}
+                      className="flex items-center gap-2.5 px-3 py-1.5 cursor-pointer hover:bg-muted/50"
+                    >
+                      <Checkbox
+                        checked={selectedAgentIds.includes(agent.user_id)}
+                        onCheckedChange={() => toggleAgentFilter(agent.user_id)}
+                        aria-label={t('filterByAgent') + ': ' + agent.label}
+                      />
+                      <span className="text-sm text-popover-foreground truncate">
+                        {agent.label}
+                      </span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
 
-        {/* Active tag-filter chips */}
-        {selectedTagIds.length > 0 && (
+        {/* Active filter chips */}
+        {(selectedTagIds.length > 0 || assigneeFilterCount > 0) && (
           <div className="flex flex-wrap items-center gap-1.5">
             {selectedTagIds.map((id) => {
               const tag = tagsMap[id];
@@ -526,8 +667,39 @@ export default function ContactsPage() {
                 </span>
               );
             })}
+            {includeUnassigned && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground">
+                {t('unassigned')}
+                <button
+                  onClick={toggleUnassignedFilter}
+                  aria-label={`Remove ${t('unassigned')} filter`}
+                  className="hover:opacity-70"
+                >
+                  <X className="size-3" />
+                </button>
+              </span>
+            )}
+            {selectedAgentIds.map((id) => {
+              const agent = agents.find((a) => a.user_id === id);
+              if (!agent) return null;
+              return (
+                <span
+                  key={id}
+                  className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-medium text-primary"
+                >
+                  {agent.label}
+                  <button
+                    onClick={() => toggleAgentFilter(id)}
+                    aria-label={`Remove ${agent.label} filter`}
+                    className="hover:opacity-70"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </span>
+              );
+            })}
             <button
-              onClick={clearTagFilters}
+              onClick={clearAllFilters}
               className="text-xs text-muted-foreground hover:text-foreground px-1"
             >
               {t('clearAll')}
