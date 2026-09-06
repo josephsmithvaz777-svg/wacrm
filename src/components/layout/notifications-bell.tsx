@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
 import type { Notification } from "@/types";
-import { Bell, CheckCheck, Loader2, UserPlus } from "lucide-react";
+import { Bell, CheckCheck, ListTodo, Loader2, UserPlus } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { enUS, es, ko } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import { toast } from "sonner";
 
 const TYPE_ICON: Record<Notification["type"], typeof Bell> = {
   conversation_assigned: UserPlus,
+  task_reminder: ListTodo,
 };
 
 const DATE_LOCALE = { en: enUS, es, ko } as const;
@@ -44,6 +45,9 @@ export function NotificationsBell() {
     (n: Notification) => {
       if (n.type === "conversation_assigned") {
         return t("types.conversationAssigned.title");
+      }
+      if (n.type === "task_reminder") {
+        return t("types.taskReminder.title");
       }
       return n.title;
     },

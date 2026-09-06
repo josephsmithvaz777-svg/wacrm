@@ -36,6 +36,7 @@ export function notificationSoundSource(opts: {
 
 let sharedCtx: AudioContext | null = null;
 let fileAudio: HTMLAudioElement | null = null;
+let unlockInFlight: Promise<void> | null = null;
 
 function getCtx(): AudioContext | null {
   if (typeof window === "undefined") return null;
@@ -48,16 +49,45 @@ function getCtx(): AudioContext | null {
   return sharedCtx;
 }
 
-/** Resume the shared AudioContext after a user gesture. */
-export function unlockAudio(): void {
-  const ctx = getCtx();
-  if (!ctx) return;
-  if (ctx.state === "suspended") {
-    void ctx.resume();
-  }
+/**
+ * Resume the shared AudioContext. Browsers start it `suspended` until
+ * a user gesture; calling this without awaiting left every chime silent.
+ */
+export function unlockAudio(): Promise<void> {
+  if (unlockInFlight) return unlockInFlight;
+  unlockInFlight = (async () => {
+    const ctx = getCtx();
+    if (ctx && ctx.state === "suspended") {
+      try {
+        await ctx.resume();
+      } catch {
+        // autoplay policy — next gesture retries
+      }
+    }
+    if (typeof window !== "undefined" && !fileAudio) {
+      fileAudio = new Audio();
+    }
+  })().finally(() => {
+    unlockInFlight = null;
+  });
+  return unlockInFlight;
 }
 
-function tone(
+async function readyCtx(): Promise<AudioContext | null> {
+  await unlockAudio();
+  const ctx = getCtx();
+  if (!ctx) return null;
+  if (ctx.state === "suspended") {
+    try {
+      await ctx.resume();
+    } catch {
+      return null;
+    }
+  }
+  return ctx.state === "running" ? ctx : null;
+}
+
+async function tone(
   freqs: number[],
   {
     duration = 0.12,
@@ -71,8 +101,8 @@ function tone(
     gap?: number;
   } = {},
 ) {
-  const ctx = getCtx();
-  if (!ctx || ctx.state === "suspended") return;
+  const ctx = await readyCtx();
+  if (!ctx) return;
 
   let t = ctx.currentTime;
   for (const freq of freqs) {
@@ -91,14 +121,18 @@ function tone(
   }
 }
 
-function playFile(url: string): void {
-  if (typeof window === "undefined") return;
+async function playFile(url: string): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  await unlockAudio();
   if (!fileAudio) fileAudio = new Audio();
   fileAudio.src = url;
   fileAudio.currentTime = 0;
-  void fileAudio.play().catch(() => {
-    // Autoplay blocked until a gesture; unlockAudio handles the next one.
-  });
+  try {
+    await fileAudio.play();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export type NotificationSoundOpts = {
@@ -108,6 +142,8 @@ export type NotificationSoundOpts = {
   url?: string | null;
 };
 
+const DEFAULT_CHIME = { duration: 0.1, gain: 0.07, gap: 0.05 } as const;
+
 /** Assignment / in-app notification chime. */
 export function playNotificationSound(opts: NotificationSoundOpts = {}): void {
   const source = notificationSoundSource({
@@ -115,14 +151,16 @@ export function playNotificationSound(opts: NotificationSoundOpts = {}): void {
     url: opts.url,
   });
   if (source === "silent") return;
-  if (source === "custom" && opts.url) {
-    playFile(opts.url.trim());
-    return;
-  }
-  tone([880, 1175], { duration: 0.1, gain: 0.07, gap: 0.05 });
+  void (async () => {
+    if (source === "custom" && opts.url) {
+      const played = await playFile(opts.url.trim());
+      if (played) return;
+    }
+    await tone([880, 1175], DEFAULT_CHIME);
+  })();
 }
 
 /** Single soft blip for inbound customer messages. */
 export function playMessageSound(): void {
-  tone([740], { duration: 0.09, gain: 0.06, type: "triangle" });
+  void tone([740], { duration: 0.09, gain: 0.06, type: "triangle" });
 }

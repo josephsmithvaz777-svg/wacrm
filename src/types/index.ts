@@ -178,8 +178,11 @@ export interface LeadTask {
   contact_id: string;
   conversation_id?: string | null;
   created_by?: string | null;
+  assigned_to?: string | null;
   title: string;
+  icon?: string | null;
   due_at?: string | null;
+  reminder_sent_at?: string | null;
   completed_at?: string | null;
   created_at: string;
   updated_at?: string;
@@ -218,7 +221,7 @@ export interface Conversation {
 // Notifications (migration 027)
 // ============================================================
 
-export type NotificationType = 'conversation_assigned';
+export type NotificationType = 'conversation_assigned' | 'task_reminder';
 
 export interface Notification {
   id: string;

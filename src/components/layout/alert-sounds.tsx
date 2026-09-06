@@ -45,12 +45,16 @@ export function AlertSounds() {
   }, [user?.id]);
 
   useEffect(() => {
-    const unlock = () => unlockAudio();
-    window.addEventListener("pointerdown", unlock, { once: true });
-    window.addEventListener("keydown", unlock, { once: true });
+    const unlock = () => {
+      void unlockAudio();
+    };
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    window.addEventListener("touchstart", unlock, { passive: true });
     return () => {
       window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("keydown", unlock);
+      window.removeEventListener("touchstart", unlock);
     };
   }, []);
 
@@ -61,12 +65,16 @@ export function AlertSounds() {
       .channel(`alert-sounds:${user.id}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "notifications" },
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${user.id}`,
+        },
         (payload) => {
           if (!soundNotificationsRef.current) return;
           const row = payload.new as Notification;
           if (row.user_id !== userIdRef.current) return;
-          unlockAudio();
           playNotificationSound({
             enabled: accountSoundEnabledRef.current,
             url: accountSoundUrlRef.current,
@@ -83,7 +91,6 @@ export function AlertSounds() {
           const now = Date.now();
           if (now - lastMessageSoundAt.current < MESSAGE_THROTTLE_MS) return;
           lastMessageSoundAt.current = now;
-          unlockAudio();
           playMessageSound();
         },
       )

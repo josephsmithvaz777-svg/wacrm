@@ -163,6 +163,9 @@
         "someone": "Someone",
         "assignedVerb": "assigned you a conversation with",
         "aContact": "a contact"
+      },
+      "taskReminder": {
+        "title": "Task due today"
       }
     }
   },
@@ -651,8 +654,10 @@
     },
     "panel": {
       "title": "Tasks",
+      "pickIcon": "Choose icon",
       "placeholder": "New task…",
       "dueDate": "Due date",
+      "dueTime": "Time",
       "due": "Due {date}",
       "empty": "No tasks",
       "delete": "Delete",

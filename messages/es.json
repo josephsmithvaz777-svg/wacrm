@@ -163,6 +163,9 @@
         "someone": "Alguien",
         "assignedVerb": "te asignó una conversación con",
         "aContact": "un contacto"
+      },
+      "taskReminder": {
+        "title": "Tarea para hoy"
       }
     }
   },
@@ -672,8 +675,10 @@
     },
     "panel": {
       "title": "Tareas",
+      "pickIcon": "Elegir icono",
       "placeholder": "Nueva tarea…",
       "dueDate": "Fecha",
+      "dueTime": "Hora",
       "due": "Vence {date}",
       "empty": "Sin tareas",
       "delete": "Eliminar",

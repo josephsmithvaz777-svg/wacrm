@@ -163,6 +163,9 @@
         "someone": "누군가",
         "assignedVerb": "님이 다음 대화를 할당했습니다:",
         "aContact": "연락처"
+      },
+      "taskReminder": {
+        "title": "오늘 할 일"
       }
     }
   },
@@ -650,8 +653,10 @@
     },
     "panel": {
       "title": "작업",
+      "pickIcon": "아이콘 선택",
       "placeholder": "새 작업…",
       "dueDate": "마감일",
+      "dueTime": "시간",
       "due": "마감 {date}",
       "empty": "작업 없음",
       "delete": "삭제",

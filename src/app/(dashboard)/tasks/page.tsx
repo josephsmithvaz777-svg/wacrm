@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import { useCan } from "@/hooks/use-can";
+import { formatAlertDateTime } from "@/lib/automations/template-vars";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { LeadTask } from "@/types";
@@ -116,11 +117,18 @@ export default function TasksPage() {
                         done && "text-muted-foreground line-through",
                       )}
                     >
+                      {task.icon ? (
+                        <span className="mr-1" aria-hidden>
+                          {task.icon}
+                        </span>
+                      ) : null}
                       {task.title}
                     </p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {contactName}
-                      {task.due_at ? ` · ${t("due", { date: task.due_at })}` : ""}
+                      {task.due_at
+                        ? ` · ${t("due", { date: formatAlertDateTime(new Date(task.due_at)) })}`
+                        : ""}
                     </p>
                   </div>
                   <Link

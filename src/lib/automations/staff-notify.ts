@@ -248,7 +248,7 @@ export function staffAlertChannel(config: {
   return (config.provider as string | undefined) === 'waha' ? 'waha' : 'meta';
 }
 
-async function sendStaffWhatsApp(
+export async function sendStaffWhatsApp(
   db: SupabaseClient,
   args: {
     accountId: string;

@@ -5,7 +5,10 @@ import { Check, ListTodo, Plus, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
+import { TaskIconPicker } from "@/components/inbox/task-icon-picker";
 import { Button } from "@/components/ui/button";
+import { formatAlertDateTime } from "@/lib/automations/template-vars";
+import { combineLocalDateAndTime } from "@/lib/datetime/zoned";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { LeadTask } from "@/types";
@@ -26,7 +29,9 @@ export function LeadTasksPanel({
   const t = useTranslations("Tasks.panel");
   const [tasks, setTasks] = useState<LeadTask[]>([]);
   const [title, setTitle] = useState("");
-  const [dueAt, setDueAt] = useState("");
+  const [icon, setIcon] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [dueTime, setDueTime] = useState("");
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -53,13 +58,37 @@ export function LeadTasksPanel({
     const {
       data: { user },
     } = await supabase.auth.getUser();
+
+    let assignedTo: string | null = null;
+    if (conversationId) {
+      const { data: conv } = await supabase
+        .from("conversations")
+        .select("assigned_agent_id")
+        .eq("id", conversationId)
+        .maybeSingle();
+      assignedTo =
+        (conv?.assigned_agent_id as string | null | undefined) ?? null;
+    }
+    if (!assignedTo) {
+      const { data: contact } = await supabase
+        .from("contacts")
+        .select("assigned_to")
+        .eq("id", contactId)
+        .maybeSingle();
+      assignedTo =
+        (contact?.assigned_to as string | null | undefined) ?? null;
+    }
+    if (!assignedTo) assignedTo = user?.id ?? null;
+
     const { error } = await supabase.from("lead_tasks").insert({
       account_id: accountId,
       contact_id: contactId,
       conversation_id: conversationId ?? null,
       created_by: user?.id ?? null,
+      assigned_to: assignedTo,
       title: trimmed,
-      due_at: dueAt || null,
+      icon: icon || null,
+      due_at: combineLocalDateAndTime(dueDate, dueTime),
     });
     setSaving(false);
     if (error) {
@@ -67,9 +96,22 @@ export function LeadTasksPanel({
       return;
     }
     setTitle("");
-    setDueAt("");
+    setIcon("");
+    setDueDate("");
+    setDueTime("");
     await load();
-  }, [accountId, canEdit, contactId, conversationId, dueAt, load, t, title]);
+  }, [
+    accountId,
+    canEdit,
+    contactId,
+    conversationId,
+    dueDate,
+    dueTime,
+    icon,
+    load,
+    t,
+    title,
+  ]);
 
   const toggleDone = useCallback(
     async (task: LeadTask) => {
@@ -114,6 +156,12 @@ export function LeadTasksPanel({
       {canEdit ? (
         <div className={cn("mt-2 space-y-1.5", compact ? "" : "px-0")}>
           <div className="flex gap-2">
+            <TaskIconPicker
+              value={icon}
+              onChange={setIcon}
+              disabled={saving}
+              label={t("pickIcon")}
+            />
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -135,13 +183,22 @@ export function LeadTasksPanel({
               <Plus className="h-3 w-3" />
             </Button>
           </div>
-          <input
-            type="date"
-            value={dueAt}
-            onChange={(e) => setDueAt(e.target.value)}
-            className="h-7 w-full rounded-md border border-border bg-muted px-2 text-[11px] text-muted-foreground outline-none focus:border-primary/50"
-            aria-label={t("dueDate")}
-          />
+          <div className="flex gap-2">
+            <input
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="h-7 min-w-0 flex-1 rounded-md border border-border bg-muted px-2 text-[11px] text-muted-foreground outline-none focus:border-primary/50"
+              aria-label={t("dueDate")}
+            />
+            <input
+              type="time"
+              value={dueTime}
+              onChange={(e) => setDueTime(e.target.value)}
+              className="h-7 w-[7.25rem] shrink-0 rounded-md border border-border bg-muted px-2 text-[11px] text-muted-foreground outline-none focus:border-primary/50"
+              aria-label={t("dueTime")}
+            />
+          </div>
         </div>
       ) : null}
 
@@ -151,6 +208,9 @@ export function LeadTasksPanel({
         ) : (
           tasks.map((task) => {
             const done = Boolean(task.completed_at);
+            const dueLabel = task.due_at
+              ? formatAlertDateTime(new Date(task.due_at))
+              : null;
             return (
               <div
                 key={task.id}
@@ -178,11 +238,16 @@ export function LeadTasksPanel({
                       done && "text-muted-foreground line-through",
                     )}
                   >
+                    {task.icon ? (
+                      <span className="mr-1" aria-hidden>
+                        {task.icon}
+                      </span>
+                    ) : null}
                     {task.title}
                   </p>
-                  {task.due_at ? (
+                  {dueLabel ? (
                     <p className="mt-0.5 text-[10px] text-muted-foreground">
-                      {t("due", { date: task.due_at })}
+                      {t("due", { date: dueLabel })}
                     </p>
                   ) : null}
                 </div>
