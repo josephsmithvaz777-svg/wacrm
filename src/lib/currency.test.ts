@@ -45,6 +45,32 @@ describe("formatCurrency", () => {
       expect(() => formatCurrency(1000, c.code)).not.toThrow();
     }
   });
+
+  it("lists Latin American currencies including PEN and MXN", () => {
+    const codes = CURRENCIES.filter((c) => c.region === "latam").map(
+      (c) => c.code,
+    );
+    for (const code of [
+      "ARS",
+      "BOB",
+      "BRL",
+      "CLP",
+      "COP",
+      "CRC",
+      "DOP",
+      "GTQ",
+      "HNL",
+      "MXN",
+      "NIO",
+      "PAB",
+      "PEN",
+      "PYG",
+      "UYU",
+      "VES",
+    ]) {
+      expect(codes).toContain(code);
+    }
+  });
 });
 
 describe("formatCurrencyShort", () => {

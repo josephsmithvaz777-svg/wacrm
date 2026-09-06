@@ -172,6 +172,10 @@
   "ModeToggle": {
     "switchMode": "Switch to {mode} mode"
   },
+  "Currency": {
+    "groupLatam": "Latin America",
+    "groupOther": "Other currencies"
+  },
   "Dashboard": {
     "page": {
       "title": "Dashboard",

@@ -1,0 +1,13 @@
+---
+description: Tras cada cambio de código, hacer commit y push a origin
+alwaysApply: true
+---
+
+# Subir cambios a git
+
+Cuando termines un cambio pedido por el usuario:
+
+1. Haz commit en la rama actual (normalmente `main`) con un mensaje que explique el porqué.
+2. Haz `git push` a `origin` (nunca `--force` salvo que el usuario lo pida).
+
+No esperes a que lo pida en cada turno. No incluyas secretos (`.env`, keys).

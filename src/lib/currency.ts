@@ -13,6 +13,8 @@
 /** App-wide fallback when no account/deal currency is available. */
 export const DEFAULT_CURRENCY = "USD";
 
+export type CurrencyRegion = "latam" | "other";
+
 export interface CurrencyOption {
   /** ISO-4217 code, e.g. "USD". Stored verbatim in the DB. */
   code: string;
@@ -20,6 +22,7 @@ export interface CurrencyOption {
   label: string;
   /** Symbol for compact display, e.g. "$". */
   symbol: string;
+  region: CurrencyRegion;
 }
 
 /**
@@ -28,22 +31,43 @@ export interface CurrencyOption {
  * list to offer more — nothing else needs to change.
  */
 export const CURRENCIES: CurrencyOption[] = [
-  { code: "USD", label: "US Dollar", symbol: "$" },
-  { code: "EUR", label: "Euro", symbol: "€" },
-  { code: "GBP", label: "British Pound", symbol: "£" },
-  { code: "INR", label: "Indian Rupee", symbol: "₹" },
-  { code: "AUD", label: "Australian Dollar", symbol: "A$" },
-  { code: "CAD", label: "Canadian Dollar", symbol: "C$" },
-  { code: "BRL", label: "Brazilian Real", symbol: "R$" },
-  { code: "JPY", label: "Japanese Yen", symbol: "¥" },
-  { code: "CNY", label: "Chinese Yuan", symbol: "¥" },
-  { code: "AED", label: "UAE Dirham", symbol: "د.إ" },
-  { code: "ZAR", label: "South African Rand", symbol: "R" },
-  { code: "NGN", label: "Nigerian Naira", symbol: "₦" },
-  { code: "SGD", label: "Singapore Dollar", symbol: "S$" },
-  { code: "MXN", label: "Mexican Peso", symbol: "$" },
-  { code: "COP", label: "Colombian Peso", symbol: "$" },
+  { code: "ARS", label: "Peso argentino", symbol: "$", region: "latam" },
+  { code: "BOB", label: "Boliviano", symbol: "Bs", region: "latam" },
+  { code: "BRL", label: "Real brasileño", symbol: "R$", region: "latam" },
+  { code: "CLP", label: "Peso chileno", symbol: "$", region: "latam" },
+  { code: "COP", label: "Peso colombiano", symbol: "$", region: "latam" },
+  { code: "CRC", label: "Colón costarricense", symbol: "₡", region: "latam" },
+  { code: "CUP", label: "Peso cubano", symbol: "$", region: "latam" },
+  { code: "DOP", label: "Peso dominicano", symbol: "RD$", region: "latam" },
+  { code: "GTQ", label: "Quetzal", symbol: "Q", region: "latam" },
+  { code: "HNL", label: "Lempira", symbol: "L", region: "latam" },
+  { code: "HTG", label: "Gourde haitiano", symbol: "G", region: "latam" },
+  { code: "MXN", label: "Peso mexicano", symbol: "$", region: "latam" },
+  { code: "NIO", label: "Córdoba", symbol: "C$", region: "latam" },
+  { code: "PAB", label: "Balboa", symbol: "B/.", region: "latam" },
+  { code: "PEN", label: "Sol peruano", symbol: "S/", region: "latam" },
+  { code: "PYG", label: "Guaraní", symbol: "₲", region: "latam" },
+  { code: "UYU", label: "Peso uruguayo", symbol: "$U", region: "latam" },
+  { code: "VES", label: "Bolívar venezolano", symbol: "Bs.", region: "latam" },
+  { code: "USD", label: "Dólar estadounidense", symbol: "$", region: "other" },
+  { code: "EUR", label: "Euro", symbol: "€", region: "other" },
+  { code: "GBP", label: "Libra esterlina", symbol: "£", region: "other" },
+  { code: "INR", label: "Rupia india", symbol: "₹", region: "other" },
+  { code: "AUD", label: "Dólar australiano", symbol: "A$", region: "other" },
+  { code: "CAD", label: "Dólar canadiense", symbol: "C$", region: "other" },
+  { code: "JPY", label: "Yen japonés", symbol: "¥", region: "other" },
+  { code: "CNY", label: "Yuan chino", symbol: "¥", region: "other" },
+  { code: "AED", label: "Dírham de EAU", symbol: "د.إ", region: "other" },
+  { code: "ZAR", label: "Rand sudafricano", symbol: "R", region: "other" },
+  { code: "NGN", label: "Naira nigeriana", symbol: "₦", region: "other" },
+  { code: "SGD", label: "Dólar de Singapur", symbol: "S$", region: "other" },
 ];
+
+export function currenciesInRegion(
+  region: CurrencyRegion,
+): CurrencyOption[] {
+  return CURRENCIES.filter((c) => c.region === region);
+}
 
 /**
  * Format a deal value as a currency string. Whole-number output

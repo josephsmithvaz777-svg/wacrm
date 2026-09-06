@@ -172,6 +172,10 @@
   "ModeToggle": {
     "switchMode": "{mode} 모드로 전환"
   },
+  "Currency": {
+    "groupLatam": "라틴아메리카",
+    "groupOther": "기타 통화"
+  },
   "Dashboard": {
     "page": {
       "title": "대시보드",
