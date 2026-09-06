@@ -192,3 +192,33 @@ describe('generateReply — Anthropic', () => {
     expect(body.messages).toHaveLength(1)
   })
 })
+
+describe('generateReply — DeepSeek', () => {
+  it('calls the OpenAI-compatible endpoint with max_tokens', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      okResponse({
+        choices: [{ message: { content: 'Claro, te ayudo.' } }],
+        usage: { prompt_tokens: 20, completion_tokens: 6, total_tokens: 26 },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await generateReply({
+      config: config({ provider: 'deepseek', model: 'deepseek-v4-flash' }),
+      systemPrompt: 'sys',
+      messages: [{ role: 'user', content: 'Hola' }],
+    })
+
+    expect(res).toEqual({
+      text: 'Claro, te ayudo.',
+      handoff: false,
+      usage: { promptTokens: 20, completionTokens: 6, totalTokens: 26 },
+    })
+    const [url, opts] = fetchMock.mock.calls[0]
+    expect(url).toContain('api.deepseek.com')
+    expect(opts.headers.Authorization).toBe('Bearer sk-test')
+    const body = JSON.parse(opts.body)
+    expect(body.max_tokens).toBeDefined()
+    expect(body.max_completion_tokens).toBeUndefined()
+  })
+})
