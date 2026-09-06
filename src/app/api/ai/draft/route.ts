@@ -8,6 +8,7 @@ import { generateReply } from '@/lib/ai/generate'
 import { buildSystemPrompt } from '@/lib/ai/defaults'
 import { latestUserMessage } from '@/lib/ai/query'
 import { logAiUsage } from '@/lib/ai/usage'
+import { listAiMediaAssets } from '@/lib/ai/media-assets'
 import { supabaseAdmin } from '@/lib/ai/admin-client'
 import { AiError } from '@/lib/ai/types'
 
@@ -97,14 +98,20 @@ export async function POST(request: Request) {
       config,
       latestUserMessage(messages),
     )
+    const mediaAssets = await listAiMediaAssets(supabase, accountId)
 
     const systemPrompt = buildSystemPrompt({
       userPrompt: config.systemPrompt,
       mode: 'draft',
       knowledge,
+      mediaAssets,
     })
 
-    const { text, usage } = await generateReply({ config, systemPrompt, messages })
+    const { text, usage, mediaAssetId } = await generateReply({
+      config,
+      systemPrompt,
+      messages,
+    })
 
     // Record spend on the account's BYO key. Best-effort + via the
     // service role (the log has no `authenticated` INSERT policy). This
@@ -126,7 +133,21 @@ export async function POST(request: Request) {
       console.error('[ai/draft] usage log skipped:', logErr)
     }
 
-    return NextResponse.json({ draft: text })
+    const asset = mediaAssetId
+      ? mediaAssets.find((a) => a.id === mediaAssetId)
+      : undefined
+    return NextResponse.json({
+      draft: text,
+      media: asset
+        ? {
+            id: asset.id,
+            title: asset.title,
+            kind: asset.kind,
+            media_url: asset.media_url,
+            filename: asset.filename,
+          }
+        : null,
+    })
   } catch (err) {
     if (err instanceof AiError) {
       return NextResponse.json(

@@ -11,6 +11,8 @@ interface Turn {
   content: string;
   /** assistant-only: the agent signalled a human handoff on this turn. */
   handoff?: boolean;
+  /** assistant-only: catalog file the bot would attach. */
+  media?: { title: string; kind: string } | null;
 }
 
 export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
@@ -61,6 +63,12 @@ export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
               ? data.reply
               : '',
           handoff: Boolean(data.handoff),
+          media:
+            data.media &&
+            typeof data.media.title === 'string' &&
+            typeof data.media.kind === 'string'
+              ? { title: data.media.title, kind: data.media.kind }
+              : null,
         },
       ]);
     } catch {
@@ -144,6 +152,16 @@ export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
               )}
             >
               {t.content && <p className="whitespace-pre-wrap">{t.content}</p>}
+              {t.role === 'assistant' && t.media && (
+                <p
+                  className={cn(
+                    'text-xs text-muted-foreground',
+                    t.content && 'mt-1.5 border-t border-border/50 pt-1.5',
+                  )}
+                >
+                  Would send {t.media.kind}: {t.media.title}
+                </p>
+              )}
               {t.role === 'assistant' && t.handoff && (
                 <p
                   className={cn(

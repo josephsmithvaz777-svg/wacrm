@@ -23,6 +23,21 @@ export const AI_PROVIDER_DEFAULT_MODEL: Record<AiProvider, string> = {
  */
 export const HANDOFF_SENTINEL = '[[HANDOFF]]'
 
+/** Model marker to attach one catalog file. Parsed by `parseGeneration`. */
+const SEND_MEDIA_RE =
+  /\[\[SEND_MEDIA:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]\]/gi
+
+export function parseSendMediaId(raw: string): string | null {
+  SEND_MEDIA_RE.lastIndex = 0
+  const match = SEND_MEDIA_RE.exec(raw)
+  return match?.[1]?.toLowerCase() ?? null
+}
+
+export function stripSendMediaMarkers(raw: string): string {
+  SEND_MEDIA_RE.lastIndex = 0
+  return raw.replace(SEND_MEDIA_RE, '').replace(/\n{3,}/g, '\n\n').trim()
+}
+
 /** Cap on generated reply length — keeps WhatsApp replies short and
  *  bounds token spend on the caller's own key. */
 export const MAX_OUTPUT_TOKENS = 1024
@@ -55,8 +70,10 @@ export function buildSystemPrompt(args: {
   mode: 'draft' | 'auto_reply'
   /** Knowledge-base excerpts retrieved for the current question. */
   knowledge?: string[]
+  /** Catalog files the model may attach (id + when-to-send). */
+  mediaAssets?: { id: string; title: string; description: string | null; kind: string }[]
 }): string {
-  const { userPrompt, mode, knowledge } = args
+  const { userPrompt, mode, knowledge, mediaAssets } = args
   const parts: string[] = [
     'You are a customer-messaging assistant for a business that uses a WhatsApp CRM. ' +
       'You are shown the recent WhatsApp conversation between the business (assistant) and a customer (user). ' +
@@ -75,6 +92,18 @@ export function buildSystemPrompt(args: {
 
   if (userPrompt && userPrompt.trim()) {
     parts.push(`Business context and instructions:\n${userPrompt.trim()}`)
+  }
+
+  if (mediaAssets && mediaAssets.length > 0) {
+    parts.push(
+      'You can attach at most one of the business files below. If the customer asks for a flyer, photo, video, audio, brochure, PDF, or a file that clearly matches, write any caption first, then output exactly [[SEND_MEDIA:<id>]] using that file\'s id. Do not invent ids. If none match, reply with text only and no marker.',
+      mediaAssets
+        .map((a) => {
+          const when = a.description?.trim() ? `: ${a.description.trim()}` : ''
+          return `- [${a.kind}] ${a.title} (id: ${a.id})${when}`
+        })
+        .join('\n'),
+    )
   }
 
   if (knowledge && knowledge.length > 0) {

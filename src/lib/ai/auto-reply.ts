@@ -7,7 +7,9 @@ import { buildSystemPrompt } from './defaults'
 import { buildHandoffSummary } from './handoff'
 import { logAiUsage } from './usage'
 import { latestUserMessage } from './query'
+import { listAiMediaAssets } from './media-assets'
 import { engineSendText } from '@/lib/flows/meta-send'
+import { sendMessageToConversation } from '@/lib/whatsapp/send-message'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { runAutomationsForTrigger } from '@/lib/automations/engine'
 import { agentCanReceiveLeads } from '@/lib/assignments/round-robin'
@@ -107,14 +109,16 @@ export async function dispatchInboundToAiReply(
       config,
       latestUserMessage(messages),
     )
+    const mediaAssets = await listAiMediaAssets(db, accountId)
 
     const systemPrompt = buildSystemPrompt({
       userPrompt: config.systemPrompt,
       mode: 'auto_reply',
       knowledge,
+      mediaAssets,
     })
 
-    const { text, handoff, usage } = await generateReply({
+    const { text, handoff, usage, mediaAssetId } = await generateReply({
       config,
       systemPrompt,
       messages,
@@ -134,7 +138,7 @@ export async function dispatchInboundToAiReply(
       usage,
     })
 
-    if (handoff || !text) {
+    if (handoff || (!text && !mediaAssetId)) {
       // The model can't (or shouldn't) answer — stop auto-replying on
       // this thread and hand it to a human. We (a) pause the bot here
       // (sticky until re-enabled), (b) route the conversation to the
@@ -202,6 +206,49 @@ export async function dispatchInboundToAiReply(
       return
     }
     if (claimed !== true) return // lost the per-conversation cap race
+
+    const asset = mediaAssetId
+      ? mediaAssets.find((a) => a.id === mediaAssetId)
+      : undefined
+    if (asset) {
+      try {
+        await sendMessageToConversation(db, accountId, {
+          conversationId,
+          messageType: asset.kind,
+          mediaUrl: asset.media_url,
+          contentText: asset.kind === 'audio' ? null : text || null,
+          filename: asset.filename,
+          senderType: 'bot',
+          aiGenerated: true,
+        })
+      } catch (err) {
+        console.error('[ai auto-reply] media send failed:', err)
+        if (text) {
+          await engineSendText({
+            accountId,
+            userId: configOwnerUserId,
+            conversationId,
+            contactId,
+            text,
+            aiGenerated: true,
+          })
+        }
+        return
+      }
+      if (asset.kind === 'audio' && text) {
+        await engineSendText({
+          accountId,
+          userId: configOwnerUserId,
+          conversationId,
+          contactId,
+          text,
+          aiGenerated: true,
+        })
+      }
+      return
+    }
+
+    if (!text) return
 
     await engineSendText({
       accountId,

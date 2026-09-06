@@ -6,6 +6,7 @@ import { retrieveKnowledge } from '@/lib/ai/knowledge'
 import { generateReply } from '@/lib/ai/generate'
 import { buildSystemPrompt } from '@/lib/ai/defaults'
 import { latestUserMessage } from '@/lib/ai/query'
+import { listAiMediaAssets } from '@/lib/ai/media-assets'
 import { AiError, type ChatMessage } from '@/lib/ai/types'
 
 // Keep the tested transcript bounded, mirroring the live context window.
@@ -78,14 +79,29 @@ export async function POST(request: Request) {
       config,
       latestUserMessage(messages),
     )
+    const mediaAssets = await listAiMediaAssets(supabase, accountId)
     const systemPrompt = buildSystemPrompt({
       userPrompt: config.systemPrompt,
       mode: 'auto_reply',
       knowledge,
+      mediaAssets,
     })
 
-    const { text, handoff } = await generateReply({ config, systemPrompt, messages })
-    return NextResponse.json({ reply: text, handoff })
+    const { text, handoff, mediaAssetId } = await generateReply({
+      config,
+      systemPrompt,
+      messages,
+    })
+    const asset = mediaAssetId
+      ? mediaAssets.find((a) => a.id === mediaAssetId)
+      : undefined
+    return NextResponse.json({
+      reply: text,
+      handoff,
+      media: asset
+        ? { title: asset.title, kind: asset.kind }
+        : null,
+    })
   } catch (err) {
     if (err instanceof AiError) {
       return NextResponse.json(

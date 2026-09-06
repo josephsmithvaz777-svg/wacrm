@@ -43,6 +43,7 @@ describe('parseGeneration', () => {
     expect(parseGeneration('Hello there')).toEqual({
       text: 'Hello there',
       handoff: false,
+      mediaAssetId: null,
       usage: null,
     })
   })
@@ -51,11 +52,13 @@ describe('parseGeneration', () => {
     expect(parseGeneration('[[HANDOFF]]')).toEqual({
       text: '',
       handoff: true,
+      mediaAssetId: null,
       usage: null,
     })
     expect(parseGeneration('Let me get a human [[HANDOFF]]')).toEqual({
       text: 'Let me get a human',
       handoff: true,
+      mediaAssetId: null,
       usage: null,
     })
   })
@@ -65,7 +68,29 @@ describe('parseGeneration', () => {
     expect(parseGeneration('Hi', usage)).toEqual({
       text: 'Hi',
       handoff: false,
+      mediaAssetId: null,
       usage,
+    })
+  })
+
+  it('extracts + strips a send-media marker', () => {
+    const id = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+    expect(parseGeneration(`Aquí va el flyer [[SEND_MEDIA:${id}]]`)).toEqual({
+      text: 'Aquí va el flyer',
+      handoff: false,
+      mediaAssetId: id,
+      usage: null,
+    })
+  })
+
+  it('ignores media when handing off', () => {
+    expect(
+      parseGeneration('[[HANDOFF]] [[SEND_MEDIA:aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee]]'),
+    ).toEqual({
+      text: '',
+      handoff: true,
+      mediaAssetId: null,
+      usage: null,
     })
   })
 })
@@ -89,6 +114,7 @@ describe('generateReply — OpenAI', () => {
     expect(res).toEqual({
       text: 'Sure — happy to help!',
       handoff: false,
+      mediaAssetId: null,
       usage: { promptTokens: 42, completionTokens: 8, totalTokens: 50 },
     })
     const [url, opts] = fetchMock.mock.calls[0]
@@ -148,6 +174,7 @@ describe('generateReply — Anthropic', () => {
     expect(res).toEqual({
       text: 'Hi there!',
       handoff: false,
+      mediaAssetId: null,
       usage: { promptTokens: 30, completionTokens: 6, totalTokens: 36 },
     })
     const [url, opts] = fetchMock.mock.calls[0]
@@ -212,6 +239,7 @@ describe('generateReply — DeepSeek', () => {
     expect(res).toEqual({
       text: 'Claro, te ayudo.',
       handoff: false,
+      mediaAssetId: null,
       usage: { promptTokens: 20, completionTokens: 6, totalTokens: 26 },
     })
     const [url, opts] = fetchMock.mock.calls[0]

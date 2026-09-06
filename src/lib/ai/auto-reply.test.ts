@@ -8,6 +8,8 @@ const h = vi.hoisted(() => ({
   retrieveKnowledge: vi.fn(),
   generateReply: vi.fn(),
   engineSendText: vi.fn(),
+  listAiMediaAssets: vi.fn(),
+  sendMessageToConversation: vi.fn(),
   state: {
     conv: null as Record<string, unknown> | null,
     autoResponders: [] as { id: string }[],
@@ -22,7 +24,11 @@ vi.mock('./config', () => ({ loadAiConfig: h.loadAiConfig }))
 vi.mock('./context', () => ({ buildConversationContext: h.buildConversationContext }))
 vi.mock('./knowledge', () => ({ retrieveKnowledge: h.retrieveKnowledge }))
 vi.mock('./generate', () => ({ generateReply: h.generateReply }))
+vi.mock('./media-assets', () => ({ listAiMediaAssets: h.listAiMediaAssets }))
 vi.mock('@/lib/flows/meta-send', () => ({ engineSendText: h.engineSendText }))
+vi.mock('@/lib/whatsapp/send-message', () => ({
+  sendMessageToConversation: h.sendMessageToConversation,
+}))
 vi.mock('@/lib/automations/engine', () => ({
   runAutomationsForTrigger: vi.fn(async () => undefined),
 }))
@@ -111,8 +117,17 @@ beforeEach(() => {
   h.loadAiConfig.mockResolvedValue(aiConfig())
   h.buildConversationContext.mockResolvedValue([{ role: 'user', content: 'hi' }])
   h.retrieveKnowledge.mockResolvedValue([])
-  h.generateReply.mockResolvedValue({ text: 'Hello!', handoff: false })
+  h.listAiMediaAssets.mockResolvedValue([])
+  h.generateReply.mockResolvedValue({
+    text: 'Hello!',
+    handoff: false,
+    mediaAssetId: null,
+  })
   h.engineSendText.mockResolvedValue({ whatsapp_message_id: 'm1' })
+  h.sendMessageToConversation.mockResolvedValue({
+    messageId: 'row-1',
+    whatsappMessageId: 'm1',
+  })
 })
 
 describe('dispatchInboundToAiReply — eligibility gates', () => {
@@ -234,5 +249,40 @@ describe('dispatchInboundToAiReply — handoff', () => {
     await dispatchInboundToAiReply(ARGS)
     expect(h.state.updatePayload).toMatchObject({ ai_autoreply_disabled: true })
     expect(h.state.updatePayload).not.toHaveProperty('assigned_agent_id')
+  })
+})
+
+describe('dispatchInboundToAiReply — media', () => {
+  const flyer = {
+    id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+    title: 'Flyer Bosques del Sol',
+    description: 'Cuando pidan información del proyecto',
+    kind: 'image' as const,
+    media_url: 'https://example.com/flyer.jpg',
+    storage_path: 'account-x/flyer.jpg',
+    filename: 'flyer.jpg',
+  }
+
+  it('sends a catalog image with the caption', async () => {
+    h.listAiMediaAssets.mockResolvedValue([flyer])
+    h.generateReply.mockResolvedValue({
+      text: 'Te envío el flyer',
+      handoff: false,
+      mediaAssetId: flyer.id,
+    })
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.sendMessageToConversation).toHaveBeenCalledWith(
+      expect.anything(),
+      'acct-1',
+      expect.objectContaining({
+        conversationId: 'conv-1',
+        messageType: 'image',
+        mediaUrl: flyer.media_url,
+        contentText: 'Te envío el flyer',
+        senderType: 'bot',
+        aiGenerated: true,
+      }),
+    )
+    expect(h.engineSendText).not.toHaveBeenCalled()
   })
 })

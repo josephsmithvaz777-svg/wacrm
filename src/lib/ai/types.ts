@@ -61,10 +61,12 @@ export interface ProviderResult {
 
 /** Outcome of a generation call. */
 export interface GenerateResult {
-  /** The reply text, with any handoff sentinel stripped. */
+  /** The reply text, with any handoff / media sentinels stripped. */
   text: string
   /** True when the model asked to hand off to a human (auto-reply mode). */
   handoff: boolean
+  /** Catalog asset the model asked to attach, or null. */
+  mediaAssetId: string | null
   /** Provider token usage for this call, or null when unavailable. */
   usage: AiUsage | null
 }

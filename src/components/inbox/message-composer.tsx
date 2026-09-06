@@ -282,8 +282,36 @@ export function MessageComposer({
         return;
       }
       const draftText = typeof data.draft === "string" ? data.draft.trim() : "";
-      if (!draftText) {
+      const media = data.media;
+      const mediaKind =
+        media &&
+        typeof media.kind === "string" &&
+        typeof media.media_url === "string" &&
+        media.media_url
+          ? media.kind
+          : null;
+      if (!draftText && !mediaKind) {
         toast.error("The assistant didn't return a reply.");
+        return;
+      }
+      if (
+        mediaKind === "image" ||
+        mediaKind === "video" ||
+        mediaKind === "audio" ||
+        mediaKind === "document"
+      ) {
+        removeStaged(draftRef.current?.path);
+        setDraft({
+          kind: mediaKind,
+          mediaUrl: media.media_url as string,
+          path: "",
+          filename:
+            (typeof media.filename === "string" && media.filename) ||
+            (typeof media.title === "string" && media.title) ||
+            "file",
+          caption: draftText,
+        });
+        setText("");
         return;
       }
       setText(draftText);
@@ -302,7 +330,7 @@ export function MessageComposer({
     } finally {
       setDrafting(false);
     }
-  }, [drafting, conversationId, adjustHeight]);
+  }, [drafting, conversationId, adjustHeight, removeStaged]);
 
   // ---- Interactive message + quick replies --------------------------
 

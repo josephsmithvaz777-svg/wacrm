@@ -5,7 +5,12 @@ import {
   type ChatMessage,
   type GenerateResult,
 } from './types'
-import { HANDOFF_SENTINEL, aiRequestTimeoutMs } from './defaults'
+import {
+  HANDOFF_SENTINEL,
+  aiRequestTimeoutMs,
+  parseSendMediaId,
+  stripSendMediaMarkers,
+} from './defaults'
 import { generateOpenAi } from './providers/openai'
 import { generateAnthropic } from './providers/anthropic'
 import { generateDeepSeek } from './providers/deepseek'
@@ -67,6 +72,7 @@ export function parseGeneration(
   usage: AiUsage | null = null,
 ): GenerateResult {
   const handoff = raw.includes(HANDOFF_SENTINEL)
-  const text = raw.split(HANDOFF_SENTINEL).join('').trim()
-  return { text, handoff, usage }
+  const mediaAssetId = handoff ? null : parseSendMediaId(raw)
+  const text = stripSendMediaMarkers(raw.split(HANDOFF_SENTINEL).join('')).trim()
+  return { text, handoff, mediaAssetId, usage }
 }
