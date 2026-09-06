@@ -1447,6 +1447,51 @@
       "tagNone": "{mode} tag (none picked)"
     }
   },
+  "Agents": {
+    "page": {
+      "title": "AI Agents",
+      "description": "Your bring-your-own-key AI agent — set it up, then test it in the playground before it replies to customers in the inbox.",
+      "tabPlayground": "Playground",
+      "tabSetup": "Setup",
+      "tabUsage": "Usage"
+    },
+    "playground": {
+      "title": "Playground",
+      "subtitle": "— test replies as if you were a customer",
+      "reset": "Reset",
+      "emptyTitle": "Send a message to see how your agent would reply.",
+      "emptyHint": "It uses your knowledge base and files, and behaves like the auto-reply bot — including handoff.",
+      "goToSetup": "Not set up yet? Go to Setup",
+      "notConfigured": "No agent configured yet — finish Setup first.",
+      "replyFailed": "Couldn't get a reply.",
+      "networkError": "Couldn't reach the agent.",
+      "wouldSendMedia": "Would send {kind}: {title}",
+      "kindImage": "image",
+      "kindVideo": "video",
+      "kindAudio": "audio",
+      "kindDocument": "document",
+      "wouldHandoff": "Would hand off to a human here",
+      "thinking": "Thinking…",
+      "inputPlaceholder": "Type a customer message…"
+    },
+    "usage": {
+      "title": "Token usage",
+      "description": "Tokens spent on your provider key by drafts and the auto-reply bot. Counts only — no message content is stored here.",
+      "loadFailed": "Failed to load usage",
+      "lastDays": "Last {days} days",
+      "empty": "No AI usage in the last {days} days yet.",
+      "emptyHint": "This fills in as the assistant drafts and auto-replies.",
+      "totalTokens": "Total tokens",
+      "llmCalls": "LLM calls",
+      "autoReply": "Auto-reply",
+      "drafts": "Drafts",
+      "tokensPerDay": "Tokens per day",
+      "tokens": "Tokens",
+      "byModel": "By model",
+      "modelRow": "{tokens} tok · {calls, plural, one {# call} other {# calls}}",
+      "truncated": "Showing a partial window — usage is high enough that only the most recent records are summarized here."
+    }
+  },
   "Settings": {
     "pageTitle": "Settings",
     "pageDesc": "Everything in one place — your account and your workspace. Pick a section to manage it.",
@@ -1965,6 +2010,7 @@
       "description": "Bring your own OpenAI, Anthropic, or DeepSeek key. wacrm calls the provider directly with your key — no per-seat AI fees, and your data stays yours. This powers AI-drafted replies in the inbox, the auto-reply bot, and the Playground.",
       "adminOnlyConfig": "Only admins and owners can change the AI configuration.",
       "loadFailed": "Failed to load AI configuration",
+      "loading": "Loading…",
       "providerAndKey": "Provider & key",
       "encryptionNotice": "Your key is encrypted at rest (AES-256-GCM) and never shown again after saving.",
       "provider": "Provider",
