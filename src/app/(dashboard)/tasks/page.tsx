@@ -7,9 +7,11 @@ import { useTranslations } from "next-intl";
 
 import { TaskCalendar } from "@/components/tasks/task-calendar";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/use-auth";
 import { useCan } from "@/hooks/use-can";
 import { formatAlertDateTime } from "@/lib/automations/template-vars";
 import { createClient } from "@/lib/supabase/client";
+import { taskTone } from "@/lib/tasks/calendar";
 import { cn } from "@/lib/utils";
 import type { LeadTask } from "@/types";
 
@@ -18,6 +20,7 @@ type TasksView = "list" | "day" | "week" | "month";
 export default function TasksPage() {
   const t = useTranslations("Tasks.page");
   const canEdit = useCan("send-messages");
+  const { account } = useAuth();
   const [tasks, setTasks] = useState<LeadTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDone, setShowDone] = useState(false);
@@ -41,6 +44,22 @@ export default function TasksPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const completeTask = useCallback(
+    async (task: LeadTask, result: string) => {
+      if (!canEdit) return;
+      const supabase = createClient();
+      await supabase
+        .from("lead_tasks")
+        .update({
+          completed_at: new Date().toISOString(),
+          result: result.trim() || null,
+        })
+        .eq("id", task.id);
+      await load();
+    },
+    [canEdit, load],
+  );
 
   const toggleDone = useCallback(
     async (task: LeadTask) => {
@@ -119,6 +138,9 @@ export default function TasksPage() {
               view={view}
               anchor={anchor}
               onAnchorChange={setAnchor}
+              canEdit={canEdit}
+              accountName={account?.name}
+              onComplete={completeTask}
             />
           )
         ) : tasks.length === 0 ? (
@@ -135,6 +157,7 @@ export default function TasksPage() {
           <ul className="space-y-2">
             {tasks.map((task) => {
               const done = Boolean(task.completed_at);
+              const tone = taskTone(task);
               const contactName =
                 task.contact?.name?.trim() ||
                 task.contact?.phone ||
@@ -145,7 +168,12 @@ export default function TasksPage() {
               return (
                 <li
                   key={task.id}
-                  className="flex items-start gap-3 rounded-xl border border-border bg-card px-3 py-3"
+                  className={cn(
+                    "flex items-start gap-3 rounded-xl border bg-card px-3 py-3",
+                    tone === "overdue" && "border-red-500/40",
+                    tone === "done" && "border-emerald-500/40",
+                    tone === "open" && "border-border",
+                  )}
                 >
                   <button
                     type="button"
@@ -154,8 +182,10 @@ export default function TasksPage() {
                     className={cn(
                       "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border",
                       done
-                        ? "border-primary bg-primary"
-                        : "border-border bg-background",
+                        ? "border-emerald-500 bg-emerald-500"
+                        : tone === "overdue"
+                          ? "border-red-500 bg-background"
+                          : "border-border bg-background",
                       !canEdit && "opacity-60",
                     )}
                     aria-label={done ? t("markOpen") : t("markDone")}
@@ -163,8 +193,10 @@ export default function TasksPage() {
                   <div className="min-w-0 flex-1">
                     <p
                       className={cn(
-                        "text-sm text-foreground",
-                        done && "text-muted-foreground line-through",
+                        "text-sm",
+                        tone === "done" && "text-emerald-400 line-through",
+                        tone === "overdue" && "text-red-400",
+                        tone === "open" && "text-foreground",
                       )}
                     >
                       {task.icon ? (
@@ -174,7 +206,14 @@ export default function TasksPage() {
                       ) : null}
                       {task.title}
                     </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
+                    <p
+                      className={cn(
+                        "mt-0.5 text-xs",
+                        tone === "overdue" && "text-red-400",
+                        tone === "done" && "text-emerald-400",
+                        tone === "open" && "text-muted-foreground",
+                      )}
+                    >
                       {contactName}
                       {task.due_at
                         ? ` · ${t("due", { date: formatAlertDateTime(new Date(task.due_at)) })}`

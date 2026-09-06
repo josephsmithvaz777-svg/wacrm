@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { enUS, es, ko } from "date-fns/locale";
 import { format } from "date-fns";
 
+import { TaskEventChip } from "@/components/tasks/task-event-card";
 import { Button } from "@/components/ui/button";
 import {
   CALENDAR_HOUR_END,
@@ -24,55 +24,22 @@ import type { LeadTask } from "@/types";
 
 const DATE_LOCALE = { en: enUS, es, ko } as const;
 
-function leadLabel(task: LeadTask, fallback: string): string {
-  return task.contact?.name?.trim() || task.contact?.phone || fallback;
-}
-
-function chatHref(task: LeadTask): string {
-  return task.conversation_id ? `/inbox?c=${task.conversation_id}` : "/inbox";
-}
-
-function EventChip({
-  task,
-  fallbackLead,
-  className,
-}: {
-  task: LeadTask;
-  fallbackLead: string;
-  className?: string;
-}) {
-  const done = Boolean(task.completed_at);
-  return (
-    <Link
-      href={chatHref(task)}
-      className={cn(
-        "block overflow-hidden rounded-md bg-primary/85 px-1.5 py-0.5 text-[11px] leading-tight text-primary-foreground hover:bg-primary",
-        done && "bg-muted text-muted-foreground line-through hover:bg-muted",
-        className,
-      )}
-      title={`${task.icon ? `${task.icon} ` : ""}${task.title} · ${leadLabel(task, fallbackLead)}`}
-    >
-      <span className="block truncate font-medium">
-        {task.icon ? `${task.icon} ` : ""}
-        {task.title}
-      </span>
-      <span className="block truncate opacity-90">
-        {leadLabel(task, fallbackLead)}
-      </span>
-    </Link>
-  );
-}
-
 export function TaskCalendar({
   tasks,
   view,
   anchor,
   onAnchorChange,
+  canEdit,
+  accountName,
+  onComplete,
 }: {
   tasks: LeadTask[];
   view: "day" | "week" | "month";
   anchor: Date;
   onAnchorChange: (next: Date) => void;
+  canEdit: boolean;
+  accountName?: string | null;
+  onComplete: (task: LeadTask, result: string) => Promise<void>;
 }) {
   const t = useTranslations("Tasks.page");
   const locale = useLocale();
@@ -158,10 +125,13 @@ export function TaskCalendar({
                 </p>
                 <div className="space-y-1">
                   {items.slice(0, 3).map((task) => (
-                    <EventChip
+                    <TaskEventChip
                       key={task.id}
                       task={task}
                       fallbackLead={fallbackLead}
+                      accountName={accountName}
+                      canEdit={canEdit}
+                      onComplete={onComplete}
                     />
                   ))}
                   {extra > 0 ? (
@@ -249,9 +219,12 @@ export function TaskCalendar({
                           height: CALENDAR_HOUR_HEIGHT - 6,
                         }}
                       >
-                        <EventChip
+                        <TaskEventChip
                           task={task}
                           fallbackLead={fallbackLead}
+                          accountName={accountName}
+                          canEdit={canEdit}
+                          onComplete={onComplete}
                           className="h-full"
                         />
                       </div>

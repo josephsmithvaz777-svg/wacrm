@@ -663,7 +663,15 @@
       "next": "다음",
       "moreCount": "+{count}개 더",
       "emptyCalendarTitle": "날짜가 있는 작업 없음",
-      "emptyCalendarBody": "채팅에서 작업을 만들 때 날짜와 시간을 지정하면 캘린더에 표시됩니다."
+      "emptyCalendarBody": "채팅에서 작업을 만들 때 날짜와 시간을 지정하면 캘린더에 표시됩니다.",
+      "dueYesterday": "어제 {time}",
+      "dueToday": "오늘 {time}",
+      "dueTomorrow": "내일 {time}",
+      "dueOnDate": "{date} {time}",
+      "daysOverdue": "({count}일)",
+      "forAccount": "{name}",
+      "resultPlaceholder": "결과 추가",
+      "completeTask": "작업 완료"
     },
     "panel": {
       "title": "작업",

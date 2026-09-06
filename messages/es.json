@@ -685,7 +685,15 @@
       "next": "Siguiente",
       "moreCount": "+{count} más",
       "emptyCalendarTitle": "No hay tareas con fecha",
-      "emptyCalendarBody": "Pon fecha y hora al crear la tarea en el chat para verla en el calendario."
+      "emptyCalendarBody": "Pon fecha y hora al crear la tarea en el chat para verla en el calendario.",
+      "dueYesterday": "Ayer {time}",
+      "dueToday": "Hoy {time}",
+      "dueTomorrow": "Mañana {time}",
+      "dueOnDate": "{date} {time}",
+      "daysOverdue": "({count, plural, one {# día} other {# días}})",
+      "forAccount": "para {name}",
+      "resultPlaceholder": "Agregar resultado",
+      "completeTask": "Completar una tarea"
     },
     "panel": {
       "title": "Tareas",

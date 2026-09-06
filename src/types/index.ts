@@ -183,6 +183,7 @@ export interface LeadTask {
   icon?: string | null;
   due_at?: string | null;
   reminder_sent_at?: string | null;
+  result?: string | null;
   completed_at?: string | null;
   created_at: string;
   updated_at?: string;

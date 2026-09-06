@@ -664,7 +664,15 @@
       "next": "Next",
       "moreCount": "+{count} more",
       "emptyCalendarTitle": "No dated tasks",
-      "emptyCalendarBody": "Set a date and time when you create the task in chat to see it on the calendar."
+      "emptyCalendarBody": "Set a date and time when you create the task in chat to see it on the calendar.",
+      "dueYesterday": "Yesterday {time}",
+      "dueToday": "Today {time}",
+      "dueTomorrow": "Tomorrow {time}",
+      "dueOnDate": "{date} {time}",
+      "daysOverdue": "({count, plural, one {# day} other {# days}})",
+      "forAccount": "for {name}",
+      "resultPlaceholder": "Add result",
+      "completeTask": "Complete task"
     },
     "panel": {
       "title": "Tasks",

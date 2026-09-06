@@ -5,6 +5,7 @@ import {
   dueHourOffset,
   isSameLocalDay,
   monthGridDays,
+  taskTone,
   tasksDueOnDay,
   weekDays,
 } from "./calendar";
@@ -65,5 +66,28 @@ describe("isSameLocalDay", () => {
     expect(
       isSameLocalDay(new Date(2026, 8, 6, 0, 1), new Date(2026, 8, 6, 23, 59)),
     ).toBe(true);
+  });
+});
+
+describe("taskTone", () => {
+  it("is overdue when the due instant is in the past and open", () => {
+    expect(
+      taskTone(
+        { due_at: "2026-09-01T10:00:00.000Z", completed_at: null },
+        new Date("2026-09-06T18:00:00.000Z"),
+      ),
+    ).toBe("overdue");
+  });
+
+  it("is done even if the due instant is in the past", () => {
+    expect(
+      taskTone(
+        {
+          due_at: "2026-09-01T10:00:00.000Z",
+          completed_at: "2026-09-01T12:00:00.000Z",
+        },
+        new Date("2026-09-06T18:00:00.000Z"),
+      ),
+    ).toBe("done");
   });
 });

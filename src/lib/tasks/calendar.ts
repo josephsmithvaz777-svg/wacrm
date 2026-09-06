@@ -2,9 +2,13 @@ import {
   addDays,
   addMonths,
   addWeeks,
+  differenceInCalendarDays,
   eachDayOfInterval,
   endOfMonth,
   endOfWeek,
+  isToday,
+  isTomorrow,
+  isYesterday,
   startOfMonth,
   startOfWeek,
 } from "date-fns";
@@ -66,4 +70,52 @@ export function hourLabels(): number[] {
   const hours: number[] = [];
   for (let h = CALENDAR_HOUR_START; h <= CALENDAR_HOUR_END; h++) hours.push(h);
   return hours;
+}
+
+export type TaskTone = "done" | "overdue" | "open";
+
+export function taskTone(
+  task: Pick<LeadTask, "completed_at" | "due_at">,
+  now: Date = new Date(),
+): TaskTone {
+  if (task.completed_at) return "done";
+  if (task.due_at && new Date(task.due_at).getTime() < now.getTime()) {
+    return "overdue";
+  }
+  return "open";
+}
+
+export function taskToneClass(tone: TaskTone): string {
+  if (tone === "done") return "bg-emerald-600 text-white hover:bg-emerald-500";
+  if (tone === "overdue") return "bg-red-600 text-white hover:bg-red-500";
+  return "bg-primary/85 text-primary-foreground hover:bg-primary";
+}
+
+export type DueRelativeKind = "yesterday" | "today" | "tomorrow" | "date";
+
+export function dueRelativeParts(
+  due: Date,
+  now: Date = new Date(),
+): {
+  kind: DueRelativeKind;
+  time: string;
+  date: string;
+  overdueDays: number;
+  isPast: boolean;
+} {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const kind: DueRelativeKind = isYesterday(due)
+    ? "yesterday"
+    : isToday(due)
+      ? "today"
+      : isTomorrow(due)
+        ? "tomorrow"
+        : "date";
+  return {
+    kind,
+    time: `${pad(due.getHours())}:${pad(due.getMinutes())}`,
+    date: `${pad(due.getDate())}/${pad(due.getMonth() + 1)}/${due.getFullYear()}`,
+    overdueDays: Math.max(0, differenceInCalendarDays(now, due)),
+    isPast: due.getTime() < now.getTime(),
+  };
 }

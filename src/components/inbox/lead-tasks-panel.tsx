@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { formatAlertDateTime } from "@/lib/automations/template-vars";
 import { combineLocalDateAndTime } from "@/lib/datetime/zoned";
 import { createClient } from "@/lib/supabase/client";
+import { taskTone } from "@/lib/tasks/calendar";
 import { cn } from "@/lib/utils";
 import type { LeadTask } from "@/types";
 
@@ -208,6 +209,7 @@ export function LeadTasksPanel({
         ) : (
           tasks.map((task) => {
             const done = Boolean(task.completed_at);
+            const tone = taskTone(task);
             const dueLabel = task.due_at
               ? formatAlertDateTime(new Date(task.due_at))
               : null;
@@ -234,8 +236,10 @@ export function LeadTasksPanel({
                 <div className="min-w-0 flex-1">
                   <p
                     className={cn(
-                      "text-xs text-foreground",
-                      done && "text-muted-foreground line-through",
+                      "text-xs",
+                      tone === "done" && "text-emerald-400 line-through",
+                      tone === "overdue" && "text-red-400",
+                      tone === "open" && "text-foreground",
                     )}
                   >
                     {task.icon ? (
@@ -246,7 +250,14 @@ export function LeadTasksPanel({
                     {task.title}
                   </p>
                   {dueLabel ? (
-                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    <p
+                      className={cn(
+                        "mt-0.5 text-[10px]",
+                        tone === "overdue" && "text-red-400",
+                        tone === "done" && "text-emerald-400",
+                        tone === "open" && "text-muted-foreground",
+                      )}
+                    >
                       {t("due", { date: dueLabel })}
                     </p>
                   ) : null}
