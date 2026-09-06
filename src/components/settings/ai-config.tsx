@@ -248,6 +248,14 @@ export function AiConfig() {
   }
 
   const disabled = !canEdit || saving;
+  const assignable = assignableMembers(members);
+  const selectedHandoffMember = assignable.find((m) => m.user_id === handoffAgentId);
+  const handoffSelectValue = selectedHandoffMember
+    ? selectedHandoffMember.user_id
+    : HANDOFF_QUEUE;
+  const handoffSelectLabel = selectedHandoffMember
+    ? memberLabel(selectedHandoffMember)
+    : t('handoffQueue');
 
   return (
     <div>
@@ -494,27 +502,20 @@ export function AiConfig() {
                 {t('handoffToDesc')}
               </p>
               <Select
-                value={
-                  handoffAgentId &&
-                  assignableMembers(members).some(
-                    (m) => m.user_id === handoffAgentId,
-                  )
-                    ? handoffAgentId
-                    : HANDOFF_QUEUE
-                }
+                value={handoffSelectValue}
                 onValueChange={(v) =>
                   setHandoffAgentId(!v || v === HANDOFF_QUEUE ? '' : v)
                 }
                 disabled={disabled || !autoReplyEnabled}
               >
                 <SelectTrigger id="ai-handoff">
-                  <SelectValue />
+                  <SelectValue>{handoffSelectLabel}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={HANDOFF_QUEUE}>
                     {t('handoffQueue')}
                   </SelectItem>
-                  {assignableMembers(members).map((m) => (
+                  {assignable.map((m) => (
                     <SelectItem key={m.user_id} value={m.user_id}>
                       {memberLabel(m)}
                     </SelectItem>
