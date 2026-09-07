@@ -268,6 +268,7 @@
       "showContact": "Show contact",
       "refresh": "Actualizar",
       "refreshConversation": "Refresh conversation",
+      "noPhone": "Sin número (WhatsApp)",
       "status": "Estado",
       "statusOpen": "Abierta",
       "statusPending": "Pendiente",
@@ -288,7 +289,7 @@
       "expired": "Expired",
       "xhRemaining": "{hours}h remaining",
       "xmRemaining": "{minutes}m remaining",
-      "noCustomerMessages": "No customer messages"
+      "noCustomerMessages": "Sin mensajes del cliente"
     },
     "composer": {
       "draftHint": "Tap the ✨ to draft a reply with AI — you can edit it before sending",

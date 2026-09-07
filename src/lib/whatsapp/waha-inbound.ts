@@ -25,6 +25,11 @@ import { dispatchInboundToFlows } from '@/lib/flows/engine';
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply';
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver';
 import { extractAdContext } from '@/lib/whatsapp/ad-context';
+import {
+  extractWhatsAppUsername,
+  normalizeWhatsAppJid,
+} from '@/lib/whatsapp/contact-identity';
+import { isRealMobilePhone } from '@/lib/whatsapp/phone-utils';
 import { mimeToContentType, persistAdCreativeSafe, uploadWahaMedia } from '@/lib/whatsapp/waha-media';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -50,24 +55,59 @@ function isPlaceholderContactName(name: string | null | undefined, phone: string
   return !isUsableDisplayName(name, phone);
 }
 
+async function findContactByJidOrUsername(
+  accountId: string,
+  jid: string | null,
+  username: string | null,
+) {
+  if (jid) {
+    const { data } = await admin()
+      .from('contacts')
+      .select('*')
+      .eq('account_id', accountId)
+      .eq('whatsapp_jid', jid)
+      .maybeSingle();
+    if (data) return data;
+  }
+  if (username) {
+    const { data } = await admin()
+      .from('contacts')
+      .select('*')
+      .eq('account_id', accountId)
+      .ilike('whatsapp_username', username)
+      .maybeSingle();
+    if (data) return data;
+  }
+  return null;
+}
+
 async function findOrCreateContact(
   accountId: string,
   ownerUserId: string,
   phone: string,
   name: string,
+  identity?: { jid?: string | null; username?: string | null },
 ) {
-  const existing = await findExistingContact(admin(), accountId, phone);
+  const jid = identity?.jid ?? null;
+  const username = identity?.username ?? null;
+  const existing =
+    (await findExistingContact(admin(), accountId, phone)) ||
+    (await findContactByJidOrUsername(accountId, jid, username));
   if (existing) {
-    const shouldUpdate =
+    const patch: Record<string, unknown> = {};
+    if (
       name &&
       !isPlaceholderContactName(name, phone) &&
-      (name !== existing.name || isPlaceholderContactName(existing.name, phone));
-    if (shouldUpdate && name !== existing.name) {
-      await admin()
-        .from('contacts')
-        .update({ name, updated_at: new Date().toISOString() })
-        .eq('id', existing.id);
-      return { contact: { ...existing, name }, wasCreated: false };
+      (name !== existing.name || isPlaceholderContactName(existing.name, phone))
+    ) {
+      patch.name = name;
+    }
+    if (jid && !existing.whatsapp_jid) patch.whatsapp_jid = jid;
+    if (username && !existing.whatsapp_username) patch.whatsapp_username = username;
+    if (Object.keys(patch).length > 0) {
+      patch.updated_at = new Date().toISOString();
+      await admin().from('contacts').update(patch).eq('id', existing.id);
+      return { contact: { ...existing, ...patch }, wasCreated: false };
     }
     return { contact: existing, wasCreated: false };
   }
@@ -78,6 +118,8 @@ async function findOrCreateContact(
       account_id: accountId,
       user_id: ownerUserId,
       phone,
+      whatsapp_jid: jid,
+      whatsapp_username: username,
       name: name || phone,
     })
     .select()
@@ -85,7 +127,9 @@ async function findOrCreateContact(
 
   if (error) {
     if (isUniqueViolation(error)) {
-      const raced = await findExistingContact(admin(), accountId, phone);
+      const raced =
+        (await findExistingContact(admin(), accountId, phone)) ||
+        (await findContactByJidOrUsername(accountId, jid, username));
       if (raced) return { contact: raced, wasCreated: false };
     }
     console.error('[waha-inbound] contact create failed:', error);
@@ -390,18 +434,26 @@ export async function processWahaEvent(
         .eq('account_id', config.account_id)
         .eq('provider', 'waha');
 
-      const fromPayload = extractInboundDisplayName(payload, phone);
+      const fromPayload = fromMe
+        ? null
+        : extractInboundDisplayName(payload, phone);
       const fromApi =
         (isUsableDisplayName(fromPayload, phone) ? fromPayload : null) ||
         (await fetchContactDisplayName(opts, resolved.chatId, phone)) ||
         (await fetchContactDisplayName(opts, phone, phone));
-      const pushName = fromApi || phone;
+      const username =
+        extractWhatsAppUsername(payload) ||
+        (fromApi ? extractWhatsAppUsername({ notifyName: fromApi }) : null);
+      const jid = normalizeWhatsAppJid(resolved.chatId);
+      const pushName =
+        fromApi || (username ? `@${username}` : phone);
 
       const createdContact = await findOrCreateContact(
         config.account_id,
         config.user_id,
         phone,
         pushName,
+        { jid, username },
       );
       if (createdContact) {
         contactOutcome = {

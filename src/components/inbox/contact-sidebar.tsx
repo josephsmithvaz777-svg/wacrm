@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { DealForm } from "@/components/pipelines/deal-form";
 import { LeadTasksPanel } from "@/components/inbox/lead-tasks-panel";
 import { useCan } from "@/hooks/use-can";
+import { contactIdentityLabel, contactDisplayName } from "@/lib/whatsapp/contact-identity";
 import type {
   Contact,
   Deal,
@@ -166,8 +167,13 @@ export function ContactSidebar({
   );
 
   const handleCopyPhone = useCallback(async () => {
-    if (!contact?.phone) return;
-    await navigator.clipboard.writeText(contact.phone);
+    if (!contact) return;
+    const value =
+      contact.whatsapp_username
+        ? `@${contact.whatsapp_username}`
+        : contact.whatsapp_jid || contact.phone;
+    if (!value) return;
+    await navigator.clipboard.writeText(value);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [contact]);
@@ -343,7 +349,7 @@ export function ContactSidebar({
     );
   }
 
-  const displayName = contact.name || contact.phone;
+  const displayName = contactDisplayName(contact, tThread("noPhone"));
   const initials = displayName.charAt(0).toUpperCase();
   const dealFormStages = stagesByPipeline[dealFormPipelineId] ?? [];
 
@@ -445,7 +451,9 @@ export function ContactSidebar({
               className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted"
             >
               <Phone className="h-4 w-4 text-muted-foreground" />
-              <span className="flex-1 text-left">{contact.phone}</span>
+              <span className="flex-1 text-left">
+                {contactIdentityLabel(contact, tThread("noPhone"))}
+              </span>
               {copied ? (
                 <Check className="h-3 w-3 text-primary" />
               ) : (

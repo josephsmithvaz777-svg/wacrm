@@ -47,6 +47,7 @@ import {
   phoneVariants,
   isRecipientNotAllowedError,
 } from '@/lib/whatsapp/phone-utils';
+import { wahaSendTarget } from '@/lib/whatsapp/contact-identity';
 import type { MessageTemplate } from '@/types';
 import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard';
 import { isUniqueViolation } from '@/lib/contacts/dedupe';
@@ -243,22 +244,15 @@ export async function sendMessageToConversation(
   }
 
   const contact = conversation.contact;
-  if (!contact?.phone) {
+  if (!contact) {
     throw new SendMessageError(
       'bad_request',
-      'Contact phone number not found',
+      'Contact not found',
       400
     );
   }
 
-  const sanitizedPhone = sanitizePhoneForMeta(contact.phone);
-  if (!isValidE164(sanitizedPhone)) {
-    throw new SendMessageError(
-      'bad_request',
-      'Invalid phone number format',
-      400
-    );
-  }
+  const sanitizedPhone = sanitizePhoneForMeta(contact.phone ?? '');
 
   // WhatsApp config, account-scoped.
   const { data: config, error: configError } = await db
@@ -277,6 +271,22 @@ export async function sendMessageToConversation(
 
   const provider = (config.provider as string | undefined) || 'meta';
   const accessToken = config.access_token ? decrypt(config.access_token) : '';
+
+  if (provider !== 'waha' && !isValidE164(sanitizedPhone)) {
+    throw new SendMessageError(
+      'bad_request',
+      'Invalid phone number format',
+      400,
+    );
+  }
+  const wahaChatId = wahaSendTarget(contact);
+  if (provider === 'waha' && !wahaChatId) {
+    throw new SendMessageError(
+      'bad_request',
+      'This lead has no WhatsApp chat id to send to.',
+      400,
+    );
+  }
 
   // Self-heal legacy CBC ciphertexts. Fire-and-forget; idempotent.
   if (config.access_token && isLegacyFormat(config.access_token)) {
@@ -341,13 +351,14 @@ export async function sendMessageToConversation(
       apiKey: accessToken || null,
       session: (config.waha_session as string) || 'default',
     };
+    const chatId = wahaChatId;
 
     let waMessageId = '';
     try {
       if (isMediaKind) {
         const result = await sendWahaMedia(
           wahaOpts,
-          sanitizedPhone,
+          chatId,
           messageType as MediaKind,
           mediaUrl!,
           contentText,
@@ -357,7 +368,7 @@ export async function sendMessageToConversation(
       } else {
         const result = await sendWahaText(
           wahaOpts,
-          sanitizedPhone,
+          chatId,
           contentText!,
           contextMessageId,
         );

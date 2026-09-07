@@ -865,6 +865,7 @@ export async function fetchContactDisplayName(
       'shortName',
       'shortname',
       'verifiedName',
+      'username',
     ]) {
       const v = json[key];
       if (typeof v === 'string' && isUsableDisplayName(v, phoneHint)) {
