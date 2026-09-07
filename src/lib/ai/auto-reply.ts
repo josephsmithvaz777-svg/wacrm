@@ -8,7 +8,6 @@ import { buildHandoffSummary } from './handoff'
 import { logAiUsage } from './usage'
 import { latestUserMessage } from './query'
 import { listAiMediaAssets } from './media-assets'
-import { engineSendText } from '@/lib/flows/meta-send'
 import { sendMessageToConversation } from '@/lib/whatsapp/send-message'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { performAiHandoff } from './perform-handoff'
@@ -18,8 +17,7 @@ interface DispatchArgs {
   accountId: string
   conversationId: string
   contactId: string
-  /** The account's WhatsApp config owner, used for the outbound send's
-   *  audit columns (mirrors how the flow runner passes it through). */
+  /** WhatsApp config owner on the account. Kept on the call site. */
   configOwnerUserId: string
 }
 
@@ -45,7 +43,7 @@ interface DispatchArgs {
 export async function dispatchInboundToAiReply(
   args: DispatchArgs,
 ): Promise<void> {
-  const { accountId, conversationId, contactId, configOwnerUserId } = args
+    const { accountId, conversationId, contactId } = args
 
   try {
     const db = supabaseAdmin()
@@ -79,8 +77,19 @@ export async function dispatchInboundToAiReply(
     if (conv.assigned_agent_id) return // a human owns this thread
     if (conv.ai_autoreply_disabled) return // handed off / turned off here
     // Cheap early-out; the authoritative cap check is the atomic claim
-    // below (this read can race a concurrent inbound).
-    if (conv.ai_reply_count >= config.autoReplyMaxPerConversation) return
+    // below (this read can race a concurrent inbound). At the cap the
+    // bot must not go quiet unassigned — hand the thread to an advisor.
+    if (conv.ai_reply_count >= config.autoReplyMaxPerConversation) {
+      await performAiHandoff(db, {
+        accountId,
+        conversationId,
+        contactId,
+        alreadyAssigned: (conv.assigned_agent_id as string | null) ?? null,
+        summary: `🤖 AI agent handed off after reaching the ${config.autoReplyMaxPerConversation} auto-reply cap.`,
+        messageText: '',
+      })
+      return
+    }
 
     const messages = await buildConversationContext(db, conversationId)
     if (messages.length === 0) return
@@ -177,6 +186,15 @@ export async function dispatchInboundToAiReply(
     }
     if (claimed !== true) return // lost the per-conversation cap race
 
+    const sendText = (body: string) =>
+      sendMessageToConversation(db, accountId, {
+        conversationId,
+        messageType: 'text',
+        contentText: body,
+        senderType: 'bot',
+        aiGenerated: true,
+      })
+
     const asset = mediaAssetId
       ? mediaAssets.find((a) => a.id === mediaAssetId)
       : undefined
@@ -194,40 +212,45 @@ export async function dispatchInboundToAiReply(
       } catch (err) {
         console.error('[ai auto-reply] media send failed:', err)
         if (text) {
-          await engineSendText({
-            accountId,
-            userId: configOwnerUserId,
-            conversationId,
-            contactId,
-            text,
-            aiGenerated: true,
-          })
+          try {
+            await sendText(text)
+          } catch (textErr) {
+            console.error('[ai auto-reply] text fallback send failed:', textErr)
+            await performAiHandoff(db, {
+              accountId,
+              conversationId,
+              contactId,
+              alreadyAssigned:
+                (conv.assigned_agent_id as string | null) ?? null,
+              summary:
+                '🤖 AI agent handed off because the WhatsApp send failed.',
+              messageText: latestUserMessage(messages) ?? '',
+            })
+          }
         }
         return
       }
       if (asset.kind === 'audio' && text) {
-        await engineSendText({
-          accountId,
-          userId: configOwnerUserId,
-          conversationId,
-          contactId,
-          text,
-          aiGenerated: true,
-        })
+        await sendText(text)
       }
       return
     }
 
     if (!text) return
 
-    await engineSendText({
-      accountId,
-      userId: configOwnerUserId,
-      conversationId,
-      contactId,
-      text,
-      aiGenerated: true,
-    })
+    try {
+      await sendText(text)
+    } catch (err) {
+      console.error('[ai auto-reply] text send failed:', err)
+      await performAiHandoff(db, {
+        accountId,
+        conversationId,
+        contactId,
+        alreadyAssigned: (conv.assigned_agent_id as string | null) ?? null,
+        summary: '🤖 AI agent handed off because the WhatsApp send failed.',
+        messageText: latestUserMessage(messages) ?? '',
+      })
+    }
   } catch (err) {
     console.error('[ai auto-reply] dispatch failed:', err)
   }

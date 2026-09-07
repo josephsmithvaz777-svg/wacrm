@@ -145,8 +145,16 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
         args: { conversation_id: 'conv-1', max_replies: 3 },
       },
     ])
-    expect(h.engineSendText).toHaveBeenCalledWith(
-      expect.objectContaining({ conversationId: 'conv-1', text: 'Hello!' }),
+    expect(h.sendMessageToConversation).toHaveBeenCalledWith(
+      expect.anything(),
+      'acct-1',
+      expect.objectContaining({
+        conversationId: 'conv-1',
+        messageType: 'text',
+        contentText: 'Hello!',
+        senderType: 'bot',
+        aiGenerated: true,
+      }),
     )
   })
 
@@ -162,7 +170,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     h.state.autoResponders = [{ id: 'auto-1' }]
     await dispatchInboundToAiReply(ARGS)
     expect(h.generateReply).not.toHaveBeenCalled()
-    expect(h.engineSendText).not.toHaveBeenCalled()
+    expect(h.sendMessageToConversation).not.toHaveBeenCalled()
   })
 
   it('does not send when the atomic slot claim loses the race', async () => {
@@ -170,20 +178,20 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     await dispatchInboundToAiReply(ARGS)
     // It still attempts the claim, but the send is skipped.
     expect(h.state.rpcCalls).toHaveLength(1)
-    expect(h.engineSendText).not.toHaveBeenCalled()
+    expect(h.sendMessageToConversation).not.toHaveBeenCalled()
   })
 
   it('skips when AI is off / not configured', async () => {
     h.loadAiConfig.mockResolvedValue(null)
     await dispatchInboundToAiReply(ARGS)
     expect(h.generateReply).not.toHaveBeenCalled()
-    expect(h.engineSendText).not.toHaveBeenCalled()
+    expect(h.sendMessageToConversation).not.toHaveBeenCalled()
   })
 
   it('skips when auto-reply is disabled for the account', async () => {
     h.loadAiConfig.mockResolvedValue(aiConfig({ autoReplyEnabled: false }))
     await dispatchInboundToAiReply(ARGS)
-    expect(h.engineSendText).not.toHaveBeenCalled()
+    expect(h.sendMessageToConversation).not.toHaveBeenCalled()
   })
 
   it('skips when a human agent is assigned', async () => {
@@ -193,7 +201,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
       ai_reply_count: 0,
     }
     await dispatchInboundToAiReply(ARGS)
-    expect(h.engineSendText).not.toHaveBeenCalled()
+    expect(h.sendMessageToConversation).not.toHaveBeenCalled()
   })
 
   it('skips when auto-reply was disabled on this conversation', async () => {
@@ -203,24 +211,32 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
       ai_reply_count: 0,
     }
     await dispatchInboundToAiReply(ARGS)
-    expect(h.engineSendText).not.toHaveBeenCalled()
+    expect(h.sendMessageToConversation).not.toHaveBeenCalled()
   })
 
-  it('skips when the per-conversation cap is reached', async () => {
+  it('hands off when the per-conversation cap is reached', async () => {
     h.state.conv = {
       assigned_agent_id: null,
       ai_autoreply_disabled: false,
       ai_reply_count: 3,
     }
     await dispatchInboundToAiReply(ARGS)
-    expect(h.engineSendText).not.toHaveBeenCalled()
+    expect(h.generateReply).not.toHaveBeenCalled()
+    expect(h.sendMessageToConversation).not.toHaveBeenCalled()
+    expect(h.performAiHandoff).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        conversationId: 'conv-1',
+        summary: expect.stringContaining('auto-reply cap'),
+      }),
+    )
   })
 
   it('skips when there is nothing to reply to', async () => {
     h.buildConversationContext.mockResolvedValue([])
     await dispatchInboundToAiReply(ARGS)
     expect(h.generateReply).not.toHaveBeenCalled()
-    expect(h.engineSendText).not.toHaveBeenCalled()
+    expect(h.sendMessageToConversation).not.toHaveBeenCalled()
   })
 })
 
@@ -228,7 +244,7 @@ describe('dispatchInboundToAiReply — handoff', () => {
   it('disables auto-reply via handoff and does not send', async () => {
     h.generateReply.mockResolvedValue({ text: '', handoff: true })
     await dispatchInboundToAiReply(ARGS)
-    expect(h.engineSendText).not.toHaveBeenCalled()
+    expect(h.sendMessageToConversation).not.toHaveBeenCalled()
     expect(h.state.rpcCalls).toHaveLength(0)
     expect(h.performAiHandoff).toHaveBeenCalledWith(
       expect.anything(),
@@ -274,6 +290,6 @@ describe('dispatchInboundToAiReply — media', () => {
         aiGenerated: true,
       }),
     )
-    expect(h.engineSendText).not.toHaveBeenCalled()
+    expect(h.sendMessageToConversation).not.toHaveBeenCalled()
   })
 })

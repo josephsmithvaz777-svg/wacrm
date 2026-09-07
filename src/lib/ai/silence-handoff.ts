@@ -26,8 +26,9 @@ interface AccountSilenceConfig {
 }
 
 /**
- * Find auto-reply threads where the bot spoke last and the customer
- * has not written back for N minutes, then hand them to an advisor.
+ * Find auto-reply threads that have gone stale — the bot spoke last
+ * and the customer never wrote back, or the customer is still waiting
+ * for a reply — then hand them to an advisor.
  *
  * Runs from `/api/automations/cron` so one Coolify pinger covers
  * delayed automations, task reminders, and this sweep.
@@ -73,7 +74,6 @@ export async function sweepSilentAiConversations(
       .eq('account_id', account.account_id)
       .is('assigned_agent_id', null)
       .eq('ai_autoreply_disabled', false)
-      .gt('ai_reply_count', 0)
       .lte('last_message_at', cutoff)
       .limit(30)
 
@@ -106,28 +106,36 @@ async function maybeHandOffSilentThread(
     .maybeSingle()
 
   if (error || !last) return false
-  if (last.sender_type === 'customer') return false
   if (!last.created_at || last.created_at > cutoffIso) return false
 
-  const lastCustomer = await db
-    .from('messages')
-    .select('content_text')
-    .eq('conversation_id', conv.id)
-    .eq('sender_type', 'customer')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  const waitingOnBot = last.sender_type === 'customer'
+  let messageText =
+    (last.content_text as string | null | undefined)?.trim() || ''
+  if (!waitingOnBot) {
+    const lastCustomer = await db
+      .from('messages')
+      .select('content_text')
+      .eq('conversation_id', conv.id)
+      .eq('sender_type', 'customer')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    messageText =
+      (lastCustomer.data?.content_text as string | null | undefined)?.trim() ||
+      ''
+  }
 
-  const messageText =
-    (lastCustomer.data?.content_text as string | null | undefined)?.trim() ||
-    ''
+  const minutes = account.silence_handoff_minutes
+  const summary = waitingOnBot
+    ? `🤖 AI agent handed off after ${minutes} minutes without answering the customer.`
+    : `🤖 AI agent handed off after ${minutes} minutes without a customer reply.`
 
   const result = await performAiHandoff(db, {
     accountId: account.account_id,
     conversationId: conv.id,
     contactId: conv.contact_id,
     alreadyAssigned: null,
-    summary: `🤖 AI agent handed off after ${account.silence_handoff_minutes} minutes without a customer reply.`,
+    summary,
     messageText,
     claimIdle: true,
   })

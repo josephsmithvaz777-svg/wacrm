@@ -126,16 +126,26 @@ describe('sweepSilentAiConversations', () => {
     )
   })
 
-  it('skips when the last message is still from the customer', async () => {
+  it('hands off when the customer is still waiting for a reply', async () => {
     h.lastMessage = {
       sender_type: 'customer',
       created_at: '2026-01-01T00:00:00.000Z',
-      content_text: 'hola',
+      content_text: '¿Qué incluye el tour?',
     }
     const now = new Date('2026-01-01T00:10:00.000Z')
     const result = await sweepSilentAiConversations(db() as never, now)
-    expect(result).toEqual({ handedOff: 0 })
-    expect(h.performAiHandoff).not.toHaveBeenCalled()
+    expect(result).toEqual({ handedOff: 1 })
+    expect(h.performAiHandoff).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        conversationId: 'conv-1',
+        claimIdle: true,
+        messageText: '¿Qué incluye el tour?',
+      }),
+    )
+    expect(h.performAiHandoff.mock.calls[0][1].summary).toContain(
+      'without answering the customer',
+    )
   })
 
   it('skips accounts with silence timeout disabled', async () => {
