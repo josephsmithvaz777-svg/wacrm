@@ -93,6 +93,17 @@ describe('resolveHandoffAssignee', () => {
     )
     expect(id).toBeNull()
   })
+
+  it('includes the account owner in the handoff pool', async () => {
+    const id = await resolveHandoffAssignee(
+      dbReturning({
+        accounts: { round_robin_last_user_id: null },
+        profiles: [{ user_id: 'owner-1' }],
+      }),
+      'acct',
+    )
+    expect(id).toBe('owner-1')
+  })
 })
 
 describe('maybeRoundRobinAssignNewConversation', () => {

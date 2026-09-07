@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import {
   clampSilenceHandoffMinutes,
+  scheduleSilenceHandoffCheck,
   sweepSilentAiConversations,
 } from './silence-handoff'
 
@@ -75,6 +76,15 @@ describe('clampSilenceHandoffMinutes', () => {
     expect(clampSilenceHandoffMinutes(-1)).toBe(0)
     expect(clampSilenceHandoffMinutes(99)).toBe(30)
     expect(clampSilenceHandoffMinutes(7)).toBe(7)
+  })
+})
+
+describe('scheduleSilenceHandoffCheck', () => {
+  it('does not arm a timer when silence is disabled', () => {
+    vi.useFakeTimers()
+    scheduleSilenceHandoffCheck({ conversationId: 'c1', minutes: 0 })
+    expect(vi.getTimerCount()).toBe(0)
+    vi.useRealTimers()
   })
 })
 

@@ -12,6 +12,8 @@ const h = vi.hoisted(() => ({
   sendMessageToConversation: vi.fn(),
   performAiHandoff: vi.fn(),
   contactBelongsToAccountStaff: vi.fn(async () => false),
+  ensureSilenceHandoffLoop: vi.fn(),
+  scheduleSilenceHandoffCheck: vi.fn(),
   state: {
     conv: null as Record<string, unknown> | null,
     autoResponders: [] as { id: string }[],
@@ -33,6 +35,10 @@ vi.mock('@/lib/whatsapp/send-message', () => ({
 }))
 vi.mock('./perform-handoff', () => ({
   performAiHandoff: h.performAiHandoff,
+}))
+vi.mock('./silence-handoff', () => ({
+  ensureSilenceHandoffLoop: h.ensureSilenceHandoffLoop,
+  scheduleSilenceHandoffCheck: h.scheduleSilenceHandoffCheck,
 }))
 vi.mock('@/lib/automations/engine', () => ({
   runAutomationsForTrigger: vi.fn(async () => undefined),
@@ -139,6 +145,8 @@ beforeEach(() => {
     messageId: 'row-1',
     whatsappMessageId: 'm1',
   })
+  h.ensureSilenceHandoffLoop.mockReset()
+  h.scheduleSilenceHandoffCheck.mockReset()
 })
 
 describe('dispatchInboundToAiReply — eligibility gates', () => {
@@ -161,6 +169,10 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
         aiGenerated: true,
       }),
     )
+    expect(h.scheduleSilenceHandoffCheck).toHaveBeenCalledWith({
+      conversationId: 'conv-1',
+      minutes: 5,
+    })
   })
 
   it('grounds the reply in retrieved knowledge', async () => {

@@ -37,7 +37,8 @@ export async function agentCanReceiveLeads(
  * return the chosen user id (or null if no eligible members).
  *
  * Viewers are excluded from the pool — they can watch the inbox
- * but must never be auto-assigned a conversation.
+ * but must never be auto-assigned a conversation. Owners are
+ * included: a one-person workspace still has someone to hand to.
  */
 export async function pickRoundRobinAgent(
   db: Db,
@@ -53,7 +54,7 @@ export async function pickRoundRobinAgent(
     .from('profiles')
     .select('user_id')
     .eq('account_id', accountId)
-    .in('account_role', ['agent', 'admin'])
+    .in('account_role', ['owner', 'admin', 'agent'])
     .order('user_id', { ascending: true });
 
   if (error || !agents?.length) {

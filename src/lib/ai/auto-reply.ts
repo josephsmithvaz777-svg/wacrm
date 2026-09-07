@@ -12,6 +12,10 @@ import { sendMessageToConversation } from '@/lib/whatsapp/send-message'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { contactBelongsToAccountStaff } from '@/lib/assignments/staff-contact'
 import { performAiHandoff } from './perform-handoff'
+import {
+  ensureSilenceHandoffLoop,
+  scheduleSilenceHandoffCheck,
+} from './silence-handoff'
 
 interface DispatchArgs {
   /** Tenancy key — drives config, contact, and whatsapp_config lookups. */
@@ -52,6 +56,7 @@ export async function dispatchInboundToAiReply(
 
     const config = await loadAiConfig(db, accountId)
     if (!config || !config.autoReplyEnabled) return
+    if (config.silenceHandoffMinutes > 0) ensureSilenceHandoffLoop()
 
     if (await contactBelongsToAccountStaff(db, accountId, contactId)) return
 
@@ -233,13 +238,22 @@ export async function dispatchInboundToAiReply(
                 '🤖 AI agent handed off because the WhatsApp send failed.',
               messageText: latestUserMessage(messages) ?? '',
             })
+            return
           }
+          scheduleSilenceHandoffCheck({
+            conversationId,
+            minutes: config.silenceHandoffMinutes,
+          })
         }
         return
       }
       if (asset.kind === 'audio' && text) {
         await sendText(text)
       }
+      scheduleSilenceHandoffCheck({
+        conversationId,
+        minutes: config.silenceHandoffMinutes,
+      })
       return
     }
 
@@ -247,6 +261,10 @@ export async function dispatchInboundToAiReply(
 
     try {
       await sendText(text)
+      scheduleSilenceHandoffCheck({
+        conversationId,
+        minutes: config.silenceHandoffMinutes,
+      })
     } catch (err) {
       console.error('[ai auto-reply] text send failed:', err)
       await performAiHandoff(db, {

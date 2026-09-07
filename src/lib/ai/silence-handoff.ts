@@ -91,6 +91,54 @@ export async function sweepSilentAiConversations(
   return { handedOff }
 }
 
+const SILENCE_LOOP_MS = 60_000
+const silenceTimers = new Map<string, ReturnType<typeof setTimeout>>()
+let silenceLoop: ReturnType<typeof setInterval> | null = null
+
+async function runSilenceSweep(): Promise<void> {
+  try {
+    const { supabaseAdmin } = await import('./admin-client')
+    await sweepSilentAiConversations(supabaseAdmin())
+  } catch (err) {
+    console.error('[ai silence] sweep failed:', err)
+  }
+}
+
+/**
+ * Coolify/Docker does not ping `/api/automations/cron` by itself, so a
+ * 5-minute silence handoff would never fire. Start a 60s sweep on the
+ * first auto-reply of this process. Idempotent.
+ */
+export function ensureSilenceHandoffLoop(): void {
+  if (silenceLoop) return
+  silenceLoop = setInterval(() => {
+    void runSilenceSweep()
+  }, SILENCE_LOOP_MS)
+}
+
+/**
+ * Arm (or reset) a timer for this thread so handoff happens ~`minutes`
+ * after the last bot send, without waiting for an external cron ping.
+ */
+export function scheduleSilenceHandoffCheck(args: {
+  conversationId: string
+  minutes: number
+}): void {
+  const minutes = clampSilenceHandoffMinutes(args.minutes)
+  const prev = silenceTimers.get(args.conversationId)
+  if (prev) clearTimeout(prev)
+  if (minutes <= 0) {
+    silenceTimers.delete(args.conversationId)
+    return
+  }
+  ensureSilenceHandoffLoop()
+  const handle = setTimeout(() => {
+    silenceTimers.delete(args.conversationId)
+    void runSilenceSweep()
+  }, minutes * 60_000)
+  silenceTimers.set(args.conversationId, handle)
+}
+
 async function maybeHandOffSilentThread(
   db: SupabaseClient,
   account: AccountSilenceConfig,
