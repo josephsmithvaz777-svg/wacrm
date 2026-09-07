@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 
 import { getCurrentAccount, toErrorResponse } from '@/lib/auth/account';
+import { normalizeWhatsAppJid } from '@/lib/whatsapp/contact-identity';
 import { decrypt } from '@/lib/whatsapp/encryption';
 import {
   ensureWebhookSubscription,
+  fetchWahaContactIdentity,
+  isUsableDisplayName,
   type WahaClientOptions,
 } from '@/lib/whatsapp/waha-api';
 import {
@@ -12,6 +15,67 @@ import {
 } from '@/lib/whatsapp/waha-sync';
 
 export const maxDuration = 60;
+
+type ContactRow = {
+  id?: string;
+  name?: string | null;
+  phone?: string | null;
+  whatsapp_jid?: string | null;
+  whatsapp_username?: string | null;
+};
+
+async function persistWahaUsername(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  params: {
+    contact: ContactRow & { id: string };
+    phone: string;
+    opts: WahaClientOptions;
+    chatId: string | null;
+    historyUsername: string | null;
+  },
+): Promise<string | null> {
+  const { contact, phone, opts } = params;
+  let username = contact.whatsapp_username || params.historyUsername;
+  let displayName: string | null = null;
+  const lookupId = params.chatId || contact.whatsapp_jid || phone;
+
+  if (!username || !contact.whatsapp_jid) {
+    try {
+      const identity = await fetchWahaContactIdentity(opts, lookupId, phone);
+      username = username || identity.username;
+      displayName = identity.name;
+    } catch (err) {
+      console.warn('[waha/sync-chat] contact identity lookup failed:', err);
+    }
+  }
+
+  const patch: Record<string, unknown> = {};
+  if (username && !contact.whatsapp_username) {
+    patch.whatsapp_username = username;
+  }
+  const jid = normalizeWhatsAppJid(params.chatId);
+  if (jid && !contact.whatsapp_jid) patch.whatsapp_jid = jid;
+  if (
+    displayName &&
+    isUsableDisplayName(displayName, phone) &&
+    (!contact.name || !isUsableDisplayName(contact.name, phone))
+  ) {
+    patch.name = displayName;
+  } else if (
+    username &&
+    (!contact.name || !isUsableDisplayName(contact.name, phone))
+  ) {
+    patch.name = `@${username}`;
+  }
+
+  if (Object.keys(patch).length > 0) {
+    patch.updated_at = new Date().toISOString();
+    await supabase.from('contacts').update(patch).eq('id', contact.id);
+  }
+
+  return username || contact.whatsapp_username || null;
+}
 
 /**
  * Per-session throttle for the webhook-subscription repair. The repair
@@ -70,7 +134,9 @@ async function handleSync(request: Request) {
 
   const { data: conversation } = await ctx.supabase
     .from('conversations')
-    .select('id, contact:contacts(phone)')
+    .select(
+      'id, contact:contacts(id, name, phone, whatsapp_jid, whatsapp_username)',
+    )
     .eq('id', conversationId)
     .eq('account_id', ctx.accountId)
     .maybeSingle();
@@ -78,14 +144,16 @@ async function handleSync(request: Request) {
   // The embedded relation comes back as an object or a single-element
   // array depending on how the FK is introspected — accept both.
   const contactRel = conversation?.contact as
-    | { phone?: string }
-    | Array<{ phone?: string }>
+    | ContactRow
+    | ContactRow[]
     | null
     | undefined;
-  const phone = Array.isArray(contactRel) ? contactRel[0]?.phone : contactRel?.phone;
-  if (!conversation || !phone) {
+  const contact = Array.isArray(contactRel) ? contactRel[0] : contactRel;
+  const phone = contact?.phone;
+  if (!conversation || !phone || !contact?.id) {
     return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
   }
+  const contactId = contact.id;
 
   let apiKey: string | null = null;
   if (config.access_token) {
@@ -121,6 +189,7 @@ async function handleSync(request: Request) {
       accountId: ctx.accountId,
       conversationId,
       phone,
+      chatJid: contact.whatsapp_jid,
       opts,
     });
   } catch (err) {
@@ -128,6 +197,14 @@ async function handleSync(request: Request) {
     console.error('[waha/sync-chat] sync failed:', message);
     return NextResponse.json({ error: message }, { status: 502 });
   }
+
+  const usernameFilled = await persistWahaUsername(ctx.supabase, {
+    contact: { ...contact, id: contactId },
+    phone,
+    opts,
+    chatId: synced.chatId,
+    historyUsername: synced.username,
+  });
 
   // Repaired after the history read on purpose: the update restarts the
   // WAHA session, which would make the read above come back empty.
@@ -138,6 +215,7 @@ async function handleSync(request: Request) {
     inserted: synced.inserted,
     scanned: synced.scanned,
     chat_id: synced.chatId,
+    username: usernameFilled,
     webhook_url: webhookUrl,
     webhook_repaired: webhookRepaired,
   });

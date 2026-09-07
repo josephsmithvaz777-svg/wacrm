@@ -44,7 +44,7 @@ export function extractWhatsAppUsername(
   }
   const visitAtHandles = (obj: Record<string, unknown> | null) => {
     if (!obj) return
-    for (const value of [obj.notifyName, obj.pushName, obj.pushname]) {
+    for (const value of [obj.notifyName, obj.pushName, obj.pushname, obj.name]) {
       if (typeof value === 'string' && value.trim().startsWith('@')) {
         pushUsernameCandidate(candidates, value)
       }
@@ -57,14 +57,20 @@ export function extractWhatsAppUsername(
       ? (payload._data as Record<string, unknown>)
       : null
   visitDedicated(data)
-  if (payload.contact && typeof payload.contact === 'object') {
-    visitDedicated(payload.contact as Record<string, unknown>)
-  }
-  if (data?.contact && typeof data.contact === 'object') {
-    visitDedicated(data.contact as Record<string, unknown>)
-  }
+  const nestedContact =
+    payload.contact && typeof payload.contact === 'object'
+      ? (payload.contact as Record<string, unknown>)
+      : null
+  const nestedDataContact =
+    data?.contact && typeof data.contact === 'object'
+      ? (data.contact as Record<string, unknown>)
+      : null
+  visitDedicated(nestedContact)
+  visitDedicated(nestedDataContact)
   visitAtHandles(payload)
   visitAtHandles(data)
+  visitAtHandles(nestedContact)
+  visitAtHandles(nestedDataContact)
 
   for (const c of candidates) {
     const username = normalizeWhatsAppUsername(c as string)

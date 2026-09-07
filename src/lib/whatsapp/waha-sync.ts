@@ -24,6 +24,7 @@ import {
   type WahaClientOptions,
 } from '@/lib/whatsapp/waha-api';
 import { extractAdContext } from '@/lib/whatsapp/ad-context';
+import { extractWhatsAppUsername } from '@/lib/whatsapp/contact-identity';
 import {
   mimeToContentType,
   persistAdCreativeSafe,
@@ -81,6 +82,26 @@ export interface SyncWahaConversationResult {
   inserted: number;
   scanned: number;
   chatId: string | null;
+  username: string | null;
+}
+
+function usernameFromHistory(
+  payloads: Record<string, unknown>[],
+): string | null {
+  for (const payload of payloads) {
+    if (isWahaFromMe(payload)) continue;
+    const username = extractWhatsAppUsername(payload);
+    if (username) return username;
+  }
+  return null;
+}
+
+function emptySync(
+  chatId: string | null,
+  scanned = 0,
+  username: string | null = null,
+): SyncWahaConversationResult {
+  return { inserted: 0, scanned, chatId, username };
 }
 
 /**
@@ -95,19 +116,26 @@ export async function syncWahaConversation(params: {
   conversationId: string;
   phone: string;
   opts: WahaClientOptions;
+  chatJid?: string | null;
   limit?: number;
 }): Promise<SyncWahaConversationResult> {
   const { accountId, conversationId, phone, opts } = params;
   const limit = params.limit ?? 50;
   const digits = phone.replace(/\D/g, '');
-  if (digits.length < 8) return { inserted: 0, scanned: 0, chatId: null };
+  if (digits.length < 8) return emptySync(null);
 
   const candidates: string[] = [];
   const cached = chatIdCache.get(conversationId);
   if (cached && Date.now() - cached.at < CHAT_ID_TTL_MS) {
     candidates.push(cached.chatId);
   }
+  const storedJid = params.chatJid?.trim();
+  if (storedJid && storedJid.includes('@') && !candidates.includes(storedJid)) {
+    candidates.push(storedJid);
+  }
+  const lid = `${digits}@lid`;
   const plain = `${digits}@c.us`;
+  if (digits.length >= 14 && !candidates.includes(lid)) candidates.push(lid);
   if (!candidates.includes(plain)) candidates.push(plain);
 
   // First pass without media: asking WAHA to download every attachment
@@ -142,8 +170,9 @@ export async function syncWahaConversation(params: {
     }
   }
 
-  if (!payloads.length) return { inserted: 0, scanned: 0, chatId };
+  if (!payloads.length) return emptySync(chatId);
   if (chatId) chatIdCache.set(conversationId, { chatId, at: Date.now() });
+  let username = usernameFromHistory(payloads);
 
   const { data: existingRows, error: existingErr } = await admin()
     .from('messages')
@@ -155,7 +184,7 @@ export async function syncWahaConversation(params: {
 
   if (existingErr) {
     console.error('[waha-sync] existing ids lookup failed:', existingErr.message);
-    return { inserted: 0, scanned: payloads.length, chatId };
+    return emptySync(chatId, payloads.length, username);
   }
 
   const known = new Set<string>();
@@ -169,14 +198,17 @@ export async function syncWahaConversation(params: {
   };
   const newPayloads = payloads.filter(isNew);
   if (!newPayloads.length) {
-    return { inserted: 0, scanned: payloads.length, chatId };
+    return emptySync(chatId, payloads.length, username);
   }
 
   // Only pay for media downloads when something new actually carries an
   // attachment — then re-read the window with the files materialised.
   if (chatId && newPayloads.some((payload) => payload.hasMedia === true)) {
     const withMedia = await fetchWahaChatMessages(opts, chatId, limit, true);
-    if (withMedia.length) payloads = withMedia;
+    if (withMedia.length) {
+      payloads = withMedia;
+      username = usernameFromHistory(payloads) || username;
+    }
   }
 
   let mediaBudget = MEDIA_BUDGET;
@@ -244,7 +276,7 @@ export async function syncWahaConversation(params: {
     }
   }
 
-  if (!rows.length) return { inserted: 0, scanned: payloads.length, chatId };
+  if (!rows.length) return emptySync(chatId, payloads.length, username);
 
   const { data: inserted, error: insertErr } = await admin()
     .from('messages')
@@ -256,7 +288,7 @@ export async function syncWahaConversation(params: {
 
   if (insertErr) {
     console.error('[waha-sync] insert failed:', insertErr.message);
-    return { inserted: 0, scanned: payloads.length, chatId };
+    return emptySync(chatId, payloads.length, username);
   }
 
   const count = inserted?.length ?? 0;
@@ -284,5 +316,5 @@ export async function syncWahaConversation(params: {
     }
   }
 
-  return { inserted: count, scanned: payloads.length, chatId };
+  return { inserted: count, scanned: payloads.length, chatId, username };
 }

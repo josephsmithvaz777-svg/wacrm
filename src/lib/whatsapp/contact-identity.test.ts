@@ -29,9 +29,22 @@ describe('extractWhatsAppUsername', () => {
     ).toBe('miladi.m')
   })
 
-  it('reads @Mr.lovin.16 style handles from notifyName', () => {
+  it('reads username from a WAHA contact record', () => {
     expect(
-      extractWhatsAppUsername({ notifyName: '@Mr.lovin.16' }),
+      extractWhatsAppUsername({
+        id: '107494928027812@lid',
+        username: 'Mr.lovin.16',
+        name: 'REBLEX',
+      }),
+    ).toBe('mr.lovin.16')
+  })
+
+  it('reads @handle from name when WhatsApp hides the phone', () => {
+    expect(
+      extractWhatsAppUsername({
+        id: '107494928027812@lid',
+        name: '@Mr.lovin.16',
+      }),
     ).toBe('mr.lovin.16')
   })
 })

@@ -11,7 +11,7 @@ import {
   extractInboundText,
   extractWahaMeId,
   extractWahaMessageId,
-  fetchContactDisplayName,
+  fetchWahaContactIdentity,
   isUsableDisplayName,
   isWahaFromMe,
   parseWahaSerializedId,
@@ -437,13 +437,25 @@ export async function processWahaEvent(
       const fromPayload = fromMe
         ? null
         : extractInboundDisplayName(payload, phone);
-      const fromApi =
-        (isUsableDisplayName(fromPayload, phone) ? fromPayload : null) ||
-        (await fetchContactDisplayName(opts, resolved.chatId, phone)) ||
-        (await fetchContactDisplayName(opts, phone, phone));
-      const username =
-        extractWhatsAppUsername(payload) ||
-        (fromApi ? extractWhatsAppUsername({ notifyName: fromApi }) : null);
+      let fromApi = isUsableDisplayName(fromPayload, phone)
+        ? fromPayload
+        : null;
+      let username = extractWhatsAppUsername(payload);
+      if (!username || !fromApi) {
+        const identity = await fetchWahaContactIdentity(
+          opts,
+          resolved.chatId,
+          phone,
+        );
+        username = username || identity.username;
+        fromApi = fromApi || identity.name;
+      }
+      if (!username && fromApi) {
+        username = extractWhatsAppUsername({
+          notifyName: fromApi,
+          name: fromApi,
+        });
+      }
       const jid = normalizeWhatsAppJid(resolved.chatId);
       const pushName =
         fromApi || (username ? `@${username}` : phone);

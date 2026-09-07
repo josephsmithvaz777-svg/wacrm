@@ -3,6 +3,8 @@
 // Docs: https://waha.devlike.pro/
 // ============================================================
 
+import { extractWhatsAppUsername } from '@/lib/whatsapp/contact-identity';
+
 export type WahaSessionStatus =
   | 'STOPPED'
   | 'STARTING'
@@ -849,13 +851,39 @@ export async function fetchContactDisplayName(
   chatIdOrPhone: string,
   phone?: string,
 ): Promise<string | null> {
+  const identity = await fetchWahaContactIdentity(opts, chatIdOrPhone, phone);
+  return identity.name;
+}
+
+export interface WahaContactIdentity {
+  name: string | null;
+  username: string | null;
+}
+
+/**
+ * Ask WAHA for the chat's public identity. Username-only leads often
+ * have no E.164; the Contacts / overview APIs may still return
+ * `username` or a `@handle` in `name`.
+ */
+export async function fetchWahaContactIdentity(
+  opts: WahaClientOptions,
+  chatIdOrPhone: string,
+  phone?: string,
+): Promise<WahaContactIdentity> {
   const session = opts.session || 'default';
   const digits = chatIdOrPhone.replace(/\D/g, '');
   const phoneHint = phone || digits;
   const contactIds = [
+    chatIdOrPhone.includes('@') ? chatIdOrPhone : `${digits}@lid`,
     chatIdOrPhone.includes('@') ? chatIdOrPhone : `${digits}@c.us`,
     digits,
   ];
+  const seen = new Set<string>();
+  const uniqueIds = contactIds.filter((id) => {
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
 
   const pickName = (json: Record<string, unknown>): string | null => {
     for (const key of [
@@ -865,7 +893,6 @@ export async function fetchContactDisplayName(
       'shortName',
       'shortname',
       'verifiedName',
-      'username',
     ]) {
       const v = json[key];
       if (typeof v === 'string' && isUsableDisplayName(v, phoneHint)) {
@@ -875,24 +902,46 @@ export async function fetchContactDisplayName(
     return null;
   };
 
-  for (const contactId of contactIds) {
+  const pickFromRecord = (
+    json: Record<string, unknown>,
+  ): WahaContactIdentity => {
+    const lastMessage =
+      json.lastMessage && typeof json.lastMessage === 'object'
+        ? (json.lastMessage as Record<string, unknown>)
+        : null;
+    return {
+      username:
+        extractWhatsAppUsername(json) ||
+        (lastMessage ? extractWhatsAppUsername(lastMessage) : null),
+      name: pickName(json),
+    };
+  };
+
+  let found: WahaContactIdentity = { name: null, username: null };
+
+  const merge = (next: WahaContactIdentity) => {
+    if (!found.username && next.username) found.username = next.username;
+    if (!found.name && next.name) found.name = next.name;
+  };
+
+  for (const contactId of uniqueIds) {
     try {
       const res = await wahaFetch(
         opts,
         `/api/contacts?contactId=${encodeURIComponent(contactId)}&session=${encodeURIComponent(session)}`,
       );
       if (res.ok) {
-        const picked = pickName((await res.json()) as Record<string, unknown>);
-        if (picked) return picked;
+        merge(pickFromRecord((await res.json()) as Record<string, unknown>));
+        if (found.username && found.name) return found;
       }
     } catch (err) {
-      console.warn('[waha] contact name lookup failed:', err);
+      console.warn('[waha] contact identity lookup failed:', err);
     }
   }
 
-  // Chat overview is the most reliable place for display names.
   try {
-    const chatId = contactIds.find((id) => id.includes('@')) || `${digits}@c.us`;
+    const chatId =
+      uniqueIds.find((id) => id.includes('@')) || `${digits}@lid`;
     const res = await wahaFetch(
       opts,
       `/api/${encodeURIComponent(session)}/chats/overview?limit=1&ids=${encodeURIComponent(chatId)}&ids=${encodeURIComponent(digits)}`,
@@ -902,19 +951,15 @@ export async function fetchContactDisplayName(
       if (Array.isArray(list)) {
         for (const row of list) {
           if (!row || typeof row !== 'object') continue;
-          const name = (row as { name?: unknown }).name;
-          if (typeof name === 'string' && isUsableDisplayName(name, phoneHint)) {
-            return name.trim();
-          }
+          merge(pickFromRecord(row as Record<string, unknown>));
         }
       }
     }
   } catch (err) {
-    console.warn('[waha] chats overview name lookup failed:', err);
+    console.warn('[waha] chats overview identity lookup failed:', err);
   }
 
-  // Chat metadata sometimes has the display name when Contacts API is empty.
-  for (const chatId of contactIds.filter((id) => id.includes('@'))) {
+  for (const chatId of uniqueIds.filter((id) => id.includes('@'))) {
     try {
       const res = await wahaFetch(
         opts,
@@ -926,14 +971,13 @@ export async function fetchContactDisplayName(
         json.chat && typeof json.chat === 'object'
           ? (json.chat as Record<string, unknown>)
           : json;
-      const picked = pickName(nested);
-      if (picked) return picked;
+      merge(pickFromRecord(nested));
     } catch (err) {
-      console.warn('[waha] chat name lookup failed:', err);
+      console.warn('[waha] chat identity lookup failed:', err);
     }
   }
 
-  return null;
+  return found;
 }
 
 function pushCandidate(list: string[], value: unknown) {
