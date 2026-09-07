@@ -241,7 +241,9 @@ export async function dispatchInboundToAiReply(
             return
           }
           scheduleSilenceHandoffCheck({
+            accountId,
             conversationId,
+            contactId,
             minutes: config.silenceHandoffMinutes,
           })
         }
@@ -251,7 +253,9 @@ export async function dispatchInboundToAiReply(
         await sendText(text)
       }
       scheduleSilenceHandoffCheck({
+        accountId,
         conversationId,
+        contactId,
         minutes: config.silenceHandoffMinutes,
       })
       return
@@ -262,7 +266,9 @@ export async function dispatchInboundToAiReply(
     try {
       await sendText(text)
       scheduleSilenceHandoffCheck({
+        accountId,
         conversationId,
+        contactId,
         minutes: config.silenceHandoffMinutes,
       })
     } catch (err) {

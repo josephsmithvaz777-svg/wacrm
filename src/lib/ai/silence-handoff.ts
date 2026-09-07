@@ -5,6 +5,12 @@ import { performAiHandoff } from './perform-handoff'
 /** Default wait after the bot's last message before handing off. */
 export const DEFAULT_SILENCE_HANDOFF_MINUTES = 5
 export const MAX_SILENCE_HANDOFF_MINUTES = 30
+/**
+ * Do not resurrect inbox fossils. A thread whose last message is older
+ * than this is a stale unassigned lead, not a live AI qualifier that
+ * just went quiet.
+ */
+export const MAX_SILENCE_LOOKBACK_MINUTES = 45
 
 export function clampSilenceHandoffMinutes(value: unknown): number {
   const n = Number(value)
@@ -30,8 +36,12 @@ interface AccountSilenceConfig {
  * and the customer never wrote back, or the customer is still waiting
  * for a reply — then hand them to an advisor.
  *
- * Runs from `/api/automations/cron` so one Coolify pinger covers
- * delayed automations, task reminders, and this sweep.
+ * Only live AI threads: the bot must have replied at least once, and
+ * the last message must be within MAX_SILENCE_LOOKBACK_MINUTES. Older
+ * unassigned inbox rows are left alone.
+ *
+ * Runs from `/api/automations/cron` and from an in-process 60s loop so
+ * Coolify does not need an extra pinger for this path.
  */
 export async function sweepSilentAiConversations(
   db: SupabaseClient,
@@ -67,6 +77,9 @@ export async function sweepSilentAiConversations(
     const cutoff = new Date(
       now.getTime() - account.silence_handoff_minutes * 60_000,
     ).toISOString()
+    const floor = new Date(
+      now.getTime() - MAX_SILENCE_LOOKBACK_MINUTES * 60_000,
+    ).toISOString()
 
     const { data: convs, error: convErr } = await db
       .from('conversations')
@@ -74,7 +87,9 @@ export async function sweepSilentAiConversations(
       .eq('account_id', account.account_id)
       .is('assigned_agent_id', null)
       .eq('ai_autoreply_disabled', false)
+      .gt('ai_reply_count', 0)
       .lte('last_message_at', cutoff)
+      .gte('last_message_at', floor)
       .limit(30)
 
     if (convErr) {
@@ -83,7 +98,7 @@ export async function sweepSilentAiConversations(
     }
 
     for (const conv of (convs ?? []) as SilentCandidate[]) {
-      const did = await maybeHandOffSilentThread(db, account, conv, cutoff)
+      const did = await maybeHandOffSilentThread(db, account, conv, cutoff, now)
       if (did) handedOff += 1
     }
   }
@@ -118,10 +133,13 @@ export function ensureSilenceHandoffLoop(): void {
 
 /**
  * Arm (or reset) a timer for this thread so handoff happens ~`minutes`
- * after the last bot send, without waiting for an external cron ping.
+ * after the last bot send. Checks only this conversation — never a
+ * backlog sweep of old unassigned leads.
  */
 export function scheduleSilenceHandoffCheck(args: {
+  accountId: string
   conversationId: string
+  contactId: string
   minutes: number
 }): void {
   const minutes = clampSilenceHandoffMinutes(args.minutes)
@@ -134,9 +152,35 @@ export function scheduleSilenceHandoffCheck(args: {
   ensureSilenceHandoffLoop()
   const handle = setTimeout(() => {
     silenceTimers.delete(args.conversationId)
-    void runSilenceSweep()
+    void handOffConversationIfSilent(args, minutes)
   }, minutes * 60_000)
   silenceTimers.set(args.conversationId, handle)
+}
+
+async function handOffConversationIfSilent(
+  args: { accountId: string; conversationId: string; contactId: string },
+  minutes: number,
+): Promise<void> {
+  try {
+    const { supabaseAdmin } = await import('./admin-client')
+    const db = supabaseAdmin()
+    const { data: conv, error } = await db
+      .from('conversations')
+      .select('id, account_id, contact_id, ai_reply_count, last_message_at')
+      .eq('id', args.conversationId)
+      .maybeSingle()
+    if (error || !conv) return
+    const cutoff = new Date(Date.now() - minutes * 60_000).toISOString()
+    await maybeHandOffSilentThread(
+      db,
+      { account_id: args.accountId, silence_handoff_minutes: minutes },
+      conv as SilentCandidate,
+      cutoff,
+      new Date(),
+    )
+  } catch (err) {
+    console.error('[ai silence] per-thread check failed:', err)
+  }
 }
 
 async function maybeHandOffSilentThread(
@@ -144,7 +188,10 @@ async function maybeHandOffSilentThread(
   account: AccountSilenceConfig,
   conv: SilentCandidate,
   cutoffIso: string,
+  now: Date,
 ): Promise<boolean> {
+  if ((conv.ai_reply_count ?? 0) <= 0) return false
+
   const { data: last, error } = await db
     .from('messages')
     .select('sender_type, created_at, content_text')
@@ -155,6 +202,11 @@ async function maybeHandOffSilentThread(
 
   if (error || !last) return false
   if (!last.created_at || last.created_at > cutoffIso) return false
+  const floorIso = new Date(
+    now.getTime() - MAX_SILENCE_LOOKBACK_MINUTES * 60_000,
+  ).toISOString()
+  if (last.created_at < floorIso) return false
+  if (last.sender_type === 'agent') return false
 
   const waitingOnBot = last.sender_type === 'customer'
   let messageText =

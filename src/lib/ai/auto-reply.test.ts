@@ -170,7 +170,9 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
       }),
     )
     expect(h.scheduleSilenceHandoffCheck).toHaveBeenCalledWith({
+      accountId: 'acct-1',
       conversationId: 'conv-1',
+      contactId: 'contact-1',
       minutes: 5,
     })
   })

@@ -25,6 +25,7 @@ function chainFor(table: string) {
   chain.eq = self
   chain.is = self
   chain.gt = self
+  chain.gte = self
   chain.lte = self
   chain.limit = self
   chain.order = self
@@ -82,7 +83,12 @@ describe('clampSilenceHandoffMinutes', () => {
 describe('scheduleSilenceHandoffCheck', () => {
   it('does not arm a timer when silence is disabled', () => {
     vi.useFakeTimers()
-    scheduleSilenceHandoffCheck({ conversationId: 'c1', minutes: 0 })
+    scheduleSilenceHandoffCheck({
+      accountId: 'a',
+      conversationId: 'c1',
+      contactId: 'c',
+      minutes: 0,
+    })
     expect(vi.getTimerCount()).toBe(0)
     vi.useRealTimers()
   })
@@ -160,6 +166,26 @@ describe('sweepSilentAiConversations', () => {
 
   it('skips accounts with silence timeout disabled', async () => {
     h.configs[0].silence_handoff_minutes = 0
+    const now = new Date('2026-01-01T00:10:00.000Z')
+    const result = await sweepSilentAiConversations(db() as never, now)
+    expect(result).toEqual({ handedOff: 0 })
+    expect(h.performAiHandoff).not.toHaveBeenCalled()
+  })
+
+  it('does not hand off a thread the AI never replied to', async () => {
+    h.convs[0].ai_reply_count = 0
+    const now = new Date('2026-01-01T00:10:00.000Z')
+    const result = await sweepSilentAiConversations(db() as never, now)
+    expect(result).toEqual({ handedOff: 0 })
+    expect(h.performAiHandoff).not.toHaveBeenCalled()
+  })
+
+  it('does not resurrect leads whose last message is older than the lookback', async () => {
+    h.lastMessage = {
+      sender_type: 'bot',
+      created_at: '2025-12-01T00:00:00.000Z',
+      content_text: 'hola',
+    }
     const now = new Date('2026-01-01T00:10:00.000Z')
     const result = await sweepSilentAiConversations(db() as never, now)
     expect(result).toEqual({ handedOff: 0 })
