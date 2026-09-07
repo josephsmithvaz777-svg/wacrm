@@ -177,6 +177,18 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     })
   })
 
+  it('arms the silence timer even when the provider throws', async () => {
+    h.generateReply.mockRejectedValue(new Error('DeepSeek timeout'))
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.scheduleSilenceHandoffCheck).toHaveBeenCalledWith({
+      accountId: 'acct-1',
+      conversationId: 'conv-1',
+      contactId: 'contact-1',
+      minutes: 5,
+    })
+    expect(h.sendMessageToConversation).not.toHaveBeenCalled()
+  })
+
   it('grounds the reply in retrieved knowledge', async () => {
     h.retrieveKnowledge.mockResolvedValue(['Returns accepted within 30 days.'])
     await dispatchInboundToAiReply(ARGS)
@@ -228,6 +240,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     }
     await dispatchInboundToAiReply(ARGS)
     expect(h.sendMessageToConversation).not.toHaveBeenCalled()
+    expect(h.scheduleSilenceHandoffCheck).not.toHaveBeenCalled()
   })
 
   it('skips when auto-reply was disabled on this conversation', async () => {

@@ -85,6 +85,16 @@ export async function dispatchInboundToAiReply(
     if (convErr || !conv) return
     if (conv.assigned_agent_id) return // a human owns this thread
     if (conv.ai_autoreply_disabled) return // handed off / turned off here
+    // Arm the silence timer before the LLM call. If DeepSeek/OpenAI
+    // hangs, throws, or the host kills `after()`, the customer is still
+    // handed to an advisor after `silenceHandoffMinutes` instead of
+    // sitting unassigned with a fake "AI is replying" banner.
+    scheduleSilenceHandoffCheck({
+      accountId,
+      conversationId,
+      contactId,
+      minutes: config.silenceHandoffMinutes,
+    })
     // Cheap early-out; the authoritative cap check is the atomic claim
     // below (this read can race a concurrent inbound). At the cap the
     // bot must not go quiet unassigned — hand the thread to an advisor.

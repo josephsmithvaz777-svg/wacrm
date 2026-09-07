@@ -541,7 +541,26 @@ export async function processWahaEvent(
     console.error('[waha-inbound] message insert failed:', msgError);
     return;
   }
-  if (!insertedRows || insertedRows.length === 0) return;
+  const inboundTextEarly = contentText || '';
+  // WAHA retries / dual-fires `message` + `message.any`. The first
+  // attempt may have been killed mid LLM call after the row existed, so
+  // a duplicate must still try auto-reply (`claim_ai_reply_slot` is the
+  // send gate). Skip automations/unread on the replay.
+  if (!insertedRows || insertedRows.length === 0) {
+    if (!fromMe && inboundTextEarly.trim()) {
+      try {
+        await dispatchInboundToAiReply({
+          accountId: config.account_id,
+          conversationId: convResult.conversation.id,
+          contactId: contactOutcome.contact.id,
+          configOwnerUserId: config.user_id,
+        });
+      } catch (err) {
+        console.error('[waha-inbound] duplicate inbound AI dispatch failed:', err);
+      }
+    }
+    return;
+  }
 
   if (!fromMe) {
     try {

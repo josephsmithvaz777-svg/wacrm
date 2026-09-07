@@ -5,6 +5,7 @@ import {
   formatMessageForModel,
   formatAdContext,
   usefulCaption,
+  isMissingAiMediaTextColumn,
 } from './context'
 
 /** Minimal fake matching the query chain in buildConversationContext:
@@ -19,6 +20,23 @@ function fakeDb(rows: unknown[]): SupabaseClient {
   }
   return chain as unknown as SupabaseClient
 }
+
+describe('isMissingAiMediaTextColumn', () => {
+  it('detects PostgREST schema-cache misses', () => {
+    expect(
+      isMissingAiMediaTextColumn({
+        code: 'PGRST204',
+        message: "Could not find the 'ai_media_text' column of 'messages' in the schema cache",
+      }),
+    ).toBe(true)
+    expect(
+      isMissingAiMediaTextColumn({
+        code: '42703',
+        message: 'column messages.content_text does not exist',
+      }),
+    ).toBe(false)
+  })
+})
 
 describe('buildConversationContext', () => {
   it('maps sender_type to role and returns chronological order', async () => {
@@ -76,6 +94,47 @@ describe('buildConversationContext', () => {
       { role: 'user', content: '[Voice note] Quiero ver los lotes de California' },
       { role: 'assistant', content: '[Sent an image] La imagen de los lotes' },
     ])
+  })
+
+  it('retries without ai_media_text when the column is missing', async () => {
+    let selects = 0
+    const chain = {
+      from: () => chain,
+      select: () => {
+        selects += 1
+        return chain
+      },
+      eq: () => chain,
+      order: () => chain,
+      limit: () =>
+        Promise.resolve(
+          selects === 1
+            ? {
+                data: null,
+                error: {
+                  code: 'PGRST204',
+                  message:
+                    "Could not find the 'ai_media_text' column of 'messages' in the schema cache",
+                },
+              }
+            : {
+                data: [
+                  {
+                    sender_type: 'customer',
+                    content_type: 'text',
+                    content_text: 'hola',
+                  },
+                ],
+                error: null,
+              },
+        ),
+    }
+    const out = await buildConversationContext(
+      chain as unknown as SupabaseClient,
+      'conv-1',
+    )
+    expect(selects).toBe(2)
+    expect(out).toEqual([{ role: 'user', content: 'hola' }])
   })
 })
 

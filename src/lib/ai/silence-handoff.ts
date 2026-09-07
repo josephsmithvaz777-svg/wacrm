@@ -36,9 +36,10 @@ interface AccountSilenceConfig {
  * and the customer never wrote back, or the customer is still waiting
  * for a reply — then hand them to an advisor.
  *
- * Only live AI threads: the bot must have replied at least once, and
- * the last message must be within MAX_SILENCE_LOOKBACK_MINUTES. Older
- * unassigned inbox rows are left alone.
+ * Live AI threads only: last message within MAX_SILENCE_LOOKBACK_MINUTES.
+ * That includes the bot going quiet after a reply, and the customer
+ * still waiting because auto-reply never sent (ai_reply_count = 0).
+ * Older unassigned inbox rows are left alone.
  *
  * Runs from `/api/automations/cron` and from an in-process 60s loop so
  * Coolify does not need an extra pinger for this path.
@@ -87,7 +88,6 @@ export async function sweepSilentAiConversations(
       .eq('account_id', account.account_id)
       .is('assigned_agent_id', null)
       .eq('ai_autoreply_disabled', false)
-      .gt('ai_reply_count', 0)
       .lte('last_message_at', cutoff)
       .gte('last_message_at', floor)
       .limit(30)
@@ -190,8 +190,6 @@ async function maybeHandOffSilentThread(
   cutoffIso: string,
   now: Date,
 ): Promise<boolean> {
-  if ((conv.ai_reply_count ?? 0) <= 0) return false
-
   const { data: last, error } = await db
     .from('messages')
     .select('sender_type, created_at, content_text')
@@ -209,6 +207,12 @@ async function maybeHandOffSilentThread(
   if (last.sender_type === 'agent') return false
 
   const waitingOnBot = last.sender_type === 'customer'
+  const botReplied = (conv.ai_reply_count ?? 0) > 0
+  // A silent customer after a bot reply, or a customer still waiting
+  // because generate/send never landed. Do not assign random unassigned
+  // threads the bot never owned (last message is bot with count 0 is
+  // inconsistent; last message must be the customer if we never replied).
+  if (!botReplied && !waitingOnBot) return false
   let messageText =
     (last.content_text as string | null | undefined)?.trim() || ''
   if (!waitingOnBot) {

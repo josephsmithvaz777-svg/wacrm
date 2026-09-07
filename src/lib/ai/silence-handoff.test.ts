@@ -172,8 +172,33 @@ describe('sweepSilentAiConversations', () => {
     expect(h.performAiHandoff).not.toHaveBeenCalled()
   })
 
-  it('does not hand off a thread the AI never replied to', async () => {
+  it('hands off when the customer is still waiting and the bot never replied', async () => {
     h.convs[0].ai_reply_count = 0
+    h.lastMessage = {
+      sender_type: 'customer',
+      created_at: '2026-01-01T00:00:00.000Z',
+      content_text: '1️⃣ Deseo Para Vivienda🏡',
+    }
+    const now = new Date('2026-01-01T00:10:00.000Z')
+    const result = await sweepSilentAiConversations(db() as never, now)
+    expect(result).toEqual({ handedOff: 1 })
+    expect(h.performAiHandoff).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        conversationId: 'conv-1',
+        claimIdle: true,
+        messageText: '1️⃣ Deseo Para Vivienda🏡',
+      }),
+    )
+  })
+
+  it('does not hand off a zero-reply thread whose last message is not the customer', async () => {
+    h.convs[0].ai_reply_count = 0
+    h.lastMessage = {
+      sender_type: 'bot',
+      created_at: '2026-01-01T00:00:00.000Z',
+      content_text: '¿En qué te ayudo?',
+    }
     const now = new Date('2026-01-01T00:10:00.000Z')
     const result = await sweepSilentAiConversations(db() as never, now)
     expect(result).toEqual({ handedOff: 0 })
