@@ -6,6 +6,7 @@ import {
   transcribeAudio,
   describeImage,
   IMAGE_DESCRIBE_MODEL,
+  DEEPSEEK_VISION_MODEL,
 } from './understand-media'
 import type { AiConfig } from './types'
 
@@ -152,5 +153,33 @@ describe('describeImage', () => {
     const [url, opts] = fetchMock.mock.calls[0]
     expect(url).toContain('api.anthropic.com')
     expect(opts.headers['x-api-key']).toBe('sk-ant-x')
+  })
+
+  it('uses DeepSeek vision when that is the only configured provider', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'Flyer de lotes en preventa California.' } }],
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const text = await describeImage({
+      config: config({
+        provider: 'deepseek',
+        apiKey: 'sk-deepseek',
+        embeddingsApiKey: null,
+      }),
+      bytes: Buffer.from('jpeg-bytes'),
+      mime: 'image/jpeg',
+    })
+    expect(text).toBe('Flyer de lotes en preventa California.')
+    const [reqUrl, reqOpts] = fetchMock.mock.calls[0]
+    expect(reqUrl).toContain('api.deepseek.com')
+    expect(reqOpts.headers.Authorization).toBe('Bearer sk-deepseek')
+    const body = JSON.parse(reqOpts.body)
+    expect(body.model).toBe(DEEPSEEK_VISION_MODEL)
+    expect(body.max_tokens).toBeDefined()
+    expect(body.messages[0].content[1].type).toBe('image_url')
   })
 })

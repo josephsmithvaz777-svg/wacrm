@@ -11,11 +11,15 @@ export const PROXY_MEDIA_PREFIX = '/api/whatsapp/media/'
 
 const WHISPER_URL = 'https://api.openai.com/v1/audio/transcriptions'
 const OPENAI_CHAT_URL = 'https://api.openai.com/v1/chat/completions'
+const DEEPSEEK_CHAT_URL = 'https://api.deepseek.com/chat/completions'
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
 const ANTHROPIC_VERSION = '2023-06-01'
 
 /** Cheap vision model for the describe-image pass (not the account's chat model). */
 export const IMAGE_DESCRIBE_MODEL = 'gpt-4o-mini'
+
+/** DeepSeek's vision model — text models (v4-flash / chat) reject images. */
+export const DEEPSEEK_VISION_MODEL = 'deepseek-v4-flash-vision-exp'
 
 const AUDIO_MAX_BYTES = 25 * 1024 * 1024
 const IMAGE_MAX_BYTES = 5 * 1024 * 1024
@@ -113,8 +117,9 @@ export async function transcribeAudio(args: {
 }
 
 /**
- * Short factual description of a customer photo. OpenAI when a key is
- * available; otherwise the account's Anthropic model.
+ * Short factual description of a customer photo.
+ * OpenAI (or the embeddings key) first, then Anthropic, then DeepSeek
+ * vision — DeepSeek's text models cannot see images.
  */
 export async function describeImage(args: {
   config: MediaAiConfig
@@ -125,10 +130,31 @@ export async function describeImage(args: {
   const { config, bytes, mime, timeoutMs = aiRequestTimeoutMs() } = args
   const openaiKey = openaiMediaKey(config)
   if (openaiKey) {
-    return describeImageOpenAi(openaiKey, bytes, mime, timeoutMs)
+    return describeImageChatCompletions({
+      apiKey: openaiKey,
+      url: OPENAI_CHAT_URL,
+      model: IMAGE_DESCRIBE_MODEL,
+      maxTokensField: 'max_completion_tokens',
+      label: 'OpenAI vision',
+      bytes,
+      mime,
+      timeoutMs,
+    })
   }
   if (config.provider === 'anthropic') {
     return describeImageAnthropic(config.apiKey, config.model, bytes, mime, timeoutMs)
+  }
+  if (config.provider === 'deepseek') {
+    return describeImageChatCompletions({
+      apiKey: config.apiKey,
+      url: DEEPSEEK_CHAT_URL,
+      model: DEEPSEEK_VISION_MODEL,
+      maxTokensField: 'max_tokens',
+      label: 'DeepSeek vision',
+      bytes,
+      mime,
+      timeoutMs,
+    })
   }
   throw new AiError('No vision provider available for this image.', {
     code: 'no_vision_provider',
@@ -136,40 +162,47 @@ export async function describeImage(args: {
   })
 }
 
-async function describeImageOpenAi(
-  apiKey: string,
-  bytes: Buffer,
-  mime: string,
-  timeoutMs: number,
-): Promise<string> {
+async function describeImageChatCompletions(args: {
+  apiKey: string
+  url: string
+  model: string
+  maxTokensField: 'max_tokens' | 'max_completion_tokens'
+  label: string
+  bytes: Buffer
+  mime: string
+  timeoutMs: number
+}): Promise<string> {
+  const { apiKey, url, model, maxTokensField, label, bytes, mime, timeoutMs } = args
   const dataUrl = `data:${safeImageMime(mime)};base64,${bytes.toString('base64')}`
+  const payload: Record<string, unknown> = {
+    model,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: IMAGE_DESCRIBE_PROMPT },
+          { type: 'image_url', image_url: { url: dataUrl } },
+        ],
+      },
+    ],
+  }
+  payload[maxTokensField] = 250
+
   let res: Response
   try {
-    res = await fetch(OPENAI_CHAT_URL, {
+    res = await fetch(url, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model: IMAGE_DESCRIBE_MODEL,
-        max_tokens: 250,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: IMAGE_DESCRIBE_PROMPT },
-              { type: 'image_url', image_url: { url: dataUrl } },
-            ],
-          },
-        ],
-      }),
+      body: JSON.stringify(payload),
       signal: AbortSignal.timeout(timeoutMs),
     })
   } catch (err) {
     throw toNetworkError(err)
   }
-  if (!res.ok) throw await providerHttpError('OpenAI vision', res)
+  if (!res.ok) throw await providerHttpError(label, res)
   const data = (await res.json().catch(() => null)) as {
     choices?: { message?: { content?: unknown } }[]
   } | null
