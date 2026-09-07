@@ -22,7 +22,6 @@ interface SilentCandidate {
 
 interface AccountSilenceConfig {
   account_id: string
-  handoff_agent_id: string | null
   silence_handoff_minutes: number
 }
 
@@ -40,7 +39,7 @@ export async function sweepSilentAiConversations(
   const { data: configs, error: cfgErr } = await db
     .from('ai_configs')
     .select(
-      'account_id, is_active, auto_reply_enabled, api_key, handoff_agent_id, silence_handoff_minutes',
+      'account_id, is_active, auto_reply_enabled, api_key, silence_handoff_minutes',
     )
     .eq('is_active', true)
     .eq('auto_reply_enabled', true)
@@ -57,7 +56,6 @@ export async function sweepSilentAiConversations(
     if (minutes <= 0) continue
     accounts.push({
       account_id: row.account_id as string,
-      handoff_agent_id: (row.handoff_agent_id as string | null) ?? null,
       silence_handoff_minutes: minutes,
     })
   }
@@ -128,7 +126,6 @@ async function maybeHandOffSilentThread(
     accountId: account.account_id,
     conversationId: conv.id,
     contactId: conv.contact_id,
-    handoffAgentId: account.handoff_agent_id,
     alreadyAssigned: null,
     summary: `🤖 AI agent handed off after ${account.silence_handoff_minutes} minutes without a customer reply.`,
     messageText,

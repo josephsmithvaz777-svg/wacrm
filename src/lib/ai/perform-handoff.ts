@@ -12,9 +12,9 @@ export interface AiHandoffResult {
 }
 
 /**
- * Pause the auto-reply bot on a thread and (when possible) assign it to
- * a human. Used both when the model emits [[HANDOFF]] and when the
- * customer goes silent after a bot reply.
+ * Pause the auto-reply bot on a thread and assign it to the next
+ * advisor in round-robin. Used both when the model emits [[HANDOFF]]
+ * and when the customer goes silent after a bot reply.
  *
  * `claimIdle` is for the silence sweep: the disable-bot write only
  * lands if the thread is still unassigned and the bot is still on, so
@@ -26,7 +26,6 @@ export async function performAiHandoff(
     accountId: string
     conversationId: string
     contactId: string
-    handoffAgentId: string | null
     alreadyAssigned: string | null
     summary: string
     messageText: string
@@ -56,11 +55,7 @@ export async function performAiHandoff(
 
   let agentId: string | null = args.alreadyAssigned
   if (!agentId) {
-    const next = await resolveHandoffAssignee(
-      db,
-      args.accountId,
-      args.handoffAgentId,
-    )
+    const next = await resolveHandoffAssignee(db, args.accountId)
     if (next) {
       const assigned = await assignConversationToAgent(db, {
         accountId: args.accountId,

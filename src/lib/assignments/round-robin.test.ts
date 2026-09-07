@@ -65,37 +65,24 @@ describe('accountHasActiveAiAutoReply', () => {
 })
 
 describe('resolveHandoffAssignee', () => {
-  it('returns the preferred agent when they can receive leads', async () => {
+  it('picks the next advisor in round-robin even if a preferred agent is set', async () => {
     const id = await resolveHandoffAssignee(
       dbReturning({
-        profiles: { account_role: 'agent' },
-        accounts: { round_robin_enabled: true },
+        accounts: { round_robin_last_user_id: 'agent-1' },
+        profiles: [{ user_id: 'agent-1' }, { user_id: 'agent-2' }],
       }),
       'acct',
-      'agent-7',
     )
-    expect(id).toBe('agent-7')
+    expect(id).toBe('agent-2')
   })
 
-  it('skips a viewer and does not assign them', async () => {
+  it('returns null when nobody is eligible', async () => {
     const id = await resolveHandoffAssignee(
       dbReturning({
-        profiles: { account_role: 'viewer' },
-        accounts: { round_robin_enabled: false },
+        accounts: { round_robin_last_user_id: null },
+        profiles: [],
       }),
       'acct',
-      'viewer-1',
-    )
-    expect(id).toBeNull()
-  })
-
-  it('leaves the chat unassigned when round-robin is off and no preferred agent', async () => {
-    const id = await resolveHandoffAssignee(
-      dbReturning({
-        accounts: { round_robin_enabled: false },
-      }),
-      'acct',
-      null,
     )
     expect(id).toBeNull()
   })

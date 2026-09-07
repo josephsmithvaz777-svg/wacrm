@@ -139,14 +139,12 @@ export async function dispatchInboundToAiReply(
 
     if (handoff || (!text && !mediaAssetId)) {
       // The model can't (or shouldn't) answer — stop auto-replying on
-      // this thread and hand it to a human. Prefer the configured
-      // handoff agent; otherwise round-robin. Assigning fires
-      // `conversation_assigned`, which notifies the advisor.
+      // this thread and hand it to the next advisor (round-robin).
+      // Assigning fires `conversation_assigned`, which notifies them.
       await performAiHandoff(db, {
         accountId,
         conversationId,
         contactId,
-        handoffAgentId: config.handoffAgentId,
         alreadyAssigned: (conv.assigned_agent_id as string | null) ?? null,
         summary: buildHandoffSummary({
           messages,

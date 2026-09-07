@@ -235,22 +235,11 @@ describe('dispatchInboundToAiReply — handoff', () => {
       expect.objectContaining({
         conversationId: 'conv-1',
         contactId: 'contact-1',
-        handoffAgentId: null,
         alreadyAssigned: null,
       }),
     )
     const summary = h.performAiHandoff.mock.calls[0][1].summary as string
     expect(summary).toContain('AI agent handed off')
-  })
-
-  it('passes the configured handoff agent through', async () => {
-    h.loadAiConfig.mockResolvedValue(aiConfig({ handoffAgentId: 'agent-7' }))
-    h.generateReply.mockResolvedValue({ text: '', handoff: true })
-    await dispatchInboundToAiReply(ARGS)
-    expect(h.performAiHandoff).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ handoffAgentId: 'agent-7' }),
-    )
   })
 })
 

@@ -4,7 +4,6 @@ import {
   requireRole,
   toErrorResponse,
 } from '@/lib/auth/account'
-import { canReceiveLeads, isAccountRole } from '@/lib/auth/roles'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
 import { encrypt, decrypt } from '@/lib/whatsapp/encryption'
 import { validateAiCredentials } from '@/lib/ai/validate'
@@ -102,31 +101,6 @@ export async function POST(request: Request) {
     )
     const silenceProvided = 'silence_handoff_minutes' in body
 
-    // Handoff routing target for auto-reply. A non-empty string must be a
-    // member of this account (else the conversation would be assigned to a
-    // stranger); an empty string / null means "leave unassigned" (the
-    // shared queue). Absent → left unchanged on update below.
-    const rawHandoff =
-      typeof body.handoff_agent_id === 'string' ? body.handoff_agent_id.trim() : ''
-    const handoffProvided = 'handoff_agent_id' in body
-    let handoffAgentId: string | null = null
-    if (rawHandoff) {
-      const { data: member } = await supabase
-        .from('profiles')
-        .select('user_id, account_role')
-        .eq('account_id', accountId)
-        .eq('user_id', rawHandoff)
-        .maybeSingle()
-      if (!member) return bad('handoff_agent_id must be a member of this account')
-      if (
-        !isAccountRole(member.account_role) ||
-        !canReceiveLeads(member.account_role)
-      ) {
-        return bad('handoff_agent_id cannot be a viewer')
-      }
-      handoffAgentId = rawHandoff
-    }
-
     const rawKey = typeof body.api_key === 'string' ? body.api_key.trim() : ''
 
     // Embeddings key (optional, for semantic KB search): a non-empty
@@ -221,9 +195,8 @@ export async function POST(request: Request) {
       auto_reply_max_per_conversation: maxPer,
     }
     if (silenceProvided) shared.silence_handoff_minutes = silenceHandoffMinutes
-    // Only touch the handoff target when the form actually sent the field,
-    // so a partial save (e.g. flipping a toggle) doesn't wipe it.
-    if (handoffProvided) shared.handoff_agent_id = handoffAgentId
+    // AI handoff always rotates among advisors — never pin one person.
+    shared.handoff_agent_id = null
     if (rawEmbeddingsKey) {
       shared.embeddings_api_key = encrypt(rawEmbeddingsKey)
     } else if (clearEmbeddingsKey) {

@@ -156,8 +156,7 @@ async function clearConversationAssignment(
 /**
  * True when the account's AI assistant is live and will auto-reply.
  * New inbound threads should stay unassigned in that case so the bot
- * can qualify the lead; round-robin (or a specific handoff agent)
- * runs later, on [[HANDOFF]].
+ * can qualify the lead; round-robin assignment runs later, on handoff.
  */
 export async function accountHasActiveAiAutoReply(
   db: Db,
@@ -176,31 +175,13 @@ export async function accountHasActiveAiAutoReply(
 }
 
 /**
- * Who should own the thread when the AI hands off. Prefers the
- * configured handoff agent; if that person is missing or ineligible
- * and the account uses round-robin, picks the next advisor instead.
- * Null means leave the chat in the shared queue.
+ * Who should own the thread when the AI hands off: the next advisor
+ * in round-robin (agent/admin). Null only if nobody is eligible.
  */
 export async function resolveHandoffAssignee(
   db: Db,
   accountId: string,
-  preferredAgentId: string | null,
 ): Promise<string | null> {
-  if (preferredAgentId) {
-    const eligible = await agentCanReceiveLeads(
-      db,
-      accountId,
-      preferredAgentId,
-    );
-    if (eligible) return preferredAgentId;
-  }
-
-  const { data: account } = await db
-    .from('accounts')
-    .select('round_robin_enabled')
-    .eq('id', accountId)
-    .maybeSingle();
-  if (!account?.round_robin_enabled) return null;
   return pickRoundRobinAgent(db, accountId);
 }
 
