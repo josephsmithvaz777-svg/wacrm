@@ -307,6 +307,11 @@ export interface Message {
    * Only set on the first inbound message of that thread. Migration 050.
    */
   ad_context?: MessageAdContext | null;
+  /**
+   * Cached AI transcription (audio) or description (image).
+   * Migration 060. Not a customer caption — that stays in `content_text`.
+   */
+  ai_media_text?: string | null;
 }
 
 export type ReactionActor = 'customer' | 'agent';

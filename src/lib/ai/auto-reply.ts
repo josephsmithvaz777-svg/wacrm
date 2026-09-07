@@ -95,7 +95,10 @@ export async function dispatchInboundToAiReply(
       return
     }
 
-    const messages = await buildConversationContext(db, conversationId)
+    const messages = await buildConversationContext(db, conversationId, {
+      accountId,
+      config,
+    })
     if (messages.length === 0) return
 
     // Account-wide throttle on the shared BYO key. The per-conversation

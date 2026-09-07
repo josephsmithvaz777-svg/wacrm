@@ -290,6 +290,7 @@ describe('dispatchInboundToAiReply — media', () => {
       mediaAssetId: flyer.id,
     })
     await dispatchInboundToAiReply(ARGS)
+    expect(h.sendMessageToConversation).toHaveBeenCalledTimes(1)
     expect(h.sendMessageToConversation).toHaveBeenCalledWith(
       expect.anything(),
       'acct-1',
@@ -302,6 +303,5 @@ describe('dispatchInboundToAiReply — media', () => {
         aiGenerated: true,
       }),
     )
-    expect(h.sendMessageToConversation).not.toHaveBeenCalled()
   })
 })
