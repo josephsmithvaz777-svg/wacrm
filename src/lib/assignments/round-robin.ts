@@ -2,6 +2,7 @@
 // Round-robin agent assignment
 // ============================================================
 
+import { contactBelongsToAccountStaff } from '@/lib/assignments/staff-contact';
 import { canReceiveLeads, isAccountRole } from '@/lib/auth/roles';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -195,6 +196,9 @@ export async function resolveHandoffAssignee(
  * Also reassigns when the current assignee is a viewer (or otherwise
  * ineligible). Leaving those threads in place kept sending WhatsApp
  * alerts to people who can only watch the inbox.
+ *
+ * Never assigns when the contact's phone belongs to a teammate —
+ * advisor numbers are inboxes, not leads.
  */
 export async function maybeRoundRobinAssignNewConversation(
   db: Db,
@@ -205,6 +209,14 @@ export async function maybeRoundRobinAssignNewConversation(
     alreadyAssigned?: string | null;
   },
 ): Promise<string | null> {
+  if (await contactBelongsToAccountStaff(db, opts.accountId, opts.contactId)) {
+    console.info(
+      '[round-robin] skip assign: contact is a staff phone',
+      opts.contactId,
+    );
+    return null;
+  }
+
   const current = opts.alreadyAssigned ?? null;
   if (current) {
     const eligible = await agentCanReceiveLeads(db, opts.accountId, current);

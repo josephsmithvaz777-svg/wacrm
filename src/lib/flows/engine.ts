@@ -889,6 +889,15 @@ export async function dispatchInboundToFlows(
       return handleReplyForActiveRun(db, activeRun, input.message, nodes);
     }
 
+    // Advisor WhatsApp numbers are not leads — don't start a customer
+    // flow (greeting / qualifier) when a teammate messages the inbox.
+    const { contactBelongsToAccountStaff } = await import(
+      "@/lib/assignments/staff-contact"
+    );
+    if (await contactBelongsToAccountStaff(db, input.accountId, input.contactId)) {
+      return { consumed: false, outcome: "no_match" };
+    }
+
     // No active run → look for a flow whose entry trigger matches.
     const flow = await findEntryFlow(
       db,

@@ -19,6 +19,7 @@ import type {
   AssignConversationStepConfig,
   NotifyStaffStepConfig,
 } from '@/types'
+import { contactBelongsToAccountStaff } from '@/lib/assignments/staff-contact'
 import { notifyStaffViaWhatsApp } from './staff-notify'
 import { supabaseAdmin } from './admin-client'
 import { addContactTagIfAbsent } from '@/lib/contacts/tag-write'
@@ -51,6 +52,17 @@ export interface AutomationContext {
   agent_id?: string
   /** Button / list-row id the customer tapped, for interactive_reply. */
   interactive_reply_id?: string
+}
+
+/** Inbound events that treat the sender as a customer / lead. */
+function isCustomerLeadTrigger(trigger: AutomationTriggerType): boolean {
+  return (
+    trigger === 'first_inbound_message' ||
+    trigger === 'new_contact_created' ||
+    trigger === 'new_message_received' ||
+    trigger === 'keyword_match' ||
+    trigger === 'interactive_reply'
+  )
 }
 
 export interface DispatchInput {
@@ -97,6 +109,17 @@ export async function runAutomationsForTrigger(input: DispatchInput): Promise<vo
       }
       if (!owned) {
         console.warn('[automations] contact not in account, refusing dispatch', input.contactId)
+        return
+      }
+      if (
+        isCustomerLeadTrigger(input.triggerType) &&
+        (await contactBelongsToAccountStaff(db, input.accountId, input.contactId))
+      ) {
+        console.info(
+          '[automations] skip: contact is a staff phone',
+          input.triggerType,
+          input.contactId,
+        )
         return
       }
     }
@@ -492,6 +515,15 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
     case 'assign_conversation': {
       const cfg = step.step_config as AssignConversationStepConfig
       if (!args.contactId) throw new Error('assign_conversation needs a contact')
+      if (
+        await contactBelongsToAccountStaff(
+          db,
+          args.automation.account_id,
+          args.contactId,
+        )
+      ) {
+        return 'skipped: contact is a staff phone'
+      }
       const conversationId = await resolveConversationId(args)
       const { data: existing } = await db
         .from('conversations')

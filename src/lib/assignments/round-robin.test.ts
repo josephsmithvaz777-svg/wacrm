@@ -2,13 +2,16 @@ import { describe, it, expect } from 'vitest'
 
 import {
   accountHasActiveAiAutoReply,
+  maybeRoundRobinAssignNewConversation,
   resolveHandoffAssignee,
 } from './round-robin'
 
 function dbReturning(
   tables: Record<string, Record<string, unknown> | Record<string, unknown>[] | null>,
 ) {
-  return {
+  const updates: string[] = []
+  const db = {
+    updates,
     from: (table: string) => {
       const row = tables[table]
       const chain: Record<string, unknown> = {}
@@ -23,10 +26,14 @@ function dbReturning(
       })
       ;(chain as { then?: unknown }).then = (resolve: (v: unknown) => void) =>
         resolve({ data: row, error: null })
-      chain.update = () => chain
+      chain.update = () => {
+        updates.push(table)
+        return chain
+      }
       return chain
     },
   }
+  return db
 }
 
 describe('accountHasActiveAiAutoReply', () => {
@@ -85,5 +92,46 @@ describe('resolveHandoffAssignee', () => {
       'acct',
     )
     expect(id).toBeNull()
+  })
+})
+
+describe('maybeRoundRobinAssignNewConversation', () => {
+  it('does not assign when the contact phone belongs to an advisor', async () => {
+    const db = dbReturning({
+      contacts: { phone: '51940912791' },
+      profiles: [{ phone: '+51 940 912 791' }, { phone: '51988824220' }],
+      accounts: { round_robin_enabled: true, round_robin_last_user_id: null },
+      ai_configs: null,
+    })
+    const id = await maybeRoundRobinAssignNewConversation(db, {
+      accountId: 'acct',
+      contactId: 'contact-jimena',
+      conversationId: 'conv-1',
+    })
+    expect(id).toBeNull()
+    expect(db.updates).toEqual([])
+  })
+
+  it('assigns a customer number to the next advisor', async () => {
+    const db = dbReturning({
+      contacts: { phone: '51911111111' },
+      profiles: [
+        { user_id: 'agent-1', phone: '51940912791', account_role: 'agent' },
+        { user_id: 'agent-2', phone: '51988824220', account_role: 'agent' },
+      ],
+      accounts: {
+        round_robin_enabled: true,
+        round_robin_last_user_id: 'agent-1',
+      },
+      ai_configs: null,
+    })
+    const id = await maybeRoundRobinAssignNewConversation(db, {
+      accountId: 'acct',
+      contactId: 'contact-lead',
+      conversationId: 'conv-2',
+    })
+    expect(id).toBe('agent-2')
+    expect(db.updates).toContain('accounts')
+    expect(db.updates).toContain('conversations')
   })
 })

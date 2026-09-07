@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   listAiMediaAssets: vi.fn(),
   sendMessageToConversation: vi.fn(),
   performAiHandoff: vi.fn(),
+  contactBelongsToAccountStaff: vi.fn(async () => false),
   state: {
     conv: null as Record<string, unknown> | null,
     autoResponders: [] as { id: string }[],
@@ -35,6 +36,9 @@ vi.mock('./perform-handoff', () => ({
 }))
 vi.mock('@/lib/automations/engine', () => ({
   runAutomationsForTrigger: vi.fn(async () => undefined),
+}))
+vi.mock('@/lib/assignments/staff-contact', () => ({
+  contactBelongsToAccountStaff: h.contactBelongsToAccountStaff,
 }))
 vi.mock('./admin-client', () => ({
   supabaseAdmin: () => ({
@@ -119,6 +123,7 @@ beforeEach(() => {
   h.state.updatePayload = null
   h.state.rpcCalls = []
   h.state.handoffAgentRole = 'agent'
+  h.contactBelongsToAccountStaff.mockResolvedValue(false)
   h.performAiHandoff.mockResolvedValue({ claimed: true, agentId: null })
   h.loadAiConfig.mockResolvedValue(aiConfig())
   h.buildConversationContext.mockResolvedValue([{ role: 'user', content: 'hi' }])
@@ -164,6 +169,13 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     expect(h.retrieveKnowledge).toHaveBeenCalled()
     const systemPrompt = h.generateReply.mock.calls[0][0].systemPrompt as string
     expect(systemPrompt).toContain('Returns accepted within 30 days.')
+  })
+
+  it('skips when the contact phone belongs to an advisor', async () => {
+    h.contactBelongsToAccountStaff.mockResolvedValue(true)
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.generateReply).not.toHaveBeenCalled()
+    expect(h.sendMessageToConversation).not.toHaveBeenCalled()
   })
 
   it('stands down when an active message-level automation exists', async () => {

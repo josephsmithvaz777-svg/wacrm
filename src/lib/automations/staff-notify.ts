@@ -1,5 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import {
+  contactPhoneMatchesStaff,
+  loadAccountStaffPhones,
+} from '@/lib/assignments/staff-contact';
 import { canReceiveLeads, isAccountRole } from '@/lib/auth/roles';
 
 import { engineSendText } from '@/lib/automations/meta-send';
@@ -117,6 +121,13 @@ export async function notifyStaffViaWhatsApp(params: {
       .maybeSingle();
     contactName = (contact?.name as string | null | undefined)?.trim() || '';
     contactPhone = (contact?.phone as string | null | undefined) ?? null;
+  }
+
+  if (contactPhone) {
+    const staffPhones = await loadAccountStaffPhones(db, accountId);
+    if (contactPhoneMatchesStaff(contactPhone, staffPhones)) {
+      return 'skipped: contact is a staff phone';
+    }
   }
 
   const candidates: StaffNotifyCandidate[] = [];

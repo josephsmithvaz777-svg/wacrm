@@ -10,6 +10,7 @@ import { latestUserMessage } from './query'
 import { listAiMediaAssets } from './media-assets'
 import { sendMessageToConversation } from '@/lib/whatsapp/send-message'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { contactBelongsToAccountStaff } from '@/lib/assignments/staff-contact'
 import { performAiHandoff } from './perform-handoff'
 
 interface DispatchArgs {
@@ -31,6 +32,7 @@ interface DispatchArgs {
  *
  * Eligibility gates (any → silent no-op):
  *   - AI off / auto-reply disabled for the account
+ *   - the contact phone belongs to a teammate (not a lead)
  *   - a human agent is assigned (they own the thread)
  *   - auto-reply was disabled for this conversation (prior handoff)
  *   - the per-conversation reply cap is reached
@@ -50,6 +52,8 @@ export async function dispatchInboundToAiReply(
 
     const config = await loadAiConfig(db, accountId)
     if (!config || !config.autoReplyEnabled) return
+
+    if (await contactBelongsToAccountStaff(db, accountId, contactId)) return
 
     // Deterministic, user-configured responders win over the LLM — the
     // caller already excludes messages a Flow consumed. Message-level

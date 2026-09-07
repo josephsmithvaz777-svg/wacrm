@@ -4,6 +4,7 @@ import {
   assignConversationToAgent,
   resolveHandoffAssignee,
 } from '@/lib/assignments/round-robin'
+import { contactBelongsToAccountStaff } from '@/lib/assignments/staff-contact'
 import { runAutomationsForTrigger } from '@/lib/automations/engine'
 
 export interface AiHandoffResult {
@@ -54,7 +55,15 @@ export async function performAiHandoff(
   }
 
   let agentId: string | null = args.alreadyAssigned
-  if (!agentId) {
+  if (
+    !agentId &&
+    (await contactBelongsToAccountStaff(db, args.accountId, args.contactId))
+  ) {
+    console.info(
+      '[ai handoff] skip assign: contact is a staff phone',
+      args.contactId,
+    )
+  } else if (!agentId) {
     const next = await resolveHandoffAssignee(db, args.accountId)
     if (next) {
       const assigned = await assignConversationToAgent(db, {
