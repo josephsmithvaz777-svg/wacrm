@@ -13,12 +13,6 @@ interface DbMessage extends MediaContextRow {
 
 const PLACEHOLDER_CAPTION = /^\[(image|audio|video|document)\]$/i
 
-const MESSAGE_CONTEXT_COLUMNS =
-  'id, sender_type, content_type, content_text, media_url, ad_context, ai_media_text'
-/** Pre-migration 060: drafts/auto-reply must not 500 if the column is missing. */
-const MESSAGE_CONTEXT_COLUMNS_LEGACY =
-  'id, sender_type, content_type, content_text, media_url, ad_context'
-
 export function isMissingAiMediaTextColumn(error: {
   message?: string
   code?: string
@@ -74,24 +68,33 @@ async function loadContextRows(
   conversationId: string,
   limit: number,
 ): Promise<DbMessage[]> {
-  const query = (columns: string) =>
-    db
-      .from('messages')
-      .select(columns)
-      .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: false })
-      .limit(limit)
+  // Select strings must be literals: a `string` variable makes supabase-js
+  // type the result as GenericStringError and `next build` fails.
+  const { data, error } = await db
+    .from('messages')
+    .select(
+      'id, sender_type, content_type, content_text, media_url, ad_context, ai_media_text',
+    )
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
 
-  const { data, error } = await query(MESSAGE_CONTEXT_COLUMNS)
-  if (!error) return (data ?? []) as DbMessage[]
+  if (!error) return (data ?? []) as unknown as DbMessage[]
   if (!isMissingAiMediaTextColumn(error)) throw error
 
   console.warn(
     '[ai context] messages.ai_media_text is missing — apply migration 060. Drafts will skip media cache.',
   )
-  const retry = await query(MESSAGE_CONTEXT_COLUMNS_LEGACY)
+  const retry = await db
+    .from('messages')
+    .select(
+      'id, sender_type, content_type, content_text, media_url, ad_context',
+    )
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
   if (retry.error) throw retry.error
-  return (retry.data ?? []) as DbMessage[]
+  return (retry.data ?? []) as unknown as DbMessage[]
 }
 
 /** Caption WhatsApp sometimes stores as `[image]` / `[audio]` when there is none. */
