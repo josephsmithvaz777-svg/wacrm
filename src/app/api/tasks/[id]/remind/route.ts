@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/automations/admin-client";
 import { getCurrentAccount, toErrorResponse } from "@/lib/auth/account";
 import { hasMinRole } from "@/lib/auth/roles";
 import {
+  ensureTaskDueReminderLoop,
   sendReminderForTask,
   shouldPersistTaskReminder,
   type DueTaskRow,
@@ -27,6 +28,7 @@ export async function POST(
       reason?: string;
     };
     if (body.reason === "reschedule") kind = "reschedule";
+    else if (body.reason === "created") kind = "created";
 
     const admin = supabaseAdmin();
     const { data, error } = await admin
@@ -44,7 +46,7 @@ export async function POST(
     if (data.completed_at) {
       return NextResponse.json({ error: "Task already done" }, { status: 400 });
     }
-    if (!data.due_at) {
+    if (!data.due_at && kind === "due") {
       return NextResponse.json({ error: "Task has no due date" }, { status: 400 });
     }
 
@@ -59,8 +61,10 @@ export async function POST(
       task.reminder_email_at = null;
     }
 
-    const markSent =
-      kind !== "reschedule" || shouldPersistTaskReminder(task.due_at);
+    const markSent = task.due_at
+      ? shouldPersistTaskReminder(task.due_at)
+      : false;
+    ensureTaskDueReminderLoop();
     const result = await sendReminderForTask(admin, task, new Date(), {
       markSent,
       kind,

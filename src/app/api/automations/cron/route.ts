@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/automations/admin-client'
 import { resumePendingExecution } from '@/lib/automations/engine'
 import type { AutomationContext } from '@/lib/automations/engine'
-import { sendDueTaskReminders } from '@/lib/tasks/reminders'
+import { sendDueTaskReminders, ensureTaskDueReminderLoop } from '@/lib/tasks/reminders'
 import { sweepSilentAiConversations } from '@/lib/ai/silence-handoff'
 
 /**
@@ -33,6 +33,7 @@ export async function GET(request: Request) {
   }
 
   const admin = supabaseAdmin()
+  ensureTaskDueReminderLoop()
   const reminders = await sendDueTaskReminders(admin)
   const silence = await sweepSilentAiConversations(admin)
 

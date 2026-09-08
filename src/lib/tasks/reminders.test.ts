@@ -19,26 +19,33 @@ const task: DueTaskRow = {
 };
 
 describe("shouldPersistTaskReminder", () => {
-  it("marks sent when the new due is today in Lima", () => {
+  it("waits until the due instant, not just the same calendar day", () => {
     expect(
       shouldPersistTaskReminder(
         "2026-09-08T18:00:00.000Z",
         new Date("2026-09-08T16:00:00.000Z"),
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
-  it("leaves the day-of reminder open when the new due is later", () => {
+  it("marks sent when the due instant has arrived", () => {
     expect(
       shouldPersistTaskReminder(
-        "2026-09-10T20:00:00.000Z",
-        new Date("2026-09-08T16:00:00.000Z"),
+        "2026-09-08T18:00:00.000Z",
+        new Date("2026-09-08T18:00:00.000Z"),
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 });
 
 describe("buildTaskReminderCopy", () => {
+  it("announces a newly created task", () => {
+    const copy = buildTaskReminderCopy(task, "Alfredo", "created");
+    expect(copy.title).toBe("Nueva tarea asignada");
+    expect(copy.whatsapp).toContain("Nueva tarea asignada");
+    expect(copy.emailSubject).toContain("Nueva tarea");
+  });
+
   it("uses the new time when a visit is rescheduled", () => {
     const copy = buildTaskReminderCopy(task, "Alfredo", "reschedule");
     expect(copy.title).toBe("Tarea reprogramada");
@@ -46,9 +53,9 @@ describe("buildTaskReminderCopy", () => {
     expect(copy.emailSubject).toContain("Tarea reprogramada");
   });
 
-  it("keeps the due-day wording for the cron reminder", () => {
+  it("uses due-time wording for the exact-time reminder", () => {
     const copy = buildTaskReminderCopy(task, "Alfredo", "due");
-    expect(copy.title).toBe("Tarea para hoy");
-    expect(copy.whatsapp).toContain("Hoy tienes asignada una tarea");
+    expect(copy.title).toBe("Es la hora de tu tarea");
+    expect(copy.whatsapp).toContain("Es la hora de tu tarea");
   });
 });

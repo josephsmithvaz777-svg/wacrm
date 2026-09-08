@@ -1,9 +1,10 @@
 "use client";
 
-import { useLocale } from "next-intl";
+import { Check } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Languages } from "lucide-react";
+import { toast } from "sonner";
 
 import {
   LOCALE_LABELS,
@@ -14,11 +15,14 @@ import {
 import { persistAppLocale } from "@/i18n/persist-locale";
 import { cn } from "@/lib/utils";
 
-/**
- * Compact language picker for login / signup / join (pre-auth).
- * Sets NEXT_LOCALE cookie and refreshes so next-intl reloads messages.
- */
-export function AuthLocaleSwitcher({ className }: { className?: string }) {
+export function LocalePicker({
+  className,
+  toastOnChange = true,
+}: {
+  className?: string;
+  toastOnChange?: boolean;
+}) {
+  const t = useTranslations("Settings.appearance");
   const locale = useLocale();
   const router = useRouter();
   const [pending, setPending] = useState<AppLocale | null>(null);
@@ -29,36 +33,37 @@ export function AuthLocaleSwitcher({ className }: { className?: string }) {
     if (next === active) return;
     setPending(next);
     persistAppLocale(next);
+    if (toastOnChange) toast.success(t("languageUpdated"));
     router.refresh();
     setPending(null);
   }
 
   return (
     <div
-      className={cn(
-        "flex items-center justify-center gap-1.5 text-xs text-muted-foreground",
-        className,
-      )}
-      role="group"
-      aria-label="Language"
+      role="radiogroup"
+      aria-label={t("language")}
+      className={cn("grid grid-cols-1 gap-2 sm:grid-cols-3", className)}
     >
-      <Languages className="h-3.5 w-3.5 shrink-0" aria-hidden />
       {SUPPORTED_LOCALES.map((code) => {
         const selected = active === code;
         return (
           <button
             key={code}
             type="button"
+            role="radio"
+            aria-checked={selected}
             onClick={() => pick(code)}
             className={cn(
-              "rounded-md px-2 py-1 transition-colors",
+              "flex items-center justify-between rounded-lg border bg-card px-3 py-2.5 text-left text-sm transition-colors",
               selected
-                ? "bg-primary/15 font-medium text-primary"
-                : "hover:bg-muted hover:text-foreground",
+                ? "border-primary/60 ring-2 ring-primary/40"
+                : "border-border hover:border-border hover:bg-muted/40",
             )}
-            aria-pressed={selected}
           >
-            {LOCALE_LABELS[code]}
+            <span className="font-medium text-foreground">
+              {LOCALE_LABELS[code]}
+            </span>
+            {selected ? <Check className="h-3.5 w-3.5 text-primary" /> : null}
           </button>
         );
       })}

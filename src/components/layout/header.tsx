@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
-import { LogOut, Menu, Settings as SettingsIcon, User } from "lucide-react";
+import { LogOut, Languages, Menu, Settings as SettingsIcon, User } from "lucide-react";
 import {
   Avatar,
   AvatarFallback,
@@ -14,11 +14,21 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ModeToggle } from "@/components/layout/mode-toggle";
 import { NotificationsBell } from "@/components/layout/notifications-bell";
-import { useTranslations } from "next-intl";
+import { persistAppLocale } from "@/i18n/persist-locale";
+import {
+  LOCALE_LABELS,
+  SUPPORTED_LOCALES,
+  type AppLocale,
+  isAppLocale,
+} from "@/i18n/config";
+import { useLocale, useTranslations } from "next-intl";
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "dashboard",
@@ -49,8 +59,11 @@ interface HeaderProps {
 export function Header({ onOpenSidebar }: HeaderProps) {
   const t = useTranslations("Header");
   const pathname = usePathname();
+  const locale = useLocale();
+  const router = useRouter();
   const { profile, signOut } = useAuth();
   const titleKey = getPageTitleKey(pathname);
+  const activeLocale = isAppLocale(locale) ? locale : ("en" as AppLocale);
 
   const initial =
     profile?.full_name?.charAt(0)?.toUpperCase() ??
@@ -134,6 +147,30 @@ export function Header({ onOpenSidebar }: HeaderProps) {
               <SettingsIcon className="size-4" />
               {t("menuSettings")}
             </DropdownMenuItem>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger className="text-popover-foreground">
+                <Languages className="size-4" />
+                {t("menuLanguage")}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {SUPPORTED_LOCALES.map((code) => (
+                  <DropdownMenuItem
+                    key={code}
+                    className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
+                    onClick={() => {
+                      if (code === activeLocale) return;
+                      persistAppLocale(code);
+                      router.refresh();
+                    }}
+                  >
+                    {LOCALE_LABELS[code]}
+                    {code === activeLocale ? (
+                      <span className="ml-auto text-xs text-primary">✓</span>
+                    ) : null}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
             <DropdownMenuSeparator className="bg-border" />
             <DropdownMenuItem
               onClick={signOut}

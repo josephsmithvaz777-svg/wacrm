@@ -153,6 +153,7 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Profile",
     "menuSettings": "Settings",
+    "menuLanguage": "Language",
     "menuSignOut": "Sign out"
   },
   "NotificationsPage": {
@@ -704,7 +705,7 @@
       "reminderWhatsAppMissing": "WhatsApp: not sent",
       "reminderEmailSent": "Email sent · {time}",
       "reminderEmailMissing": "Email: not sent",
-      "reminderPendingHint": "The reminder goes out on the due day when cron runs — not at the exact time.",
+      "reminderPendingHint": "The reminder is sent when the task is created, and again at the exact due time.",
       "sendReminderNow": "Send reminder now",
       "reminderSendOk": "Reminder sent to the advisor",
       "reminderSendFailed": "Couldn’t send the reminder",
@@ -744,7 +745,9 @@
       "toastRescheduleOk": "Appointment updated and advisor notified",
       "toastRescheduleSaved": "Appointment updated",
       "toastNewAppointmentOk": "New appointment created and advisor notified",
-      "toastNewAppointmentSaved": "New appointment created"
+      "toastNewAppointmentSaved": "New appointment created",
+      "toastNotifyOk": "Advisor notified",
+      "toastNotifyFailed": "Task saved, but the advisor couldn’t be notified"
     }
   },
   "Pipelines": {
@@ -1901,6 +1904,8 @@
       "displayName": "Display name",
       "whatsappPhone": "WhatsApp number",
       "whatsappPhoneHint": "Your personal number, with country code. Automations use it to alert you when a customer messages.",
+      "language": "Language",
+      "languageHint": "Change the interface language. Saved in this browser.",
       "email": "Email",
       "emailChangeHint": "Check the inbox for <bold>{oldEmail}</bold> and <bold>{newEmail}</bold> — both need to confirm before the change takes effect.",
       "accountDetails": "Account details",

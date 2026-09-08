@@ -2,7 +2,7 @@ export { TASK_REMINDER_RESET } from "@/lib/tasks/constants";
 
 export async function notifyTaskAdvisor(
   taskId: string,
-  reason: "due" | "reschedule" = "due",
+  reason: "due" | "reschedule" | "created" = "due",
 ): Promise<{
   ok: boolean;
   whatsapp?: boolean;

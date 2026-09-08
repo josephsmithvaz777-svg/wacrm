@@ -7,10 +7,8 @@ import {
   staffPhoneDigits,
 } from "@/lib/automations/staff-notify";
 import {
-  AUTOMATION_GREETING_TZ,
   formatAlertDateTime,
 } from "@/lib/automations/template-vars";
-import { calendarDateInZone, zonedDayRange } from "@/lib/datetime/zoned";
 import { sendPlainEmail } from "@/lib/email/send";
 
 export interface TaskReminderSummary {
@@ -27,7 +25,7 @@ export type DueTaskRow = {
   conversation_id: string | null;
   title: string;
   icon: string | null;
-  due_at: string;
+  due_at: string | null;
   assigned_to: string | null;
   created_by: string | null;
   reminder_sent_at?: string | null;
@@ -35,17 +33,15 @@ export type DueTaskRow = {
   reminder_email_at?: string | null;
 };
 
-export type TaskReminderKind = "due" | "reschedule";
+export type TaskReminderKind = "due" | "reschedule" | "created";
 
 export function shouldPersistTaskReminder(
   dueAt: string,
   now: Date = new Date(),
-  timeZone: string = AUTOMATION_GREETING_TZ,
 ): boolean {
-  return (
-    calendarDateInZone(new Date(dueAt), timeZone) <=
-    calendarDateInZone(now, timeZone)
-  );
+  const due = new Date(dueAt).getTime();
+  if (!Number.isFinite(due)) return false;
+  return due <= now.getTime();
 }
 
 export function buildTaskReminderCopy(
@@ -60,7 +56,24 @@ export function buildTaskReminderCopy(
   emailText: string;
 } {
   const labeled = `${task.icon ? `${task.icon} ` : ""}${task.title}`.trim();
-  const when = formatAlertDateTime(new Date(task.due_at));
+  const when = task.due_at ? formatAlertDateTime(new Date(task.due_at)) : "";
+  if (kind === "created") {
+    const body = when
+      ? `Se te asignó la tarea «${labeled}» con ${contactLabel}. Hora: ${when}.`
+      : `Se te asignó la tarea «${labeled}» con ${contactLabel}.`;
+    return {
+      title: "Nueva tarea asignada",
+      body,
+      whatsapp: [
+        "Nueva tarea asignada",
+        `Lead: ${contactLabel}`,
+        `Tarea: ${labeled}`,
+        ...(when ? [`Hora: ${when}`] : []),
+      ].join("\n"),
+      emailSubject: `Nueva tarea — ${task.title}`,
+      emailText: body,
+    };
+  }
   if (kind === "reschedule") {
     const body = `La tarea «${labeled}» con ${contactLabel} se reprogramó a ${when}.`;
     return {
@@ -76,20 +89,19 @@ export function buildTaskReminderCopy(
       emailText: `${body}\n\nNueva hora: ${when}`,
     };
   }
-  const title = "Tarea para hoy";
-  const body = `Hoy tienes asignada la tarea «${labeled}» con ${contactLabel}.`;
+  const title = "Es la hora de tu tarea";
+  const body = `Es la hora de la tarea «${labeled}» con ${contactLabel}.`;
   return {
     title,
     body,
     whatsapp: [
-      "Recordatorio de tarea",
-      `Hoy tienes asignada una tarea.`,
+      "Es la hora de tu tarea",
       `Lead: ${contactLabel}`,
       `Tarea: ${labeled}`,
-      `Hora: ${when}`,
+      ...(when ? [`Hora: ${when}`] : []),
     ].join("\n"),
-    emailSubject: `Recordatorio: tienes una tarea hoy — ${task.title}`,
-    emailText: `${body}\n\nHora: ${when}`,
+    emailSubject: `Es la hora de tu tarea — ${task.title}`,
+    emailText: `${body}${when ? `\n\nHora: ${when}` : ""}`,
   };
 }
 
@@ -118,8 +130,10 @@ export async function sendReminderForTask(
   const errors: string[] = [];
   const markSent = opts.markSent !== false;
   const kind = opts.kind ?? "due";
-  let whatsapp = kind === "reschedule" ? false : Boolean(task.reminder_whatsapp_at);
-  let emailSent = kind === "reschedule" ? false : Boolean(task.reminder_email_at);
+  const forceChannels =
+    kind === "created" || kind === "reschedule" || kind === "due";
+  let whatsapp = forceChannels ? false : Boolean(task.reminder_whatsapp_at);
+  let emailSent = forceChannels ? false : Boolean(task.reminder_email_at);
 
   if (markSent && !task.reminder_sent_at) {
     await db
@@ -147,7 +161,7 @@ export async function sendReminderForTask(
   const email = (profile?.email as string | null | undefined)?.trim() || "";
   const name = (profile?.full_name as string | null | undefined) ?? null;
 
-  if (!task.reminder_sent_at || kind === "reschedule") {
+  if (!task.reminder_sent_at || kind === "reschedule" || kind === "created") {
     try {
       await db.from("notifications").insert({
         account_id: task.account_id,
@@ -176,12 +190,10 @@ export async function sendReminderForTask(
           toName: name,
           text: copy.whatsapp,
         });
-        if (markSent) {
-          await db
-            .from("lead_tasks")
-            .update({ reminder_whatsapp_at: now.toISOString() })
-            .eq("id", task.id);
-        }
+        await db
+          .from("lead_tasks")
+          .update({ reminder_whatsapp_at: now.toISOString() })
+          .eq("id", task.id);
         whatsapp = true;
       } catch (err) {
         errors.push(
@@ -201,12 +213,10 @@ export async function sendReminderForTask(
         text: copy.emailText,
       });
       if (mail.ok) {
-        if (markSent) {
-          await db
-            .from("lead_tasks")
-            .update({ reminder_email_at: now.toISOString() })
-            .eq("id", task.id);
-        }
+        await db
+          .from("lead_tasks")
+          .update({ reminder_email_at: now.toISOString() })
+          .eq("id", task.id);
         emailSent = true;
       } else if (mail.skipped) {
         errors.push("email skipped: RESEND_API_KEY not set");
@@ -220,14 +230,13 @@ export async function sendReminderForTask(
 }
 
 /**
- * Send WhatsApp + email + in-app notification for open tasks due
- * today or already overdue (America/Lima).
+ * Send WhatsApp + email + in-app notification for open tasks whose
+ * due instant has arrived (or is already overdue).
  */
 export async function sendDueTaskReminders(
   db: SupabaseClient = supabaseAdmin(),
   now: Date = new Date(),
 ): Promise<TaskReminderSummary> {
-  const { end } = zonedDayRange(now, AUTOMATION_GREETING_TZ);
   const { data, error } = await db
     .from("lead_tasks")
     .select(
@@ -236,7 +245,7 @@ export async function sendDueTaskReminders(
     .is("completed_at", null)
     .is("reminder_sent_at", null)
     .not("due_at", "is", null)
-    .lt("due_at", end.toISOString())
+    .lte("due_at", now.toISOString())
     .limit(100);
 
   if (error) {
@@ -261,4 +270,27 @@ export async function sendDueTaskReminders(
   }
 
   return summary;
+}
+
+const DUE_LOOP_MS = 30_000;
+let dueLoop: ReturnType<typeof setInterval> | null = null;
+
+async function runDueSweep(): Promise<void> {
+  try {
+    await sendDueTaskReminders();
+  } catch (err) {
+    console.error("[task-reminders] sweep failed:", err);
+  }
+}
+
+/**
+ * Hostinger / Docker may not ping cron every minute. A 30s loop on
+ * the Node process fires WhatsApp + email when the due instant arrives.
+ */
+export function ensureTaskDueReminderLoop(): void {
+  if (dueLoop) return;
+  void runDueSweep();
+  dueLoop = setInterval(() => {
+    void runDueSweep();
+  }, DUE_LOOP_MS);
 }

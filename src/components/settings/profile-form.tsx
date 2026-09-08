@@ -17,6 +17,7 @@ import {
 import { Card, CardContent } from '@/components/ui/card';
 import { useTranslations } from 'next-intl';
 import { SettingsPanelHead } from './settings-panel-head';
+import { LocalePicker } from '@/components/locale-picker';
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 const ALLOWED_MIME = new Set([
@@ -296,6 +297,12 @@ export function ProfileForm() {
             <p className="text-xs text-muted-foreground">
               {t('whatsappPhoneHint')}
             </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-foreground">{t('language')}</Label>
+            <p className="text-xs text-muted-foreground">{t('languageHint')}</p>
+            <LocalePicker />
           </div>
 
           {/* Email */}

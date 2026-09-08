@@ -16,7 +16,6 @@ import { useAssignableMembers } from "@/hooks/use-assignable-members";
 import { useAuth } from "@/hooks/use-auth";
 import { AUTOMATION_GREETING_TZ, formatAlertDateTime } from "@/lib/automations/template-vars";
 import {
-  calendarDateInZone,
   combineLocalDateAndTime,
   dueAtChanged,
   splitZonedDateTime,
@@ -131,12 +130,12 @@ export function LeadTasksPanel({
       toast.error(t("toastSaveFailed"));
       return;
     }
-    if (created?.id && created.due_at) {
-      const due = new Date(created.due_at);
-      const today = calendarDateInZone(new Date(), AUTOMATION_GREETING_TZ);
-      const dueDay = calendarDateInZone(due, AUTOMATION_GREETING_TZ);
-      if (dueDay <= today) {
-        void notifyTaskAdvisor(created.id);
+    if (created?.id) {
+      const body = await notifyTaskAdvisor(created.id, "created");
+      if (body.ok && (body.whatsapp || body.email)) {
+        toast.success(t("toastNotifyOk"));
+      } else if (!body.ok || body.errors?.length) {
+        toast.error(body.errors?.[0] || t("toastNotifyFailed"));
       }
     }
     setTitle("");

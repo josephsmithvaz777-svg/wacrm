@@ -153,6 +153,7 @@
     "defaultAvatar": "아바타",
     "menuProfile": "프로필",
     "menuSettings": "설정",
+    "menuLanguage": "언어",
     "menuSignOut": "로그아웃"
   },
   "NotificationsPage": {
@@ -703,7 +704,7 @@
       "reminderWhatsAppMissing": "WhatsApp: 미발송",
       "reminderEmailSent": "이메일 발송 · {time}",
       "reminderEmailMissing": "이메일: 미발송",
-      "reminderPendingHint": "알림은 마감일 크론이 돌 때 발송됩니다. 정확한 시각이 아닙니다.",
+      "reminderPendingHint": "알림은 작업을 만들 때와 마감 시각에 다시 발송됩니다.",
       "sendReminderNow": "지금 알림 보내기",
       "reminderSendOk": "담당자에게 알림을 보냈습니다",
       "reminderSendFailed": "알림을 보내지 못했습니다",
@@ -743,7 +744,9 @@
       "toastRescheduleOk": "일정을 바꾸고 담당자에게 알렸습니다",
       "toastRescheduleSaved": "일정을 바꿨습니다",
       "toastNewAppointmentOk": "새 일정을 만들고 담당자에게 알렸습니다",
-      "toastNewAppointmentSaved": "새 일정을 만들었습니다"
+      "toastNewAppointmentSaved": "새 일정을 만들었습니다",
+      "toastNotifyOk": "담당자에게 알림을 보냈습니다",
+      "toastNotifyFailed": "작업은 만들었지만 담당자에게 알리지 못했습니다"
     }
   },
   "Pipelines": {
@@ -1900,6 +1903,8 @@
       "displayName": "표시 이름",
       "whatsappPhone": "왓츠앱 번호",
       "whatsappPhoneHint": "국가 코드가 포함된 개인 번호입니다. 고객이 메시지를 보낼 때 자동화가 이 번호로 알립니다.",
+      "language": "언어",
+      "languageHint": "인터페이스 언어를 변경합니다. 이 브라우저에 저장됩니다.",
       "email": "이메일",
       "emailChangeHint": "<bold>{oldEmail}</bold>과(와) <bold>{newEmail}</bold>의 받은편지함을 확인하세요 — 변경 사항이 적용되려면 둘 다 확인이 필요합니다.",
       "accountDetails": "계정 정보",

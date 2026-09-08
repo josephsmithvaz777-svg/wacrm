@@ -153,6 +153,7 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Perfil",
     "menuSettings": "Configuración",
+    "menuLanguage": "Idioma",
     "menuSignOut": "Cerrar sesión"
   },
   "NotificationsPage": {
@@ -725,7 +726,7 @@
       "reminderWhatsAppMissing": "WhatsApp: no enviado",
       "reminderEmailSent": "Correo enviado · {time}",
       "reminderEmailMissing": "Correo: no enviado",
-      "reminderPendingHint": "El aviso sale el día de la tarea, cuando corre el cron — no a la hora exacta.",
+      "reminderPendingHint": "El aviso sale al crear la tarea y otra vez a la fecha y hora exactas.",
       "sendReminderNow": "Enviar aviso ahora",
       "reminderSendOk": "Aviso enviado al asesor",
       "reminderSendFailed": "No se pudo enviar el aviso",
@@ -765,7 +766,9 @@
       "toastRescheduleOk": "Cita actualizada y aviso enviado",
       "toastRescheduleSaved": "Cita actualizada",
       "toastNewAppointmentOk": "Nueva cita creada y aviso enviado",
-      "toastNewAppointmentSaved": "Nueva cita creada"
+      "toastNewAppointmentSaved": "Nueva cita creada",
+      "toastNotifyOk": "Aviso enviado al asesor",
+      "toastNotifyFailed": "La tarea se creó, pero no se pudo avisar al asesor"
     }
   },
   "Pipelines": {
@@ -1925,6 +1928,8 @@
       "displayName": "Nombre para mostrar",
       "whatsappPhone": "Número de WhatsApp",
       "whatsappPhoneHint": "Tu número personal, con código de país. Las automatizaciones lo usan para avisarte cuando escribe un cliente.",
+      "language": "Idioma",
+      "languageHint": "Cambia el idioma de la interfaz. Se guarda en este navegador.",
       "email": "Correo",
       "emailChangeHint": "Revisa la bandeja de <bold>{oldEmail}</bold> y <bold>{newEmail}</bold>: ambos deben confirmar antes de que el cambio surta efecto.",
       "accountDetails": "Detalles de la cuenta",
