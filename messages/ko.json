@@ -16,6 +16,14 @@
     "noAccount": "계정이 없으신가요?",
     "createAccount": "계정 만들기"
   },
+  "Errors": {
+    "page": {
+      "title": "이 페이지를 불러오지 못했습니다",
+      "body": "새로고침해 다시 시도하세요. 탭을 연 채로 업데이트가 나가면 자주 발생합니다.",
+      "reload": "새로고침",
+      "retry": "다시 시도"
+    }
+  },
   "SignupPage": {
     "titleInvite": "계정 만들고 참여",
     "titleInviteNamed": "{name}에 참여",
@@ -661,6 +669,9 @@
       "unknownLead": "리드",
       "due": "마감 {date}",
       "openChat": "채팅",
+      "assignTo": "상담원에게 배정",
+      "unassigned": "미배정",
+      "toastAssignFailed": "작업을 배정하지 못했습니다",
       "markDone": "완료로 표시",
       "markOpen": "미완료로 표시",
       "viewList": "목록",
@@ -698,10 +709,13 @@
       "dueTime": "시간",
       "due": "마감 {date}",
       "empty": "작업 없음",
+      "assignTo": "상담원에게 배정",
+      "unassigned": "미배정",
       "delete": "삭제",
       "markDone": "완료로 표시",
       "markOpen": "미완료로 표시",
       "toastSaveFailed": "작업을 저장하지 못했습니다",
+      "toastAssignFailed": "작업을 배정하지 못했습니다",
       "toastDeleteFailed": "작업을 삭제하지 못했습니다"
     }
   },

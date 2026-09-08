@@ -7,7 +7,12 @@ import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import { TaskCalendar } from "@/components/tasks/task-calendar";
+import {
+  assigneeName,
+  TaskAssigneeSelect,
+} from "@/components/tasks/task-assignee-select";
 import { Button } from "@/components/ui/button";
+import { useAssignableMembers } from "@/hooks/use-assignable-members";
 import { useAuth } from "@/hooks/use-auth";
 import { useCan } from "@/hooks/use-can";
 import { formatAlertDateTime } from "@/lib/automations/template-vars";
@@ -22,7 +27,9 @@ type TasksView = "list" | "day" | "week" | "month";
 export default function TasksPage() {
   const t = useTranslations("Tasks.page");
   const canEdit = useCan("send-messages");
-  const { account, accountRole, isAgent, profileLoading, user } = useAuth();
+  const { account, accountRole, canManageMembers, isAgent, profileLoading, user } =
+    useAuth();
+  const members = useAssignableMembers();
   const lockToSelf = shouldLockTasksToSelf(
     accountRole,
     account?.restrict_agent_tasks !== false,
@@ -113,6 +120,23 @@ export default function TasksPage() {
     [canEdit, load],
   );
 
+  const assignTask = useCallback(
+    async (task: LeadTask, agentId: string) => {
+      if (!canManageMembers) return;
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("lead_tasks")
+        .update({ assigned_to: agentId || null })
+        .eq("id", task.id);
+      if (error) {
+        toast.error(t("toastAssignFailed"));
+        return;
+      }
+      await load();
+    },
+    [canManageMembers, load, t],
+  );
+
   const views: { id: TasksView; label: string }[] = [
     { id: "list", label: t("viewList") },
     { id: "day", label: t("viewDay") },
@@ -190,9 +214,12 @@ export default function TasksPage() {
               anchor={anchor}
               onAnchorChange={setAnchor}
               canEdit={canEdit}
+              canAssign={canManageMembers}
+              members={members}
               accountName={account?.name}
               onComplete={completeTask}
               onRemind={remindTask}
+              onAssign={assignTask}
             />
           )
         ) : tasks.length === 0 ? (
@@ -270,7 +297,19 @@ export default function TasksPage() {
                       {task.due_at
                         ? ` · ${t("due", { date: formatAlertDateTime(new Date(task.due_at)) })}`
                         : ""}
+                      {` · ${assigneeName(members, task.assigned_to, t("unassigned"))}`}
                     </p>
+                    {canManageMembers ? (
+                      <div className="mt-2 max-w-xs">
+                        <TaskAssigneeSelect
+                          value={task.assigned_to ?? ""}
+                          onChange={(id) => void assignTask(task, id)}
+                          members={members}
+                          placeholder={t("assignTo")}
+                          unassignedLabel={t("unassigned")}
+                        />
+                      </div>
+                    ) : null}
                   </div>
                   <Link
                     href={href}

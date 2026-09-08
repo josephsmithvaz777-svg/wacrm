@@ -16,6 +16,14 @@
     "noAccount": "Don't have an account?",
     "createAccount": "Create account"
   },
+  "Errors": {
+    "page": {
+      "title": "This page couldn’t be loaded",
+      "body": "Reload to try again. This often happens after an update while the tab was left open.",
+      "reload": "Reload",
+      "retry": "Try again"
+    }
+  },
   "SignupPage": {
     "titleInvite": "Create account & join",
     "titleInviteNamed": "Join {name}",
@@ -662,6 +670,9 @@
       "unknownLead": "Lead",
       "due": "Due {date}",
       "openChat": "Chat",
+      "assignTo": "Assign to an agent",
+      "unassigned": "Unassigned",
+      "toastAssignFailed": "Couldn’t assign the task",
       "markDone": "Mark done",
       "markOpen": "Mark open",
       "viewList": "List",
@@ -699,10 +710,13 @@
       "dueTime": "Time",
       "due": "Due {date}",
       "empty": "No tasks",
+      "assignTo": "Assign to an agent",
+      "unassigned": "Unassigned",
       "delete": "Delete",
       "markDone": "Mark done",
       "markOpen": "Mark open",
       "toastSaveFailed": "Couldn’t save the task",
+      "toastAssignFailed": "Couldn’t assign the task",
       "toastDeleteFailed": "Couldn’t delete the task"
     }
   },

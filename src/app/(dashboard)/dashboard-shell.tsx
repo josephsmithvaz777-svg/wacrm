@@ -9,6 +9,10 @@ import { Header } from "@/components/layout/header";
 import { PresenceHeartbeat } from "@/components/presence/presence-heartbeat";
 import { ProfileThemeHydrator } from "@/components/layout/profile-theme-hydrator";
 import { AlertSounds } from "@/components/layout/alert-sounds";
+import {
+  clearStaleReloadFlag,
+  reloadOnceIfStale,
+} from "@/lib/navigation/stale-client";
 
 function DashboardShellInner({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -22,6 +26,23 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
       router.push("/login");
     }
   }, [user, loading, router]);
+
+  useEffect(() => {
+    const settled = window.setTimeout(() => clearStaleReloadFlag(), 5000);
+    const onReject = (event: PromiseRejectionEvent) => {
+      if (reloadOnceIfStale(event.reason)) event.preventDefault();
+    };
+    const onError = (event: ErrorEvent) => {
+      reloadOnceIfStale(event.error ?? event.message);
+    };
+    window.addEventListener("unhandledrejection", onReject);
+    window.addEventListener("error", onError);
+    return () => {
+      window.clearTimeout(settled);
+      window.removeEventListener("unhandledrejection", onReject);
+      window.removeEventListener("error", onError);
+    };
+  }, []);
 
   if (loading) {
     return (

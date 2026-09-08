@@ -6,7 +6,13 @@ import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import { TaskIconPicker } from "@/components/inbox/task-icon-picker";
+import {
+  assigneeName,
+  TaskAssigneeSelect,
+} from "@/components/tasks/task-assignee-select";
 import { Button } from "@/components/ui/button";
+import { useAssignableMembers } from "@/hooks/use-assignable-members";
+import { useAuth } from "@/hooks/use-auth";
 import { AUTOMATION_GREETING_TZ, formatAlertDateTime } from "@/lib/automations/template-vars";
 import { calendarDateInZone, combineLocalDateAndTime } from "@/lib/datetime/zoned";
 import { createClient } from "@/lib/supabase/client";
@@ -28,11 +34,14 @@ export function LeadTasksPanel({
   compact?: boolean;
 }) {
   const t = useTranslations("Tasks.panel");
+  const { canManageMembers, user } = useAuth();
+  const members = useAssignableMembers();
   const [tasks, setTasks] = useState<LeadTask[]>([]);
   const [title, setTitle] = useState("");
   const [icon, setIcon] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [dueTime, setDueTime] = useState("");
+  const [assignedTo, setAssignedTo] = useState("");
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -51,35 +60,49 @@ export function LeadTasksPanel({
     void load();
   }, [load]);
 
-  const addTask = useCallback(async () => {
-    const trimmed = title.trim();
-    if (!trimmed || !accountId || !canEdit) return;
-    setSaving(true);
+  const defaultAssignee = useCallback(async (): Promise<string | null> => {
     const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    let assignedTo: string | null = null;
     if (conversationId) {
       const { data: conv } = await supabase
         .from("conversations")
         .select("assigned_agent_id")
         .eq("id", conversationId)
         .maybeSingle();
-      assignedTo =
+      const fromConv =
         (conv?.assigned_agent_id as string | null | undefined) ?? null;
+      if (fromConv) return fromConv;
     }
-    if (!assignedTo) {
-      const { data: contact } = await supabase
-        .from("contacts")
-        .select("assigned_to")
-        .eq("id", contactId)
-        .maybeSingle();
-      assignedTo =
-        (contact?.assigned_to as string | null | undefined) ?? null;
+    const { data: contact } = await supabase
+      .from("contacts")
+      .select("assigned_to")
+      .eq("id", contactId)
+      .maybeSingle();
+    return (contact?.assigned_to as string | null | undefined) ?? null;
+  }, [contactId, conversationId]);
+
+  useEffect(() => {
+    void defaultAssignee().then((id) => {
+      if (id) setAssignedTo(id);
+    });
+  }, [defaultAssignee]);
+
+  const addTask = useCallback(async () => {
+    const trimmed = title.trim();
+    if (!trimmed || !accountId || !canEdit) return;
+    setSaving(true);
+    const supabase = createClient();
+    const userId = user?.id ?? null;
+
+    let nextAssignee: string | null = assignedTo || null;
+    if (!nextAssignee) nextAssignee = await defaultAssignee();
+    if (
+      nextAssignee &&
+      members.length > 0 &&
+      !members.some((m) => m.user_id === nextAssignee)
+    ) {
+      nextAssignee = null;
     }
-    if (!assignedTo) assignedTo = user?.id ?? null;
+    if (!nextAssignee && !canManageMembers) nextAssignee = userId;
 
     const dueIso = combineLocalDateAndTime(dueDate, dueTime);
     const { data: created, error } = await supabase
@@ -88,8 +111,8 @@ export function LeadTasksPanel({
         account_id: accountId,
         contact_id: contactId,
         conversation_id: conversationId ?? null,
-        created_by: user?.id ?? null,
-        assigned_to: assignedTo,
+        created_by: userId,
+        assigned_to: nextAssignee,
         title: trimmed,
         icon: icon || null,
         due_at: dueIso,
@@ -113,19 +136,43 @@ export function LeadTasksPanel({
     setIcon("");
     setDueDate("");
     setDueTime("");
+    const fallback = await defaultAssignee();
+    setAssignedTo(fallback ?? "");
     await load();
   }, [
     accountId,
+    assignedTo,
     canEdit,
+    canManageMembers,
     contactId,
     conversationId,
+    defaultAssignee,
     dueDate,
     dueTime,
     icon,
     load,
+    members,
     t,
     title,
+    user?.id,
   ]);
+
+  const assignTask = useCallback(
+    async (taskId: string, agentId: string) => {
+      if (!canEdit || !canManageMembers) return;
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("lead_tasks")
+        .update({ assigned_to: agentId || null })
+        .eq("id", taskId);
+      if (error) {
+        toast.error(t("toastAssignFailed"));
+        return;
+      }
+      await load();
+    },
+    [canEdit, canManageMembers, load, t],
+  );
 
   const toggleDone = useCallback(
     async (task: LeadTask) => {
@@ -213,6 +260,16 @@ export function LeadTasksPanel({
               aria-label={t("dueTime")}
             />
           </div>
+          {canManageMembers ? (
+            <TaskAssigneeSelect
+              value={assignedTo}
+              onChange={setAssignedTo}
+              members={members}
+              disabled={saving}
+              placeholder={t("assignTo")}
+              unassignedLabel={t("unassigned")}
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -272,6 +329,21 @@ export function LeadTasksPanel({
                       )}
                     >
                       {t("due", { date: dueLabel })}
+                    </p>
+                  ) : null}
+                  {canManageMembers ? (
+                    <div className="mt-1">
+                      <TaskAssigneeSelect
+                        value={task.assigned_to ?? ""}
+                        onChange={(id) => void assignTask(task.id, id)}
+                        members={members}
+                        placeholder={t("assignTo")}
+                        unassignedLabel={t("unassigned")}
+                      />
+                    </div>
+                  ) : task.assigned_to ? (
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                      {assigneeName(members, task.assigned_to, t("unassigned"))}
                     </p>
                   ) : null}
                 </div>

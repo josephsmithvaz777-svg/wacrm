@@ -16,6 +16,14 @@
     "noAccount": "¿No tienes una cuenta?",
     "createAccount": "Crear cuenta"
   },
+  "Errors": {
+    "page": {
+      "title": "No se pudo cargar esta página",
+      "body": "Recarga para intentarlo de nuevo. Suele pasar después de una actualización, con la pestaña abierta.",
+      "reload": "Recargar",
+      "retry": "Reintentar"
+    }
+  },
   "SignupPage": {
     "titleInvite": "Crear cuenta y unirte",
     "titleInviteNamed": "Únete a {name}",
@@ -683,6 +691,9 @@
       "unknownLead": "Lead",
       "due": "Vence {date}",
       "openChat": "Chat",
+      "assignTo": "Asignar a un agente",
+      "unassigned": "Sin asignar",
+      "toastAssignFailed": "No se pudo asignar la tarea",
       "markDone": "Marcar hecha",
       "markOpen": "Marcar pendiente",
       "viewList": "Lista",
@@ -720,10 +731,13 @@
       "dueTime": "Hora",
       "due": "Vence {date}",
       "empty": "Sin tareas",
+      "assignTo": "Asignar a un agente",
+      "unassigned": "Sin asignar",
       "delete": "Eliminar",
       "markDone": "Marcar hecha",
       "markOpen": "Marcar pendiente",
       "toastSaveFailed": "No se pudo guardar la tarea",
+      "toastAssignFailed": "No se pudo asignar la tarea",
       "toastDeleteFailed": "No se pudo eliminar la tarea"
     }
   },

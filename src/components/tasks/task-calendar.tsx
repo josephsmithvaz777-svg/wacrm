@@ -20,7 +20,7 @@ import {
   weekDays,
 } from "@/lib/tasks/calendar";
 import { cn } from "@/lib/utils";
-import type { LeadTask } from "@/types";
+import type { AccountMember, LeadTask } from "@/types";
 
 const DATE_LOCALE = { en: enUS, es, ko } as const;
 
@@ -30,18 +30,24 @@ export function TaskCalendar({
   anchor,
   onAnchorChange,
   canEdit,
+  canAssign,
+  members,
   accountName,
   onComplete,
   onRemind,
+  onAssign,
 }: {
   tasks: LeadTask[];
   view: "day" | "week" | "month";
   anchor: Date;
   onAnchorChange: (next: Date) => void;
   canEdit: boolean;
+  canAssign?: boolean;
+  members?: AccountMember[];
   accountName?: string | null;
   onComplete: (task: LeadTask, result: string) => Promise<void>;
   onRemind?: (task: LeadTask) => Promise<void>;
+  onAssign?: (task: LeadTask, agentId: string) => Promise<void>;
 }) {
   const t = useTranslations("Tasks.page");
   const locale = useLocale();
@@ -133,8 +139,11 @@ export function TaskCalendar({
                       fallbackLead={fallbackLead}
                       accountName={accountName}
                       canEdit={canEdit}
+                      canAssign={canAssign}
+                      members={members}
                       onComplete={onComplete}
                       onRemind={onRemind}
+                      onAssign={onAssign}
                     />
                   ))}
                   {extra > 0 ? (
@@ -227,8 +236,11 @@ export function TaskCalendar({
                           fallbackLead={fallbackLead}
                           accountName={accountName}
                           canEdit={canEdit}
+                          canAssign={canAssign}
+                          members={members}
                           onComplete={onComplete}
                           onRemind={onRemind}
+                          onAssign={onAssign}
                           className="h-full"
                         />
                       </div>

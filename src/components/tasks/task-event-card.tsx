@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 
+import { TaskAssigneeSelect, assigneeName } from "@/components/tasks/task-assignee-select";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -17,7 +18,7 @@ import {
   taskToneClass,
 } from "@/lib/tasks/calendar";
 import { cn } from "@/lib/utils";
-import type { LeadTask } from "@/types";
+import type { AccountMember, LeadTask } from "@/types";
 
 function leadLabel(task: LeadTask, fallback: string): string {
   return task.contact?.name?.trim() || task.contact?.phone || fallback;
@@ -32,16 +33,22 @@ export function TaskEventChip({
   fallbackLead,
   accountName,
   canEdit,
+  canAssign,
+  members,
   onComplete,
   onRemind,
+  onAssign,
   className,
 }: {
   task: LeadTask;
   fallbackLead: string;
   accountName?: string | null;
   canEdit: boolean;
+  canAssign?: boolean;
+  members?: AccountMember[];
   onComplete: (task: LeadTask, result: string) => Promise<void>;
   onRemind?: (task: LeadTask) => Promise<void>;
+  onAssign?: (task: LeadTask, agentId: string) => Promise<void>;
   className?: string;
 }) {
   const t = useTranslations("Tasks.page");
@@ -116,6 +123,19 @@ export function TaskEventChip({
             {task.title}
           </span>
         </p>
+        {canAssign && onAssign && members ? (
+          <TaskAssigneeSelect
+            value={task.assigned_to ?? ""}
+            onChange={(id) => void onAssign(task, id)}
+            members={members}
+            placeholder={t("assignTo")}
+            unassignedLabel={t("unassigned")}
+          />
+        ) : members ? (
+          <p className="text-[11px] text-muted-foreground">
+            {assigneeName(members, task.assigned_to, t("unassigned"))}
+          </p>
+        ) : null}
         <div className="rounded-md bg-muted/70 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
           {task.reminder_whatsapp_at ? (
             <p>
