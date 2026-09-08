@@ -3,14 +3,18 @@
 // ============================================================
 
 import { contactBelongsToAccountStaff } from '@/lib/assignments/staff-contact';
-import { canReceiveLeads, isAccountRole } from '@/lib/auth/roles';
+import {
+  canReceiveLeads,
+  isAccountRole,
+  ROLES_THAT_RECEIVE_LEADS,
+} from '@/lib/auth/roles';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = any;
 
 /**
  * True when `agentId` is a member of the account who may own a lead
- * (owner / admin / agent). Viewers are never eligible.
+ * (owner / agent). Admins and viewers are never eligible.
  */
 export async function agentCanReceiveLeads(
   db: Db,
@@ -32,13 +36,13 @@ export async function agentCanReceiveLeads(
 }
 
 /**
- * Pick the next agent/admin in stable user_id order for an account,
+ * Pick the next owner/agent in stable user_id order for an account,
  * advance the cursor on `accounts.round_robin_last_user_id`, and
  * return the chosen user id (or null if no eligible members).
  *
- * Viewers are excluded from the pool — they can watch the inbox
- * but must never be auto-assigned a conversation. Owners are
- * included: a one-person workspace still has someone to hand to.
+ * Admins and viewers are excluded from the pool — they can watch
+ * the inbox but must never be auto-assigned a conversation. Owners
+ * stay in: a one-person workspace still has someone to hand to.
  */
 export async function pickRoundRobinAgent(
   db: Db,
@@ -52,12 +56,18 @@ export async function pickRoundRobinAgent(
 
   const { data: agents, error } = await db
     .from('profiles')
-    .select('user_id')
+    .select('user_id, account_role')
     .eq('account_id', accountId)
-    .in('account_role', ['owner', 'admin', 'agent'])
+    .in('account_role', [...ROLES_THAT_RECEIVE_LEADS])
     .order('user_id', { ascending: true });
 
-  if (error || !agents?.length) {
+  const eligible = (
+    (agents ?? []) as { user_id: string; account_role?: string }[]
+  ).filter(
+    (a) => isAccountRole(a.account_role) && canReceiveLeads(a.account_role),
+  );
+
+  if (error || !eligible.length) {
     if (error) console.warn('[round-robin] load agents failed:', error);
     return null;
   }
@@ -67,11 +77,9 @@ export async function pickRoundRobinAgent(
       ? (account.round_robin_last_user_id as string)
       : null;
   const idx = last
-    ? (agents as { user_id: string }[]).findIndex((a) => a.user_id === last)
+    ? eligible.findIndex((a) => a.user_id === last)
     : -1;
-  const next = (agents as { user_id: string }[])[
-    (idx + 1) % agents.length
-  ];
+  const next = eligible[(idx + 1) % eligible.length];
   if (!next?.user_id) return null;
 
   const { error: updErr } = await db
@@ -90,7 +98,8 @@ export async function pickRoundRobinAgent(
 
 /**
  * Assign conversation + contact to an agent (best-effort contact sync).
- * No-ops and returns false when the target is a viewer or not a member.
+ * No-ops and returns false when the target cannot receive leads
+ * (admin, viewer, or not a member).
  */
 export async function assignConversationToAgent(
   db: Db,
@@ -178,7 +187,7 @@ export async function accountHasActiveAiAutoReply(
 
 /**
  * Who should own the thread when the AI hands off: the next advisor
- * in round-robin (agent/admin). Null only if nobody is eligible.
+ * in round-robin (owner/agent). Null only if nobody is eligible.
  */
 export async function resolveHandoffAssignee(
   db: Db,
@@ -194,9 +203,9 @@ export async function resolveHandoffAssignee(
  * Skips assignment when AI auto-reply is on: the bot owns the first
  * stretch of the chat, and the advisor is assigned on handoff.
  *
- * Also reassigns when the current assignee is a viewer (or otherwise
- * ineligible). Leaving those threads in place kept sending WhatsApp
- * alerts to people who can only watch the inbox.
+ * Also reassigns when the current assignee is an admin, viewer, or
+ * otherwise ineligible. Leaving those threads in place kept sending
+ * WhatsApp alerts to people who can only watch the inbox.
  *
  * Never assigns when the contact's phone belongs to a teammate —
  * advisor numbers are inboxes, not leads.

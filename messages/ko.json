@@ -1553,7 +1553,7 @@
       "restrictDisabled": "상담원 제한이 꺼졌습니다",
       "restrictSaveFailed": "제한 설정을 저장하지 못했습니다",
       "roundRobinTitle": "라운드로빈 배정",
-      "roundRobinDesc": "새 인바운드 채팅을 상담원/관리자에게 순서대로 배정합니다. 자동화의 “대화 배정 → 라운드로빈” 단계도 사용할 수 있습니다.",
+      "roundRobinDesc": "새 인바운드 채팅을 상담원에게 순서대로 배정합니다(관리자는 리드를 받지 않음). 자동화의 “대화 배정 → 라운드로빈” 단계도 사용할 수 있습니다.",
       "roundRobinToggle": "새 채팅 라운드로빈 켜기",
       "roundRobinSaving": "저장 중…",
       "roundRobinEnabled": "라운드로빈이 켜졌습니다",
@@ -1721,7 +1721,7 @@
     },
     "roles": {
       "admin": "관리자",
-      "adminHint": "멤버와 모든 설정 관리",
+      "adminHint": "멤버와 모든 설정 관리; 인박스는 볼 수 있지만 리드를 배정받지 않음",
       "agent": "상담원",
       "agentHint": "기능 사용; 설정 없음 (제한 시 본인 연락처만)",
       "viewer": "뷰어",

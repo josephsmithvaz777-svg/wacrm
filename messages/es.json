@@ -1575,7 +1575,7 @@
       "restrictDisabled": "Restricción de agentes desactivada",
       "restrictSaveFailed": "No se pudo guardar la restricción",
       "roundRobinTitle": "Asignación round-robin",
-      "roundRobinDesc": "Los chats nuevos entrantes se asignan por turnos entre agentes y admins. También puedes usar el paso “Asignar conversación → Round-robin” en Automatizaciones.",
+      "roundRobinDesc": "Los chats nuevos entrantes se asignan por turnos entre agentes (el admin no recibe leads). También puedes usar el paso “Asignar conversación → Round-robin” en Automatizaciones.",
       "roundRobinToggle": "Activar round-robin en chats nuevos",
       "roundRobinSaving": "Guardando…",
       "roundRobinEnabled": "Round-robin activado",
@@ -1743,7 +1743,7 @@
     },
     "roles": {
       "admin": "Admin",
-      "adminHint": "Gestiona miembros y toda la configuración",
+      "adminHint": "Gestiona miembros y toda la configuración; ve el inbox pero no recibe leads",
       "agent": "Agente",
       "agentHint": "Bandeja y contactos; sin configuración (si activas la restricción, solo ve lo suyo)",
       "viewer": "Visor",

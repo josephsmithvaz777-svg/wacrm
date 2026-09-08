@@ -84,7 +84,7 @@ export async function POST(
     const admin = supabaseAdmin();
     if (!(await agentCanReceiveLeads(admin, accountId, agentId))) {
       return NextResponse.json(
-        { error: 'Los visores no pueden recibir leads' },
+        { error: 'Ese usuario no puede recibir leads' },
         { status: 400 },
       );
     }

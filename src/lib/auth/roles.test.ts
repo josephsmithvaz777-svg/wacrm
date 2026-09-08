@@ -108,9 +108,9 @@ describe("capability predicates", () => {
     expect(canSendMessages("viewer")).toBe(false);
   });
 
-  it("canReceiveLeads: agent+ only (viewers are never assigned)", () => {
+  it("canReceiveLeads: owner and agent only (admin/viewer never assigned)", () => {
     expect(canReceiveLeads("owner")).toBe(true);
-    expect(canReceiveLeads("admin")).toBe(true);
+    expect(canReceiveLeads("admin")).toBe(false);
     expect(canReceiveLeads("agent")).toBe(true);
     expect(canReceiveLeads("viewer")).toBe(false);
   });

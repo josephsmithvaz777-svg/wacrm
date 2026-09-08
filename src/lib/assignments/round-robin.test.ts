@@ -76,7 +76,7 @@ describe('resolveHandoffAssignee', () => {
     const id = await resolveHandoffAssignee(
       dbReturning({
         accounts: { round_robin_last_user_id: 'agent-1' },
-        profiles: [{ user_id: 'agent-1' }, { user_id: 'agent-2' }],
+        profiles: [{ user_id: 'agent-1', account_role: 'agent' }, { user_id: 'agent-2', account_role: 'agent' }],
       }),
       'acct',
     )
@@ -98,11 +98,25 @@ describe('resolveHandoffAssignee', () => {
     const id = await resolveHandoffAssignee(
       dbReturning({
         accounts: { round_robin_last_user_id: null },
-        profiles: [{ user_id: 'owner-1' }],
+        profiles: [{ user_id: 'owner-1', account_role: 'owner' }],
       }),
       'acct',
     )
     expect(id).toBe('owner-1')
+  })
+
+  it('skips admin — they can watch but must never receive leads', async () => {
+    const id = await resolveHandoffAssignee(
+      dbReturning({
+        accounts: { round_robin_last_user_id: null },
+        profiles: [
+          { user_id: 'admin-1', account_role: 'admin' },
+          { user_id: 'agent-1', account_role: 'agent' },
+        ],
+      }),
+      'acct',
+    )
+    expect(id).toBe('agent-1')
   })
 })
 

@@ -25,7 +25,7 @@ export function memberLabel(m: AccountMember): string {
   return m.full_name || m.email || m.user_id;
 }
 
-/** Members who may own a conversation. Viewers stay out of assignment pickers. */
+/** Members who may own a conversation. Admins and viewers stay out of assignment pickers. */
 export function assignableMembers(members: AccountMember[]): AccountMember[] {
   return members.filter((m) => canReceiveLeads(m.role));
 }

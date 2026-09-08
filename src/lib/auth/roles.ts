@@ -90,12 +90,27 @@ export function canSendMessages(role: AccountRole): boolean {
 }
 
 /**
- * Owner / admin / agent: may be assigned a conversation or contact
- * (inbox, round-robin, automations, AI handoff). Viewers can watch
- * the inbox but must never sit in the assignment pool.
+ * Roles that may own a conversation or contact (inbox, round-robin,
+ * automations, AI handoff). Keep this list in lockstep with
+ * `canReceiveLeads` — round-robin queries it so admins never slip
+ * into the assignment pool via a stale `.in(...)` filter.
+ *
+ * Owner stays in: a one-person workspace still needs someone to
+ * hand to. Admin is settings/oversight only — they can watch every
+ * thread but must never be auto-assigned a lead. Viewer is read-only.
+ */
+export const ROLES_THAT_RECEIVE_LEADS: readonly AccountRole[] = [
+  "owner",
+  "agent",
+] as const;
+
+/**
+ * Owner / agent: may be assigned a conversation or contact.
+ * Admins and viewers can watch the inbox but must never sit in
+ * the assignment pool.
  */
 export function canReceiveLeads(role: AccountRole): boolean {
-  return hasMinRole(role, "agent");
+  return (ROLES_THAT_RECEIVE_LEADS as readonly string[]).includes(role);
 }
 
 /**

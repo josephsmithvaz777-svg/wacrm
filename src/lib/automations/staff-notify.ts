@@ -183,7 +183,7 @@ export async function notifyStaffViaWhatsApp(params: {
         .maybeSingle();
       const role = agent?.account_role;
       if (!isAccountRole(role) || !canReceiveLeads(role)) {
-        skipReasons.push('assigned agent is a viewer and cannot receive leads');
+        skipReasons.push('assigned agent cannot receive leads');
       } else {
         const phone = (agent?.phone as string | null | undefined) ?? null;
         if (!isUsableStaffPhone(phone)) {

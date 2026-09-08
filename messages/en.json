@@ -1554,7 +1554,7 @@
       "restrictDisabled": "Agent contact restriction disabled",
       "restrictSaveFailed": "Couldn’t save restriction",
       "roundRobinTitle": "Round-robin assignment",
-      "roundRobinDesc": "New inbound chats rotate across agents and admins. You can also use the Automations step “Assign conversation → Round-robin”.",
+      "roundRobinDesc": "New inbound chats rotate across agents (admins do not receive leads). You can also use the Automations step “Assign conversation → Round-robin”.",
       "roundRobinToggle": "Enable round-robin on new chats",
       "roundRobinSaving": "Saving…",
       "roundRobinEnabled": "Round-robin enabled",
@@ -1722,7 +1722,7 @@
     },
     "roles": {
       "admin": "Admin",
-      "adminHint": "Manage members + everything",
+      "adminHint": "Manage members + everything; can watch the inbox but does not receive leads",
       "agent": "Agent",
       "agentHint": "Use features; no settings (with restriction: only own/assigned contacts)",
       "viewer": "Viewer",
