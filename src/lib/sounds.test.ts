@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CUSTOM_SOUND_TIMEOUT_MS,
   NOTIFICATION_SOUND_MAX_BYTES,
   isNotificationSoundFile,
   notificationSoundSource,
@@ -26,6 +27,10 @@ describe("notificationSoundSource", () => {
     expect(notificationSoundSource({ enabled: true, url: "  " })).toBe(
       "default",
     );
+  });
+
+  it("gives up on a custom file in time to fall back", () => {
+    expect(CUSTOM_SOUND_TIMEOUT_MS).toBeLessThanOrEqual(3000);
   });
 });
 

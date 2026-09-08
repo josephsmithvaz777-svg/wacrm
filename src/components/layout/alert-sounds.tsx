@@ -16,6 +16,10 @@ const MESSAGE_THROTTLE_MS = 1600;
 /**
  * Dashboard-wide listeners: unlock audio on first gesture, play chimes
  * for new notifications and inbound customer messages when enabled.
+ *
+ * Notifications + messages share one Realtime channel. Account sound
+ * prefs live on a second channel so a missing `accounts` publication
+ * cannot take down the chimes (that used to silence every alert).
  */
 export function AlertSounds() {
   const { user, accountId, account } = useAuth();
@@ -51,10 +55,12 @@ export function AlertSounds() {
     window.addEventListener("pointerdown", unlock);
     window.addEventListener("keydown", unlock);
     window.addEventListener("touchstart", unlock, { passive: true });
+    document.addEventListener("visibilitychange", unlock);
     return () => {
       window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("keydown", unlock);
       window.removeEventListener("touchstart", unlock);
+      document.removeEventListener("visibilitychange", unlock);
     };
   }, []);
 
@@ -94,6 +100,18 @@ export function AlertSounds() {
           playMessageSound();
         },
       )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, accountId]);
+
+  useEffect(() => {
+    if (!accountId) return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`alert-sounds-account:${accountId}`)
       .on(
         "postgres_changes",
         {
@@ -121,7 +139,7 @@ export function AlertSounds() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, accountId]);
+  }, [accountId]);
 
   return null;
 }

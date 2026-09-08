@@ -15,6 +15,9 @@ const ALLOWED_MIME = new Set([
   "audio/m4a",
 ]);
 
+/** Give up on a custom file quickly so the built-in chime can still play. */
+export const CUSTOM_SOUND_TIMEOUT_MS = 2500;
+
 export function isNotificationSoundFile(file: {
   name: string;
   type: string;
@@ -35,8 +38,6 @@ export function notificationSoundSource(opts: {
 }
 
 let sharedCtx: AudioContext | null = null;
-let fileAudio: HTMLAudioElement | null = null;
-let unlockInFlight: Promise<void> | null = null;
 
 function getCtx(): AudioContext | null {
   if (typeof window === "undefined") return null;
@@ -51,30 +52,21 @@ function getCtx(): AudioContext | null {
 
 /**
  * Resume the shared AudioContext. Browsers start it `suspended` until
- * a user gesture; calling this without awaiting left every chime silent.
+ * a user gesture. `resume()` must be invoked in the same turn as the
+ * click/keydown — wrapping it in an async IIFE first dropped the
+ * gesture and left every chime silent.
  */
 export function unlockAudio(): Promise<void> {
-  if (unlockInFlight) return unlockInFlight;
-  unlockInFlight = (async () => {
-    const ctx = getCtx();
-    if (ctx && ctx.state === "suspended") {
-      try {
-        await ctx.resume();
-      } catch {
-        // autoplay policy — next gesture retries
-      }
-    }
-    if (typeof window !== "undefined" && !fileAudio) {
-      fileAudio = new Audio();
-    }
-  })().finally(() => {
-    unlockInFlight = null;
-  });
-  return unlockInFlight;
+  if (typeof window === "undefined") return Promise.resolve();
+  const ctx = getCtx();
+  if (!ctx || ctx.state !== "suspended") return Promise.resolve();
+  return ctx.resume().then(
+    () => undefined,
+    () => undefined,
+  );
 }
 
 async function readyCtx(): Promise<AudioContext | null> {
-  await unlockAudio();
   const ctx = getCtx();
   if (!ctx) return null;
   if (ctx.state === "suspended") {
@@ -121,18 +113,37 @@ async function tone(
   }
 }
 
-async function playFile(url: string): Promise<boolean> {
-  if (typeof window === "undefined") return false;
-  await unlockAudio();
-  if (!fileAudio) fileAudio = new Audio();
-  fileAudio.src = url;
-  fileAudio.currentTime = 0;
-  try {
-    await fileAudio.play();
-    return true;
-  } catch {
-    return false;
-  }
+export function playCustomSoundUrl(url: string): Promise<boolean> {
+  if (typeof window === "undefined") return Promise.resolve(false);
+  void unlockAudio();
+
+  return new Promise((resolve) => {
+    const audio = new Audio();
+    let settled = false;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      audio.onerror = null;
+      audio.onplaying = null;
+      if (!ok) {
+        audio.pause();
+        audio.removeAttribute("src");
+        audio.load();
+      }
+      resolve(ok);
+    };
+
+    const timer = window.setTimeout(
+      () => finish(false),
+      CUSTOM_SOUND_TIMEOUT_MS,
+    );
+    audio.preload = "auto";
+    audio.onerror = () => finish(false);
+    audio.onplaying = () => finish(true);
+    audio.src = url;
+    void audio.play().catch(() => finish(false));
+  });
 }
 
 export type NotificationSoundOpts = {
@@ -153,7 +164,7 @@ export function playNotificationSound(opts: NotificationSoundOpts = {}): void {
   if (source === "silent") return;
   void (async () => {
     if (source === "custom" && opts.url) {
-      const played = await playFile(opts.url.trim());
+      const played = await playCustomSoundUrl(opts.url.trim());
       if (played) return;
     }
     await tone([880, 1175], DEFAULT_CHIME);

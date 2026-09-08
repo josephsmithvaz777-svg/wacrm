@@ -33,7 +33,7 @@ export function NotificationsSettingsPanel() {
   } = useSoundPrefs();
 
   const previewNotification = () => {
-    unlockAudio();
+    void unlockAudio();
     playNotificationSound({
       enabled: account?.notification_sound_enabled !== false,
       url: account?.notification_sound_url,
@@ -42,7 +42,7 @@ export function NotificationsSettingsPanel() {
   };
 
   const previewMessage = () => {
-    unlockAudio();
+    void unlockAudio();
     playMessageSound();
     toast.message(t("previewPlayed"));
   };
@@ -147,7 +147,7 @@ function AccountNotificationSoundCard() {
   }, [account?.notification_sound_enabled, account?.notification_sound_url]);
 
   const preview = () => {
-    unlockAudio();
+    void unlockAudio();
     playNotificationSound({ enabled: true, url: soundUrl });
     toast.message(t("previewPlayed"));
   };
