@@ -262,6 +262,21 @@ describe('autoAssignPool', () => {
     ])
     expect(pool.map((a) => a.user_id)).toEqual(['owner-1'])
   })
+
+  it('uses numbered order then any extra advisor', () => {
+    const pool = autoAssignPool([
+      { user_id: 'zzzz-other', account_role: 'agent', round_robin_order: null },
+      { user_id: 'jimena', account_role: 'agent', round_robin_order: 3 },
+      { user_id: 'isaac', account_role: 'agent', round_robin_order: 1 },
+      { user_id: 'brenda', account_role: 'agent', round_robin_order: 2 },
+    ])
+    expect(pool.map((a) => a.user_id)).toEqual([
+      'isaac',
+      'brenda',
+      'jimena',
+      'zzzz-other',
+    ])
+  })
 })
 
 describe('claimRoundRobinAssignment', () => {

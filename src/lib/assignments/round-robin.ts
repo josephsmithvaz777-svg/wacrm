@@ -18,13 +18,32 @@ const AUTO_ASSIGN_LOOKUP_ROLES = ['owner', 'agent'] as const;
  * otherwise watch and write without keeping the lead.
  */
 export function autoAssignPool(
-  members: { user_id: string; account_role?: string }[],
-): { user_id: string; account_role?: string }[] {
+  members: {
+    user_id: string
+    account_role?: string
+    round_robin_order?: number | null
+  }[],
+): { user_id: string; account_role?: string; round_robin_order?: number | null }[] {
   const advisors = members.filter(
     (a) => isAccountRole(a.account_role) && a.account_role === 'agent',
-  );
-  if (advisors.length > 0) return advisors;
-  return members.filter((a) => a.account_role === 'owner');
+  )
+  const pool = advisors.length > 0
+    ? advisors
+    : members.filter((a) => a.account_role === 'owner')
+  return [...pool].sort(compareRoundRobinOrder)
+}
+
+export function compareRoundRobinOrder(
+  a: { user_id: string; round_robin_order?: number | null },
+  b: { user_id: string; round_robin_order?: number | null },
+): number {
+  const aOrder = a.round_robin_order
+  const bOrder = b.round_robin_order
+  const aMissing = aOrder == null
+  const bMissing = bOrder == null
+  if (aMissing !== bMissing) return aMissing ? 1 : -1
+  if (!aMissing && !bMissing && aOrder !== bOrder) return aOrder - bOrder
+  return a.user_id < b.user_id ? -1 : a.user_id > b.user_id ? 1 : 0
 }
 
 async function loadAutoAssignPool(
@@ -33,10 +52,9 @@ async function loadAutoAssignPool(
 ): Promise<{ user_id: string; account_role?: string }[]> {
   const { data: agents, error } = await db
     .from('profiles')
-    .select('user_id, account_role')
+    .select('user_id, account_role, round_robin_order')
     .eq('account_id', accountId)
-    .in('account_role', [...AUTO_ASSIGN_LOOKUP_ROLES])
-    .order('user_id', { ascending: true });
+    .in('account_role', [...AUTO_ASSIGN_LOOKUP_ROLES]);
   if (error) {
     console.warn('[round-robin] load agents failed:', error);
     return [];
@@ -69,7 +87,7 @@ export async function agentCanReceiveLeads(
 }
 
 /**
- * Pick the next owner/agent in stable user_id order for an account,
+ * Pick the next owner/agent in round_robin_order (then user_id),
  * advance the cursor on `accounts.round_robin_last_user_id`, and
  * return the chosen user id (or null if no eligible members).
  *

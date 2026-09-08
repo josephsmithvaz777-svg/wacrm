@@ -12,3 +12,9 @@ export function latestUserMessage(messages: ChatMessage[]): string {
   }
   return messages.length > 0 ? messages[messages.length - 1].content : ''
 }
+
+/** True when the bot (or an agent) already answered after the last customer turn. */
+export function alreadyRepliedToLatestCustomer(messages: ChatMessage[]): boolean {
+  if (messages.length === 0) return false
+  return messages[messages.length - 1].role === 'assistant'
+}

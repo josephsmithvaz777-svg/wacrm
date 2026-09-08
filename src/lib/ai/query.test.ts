@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { latestUserMessage } from './query'
+import { latestUserMessage, alreadyRepliedToLatestCustomer } from './query'
 
 describe('latestUserMessage', () => {
   it('returns the most recent user turn', () => {
@@ -20,5 +20,17 @@ describe('latestUserMessage', () => {
 
   it('returns empty string for no messages', () => {
     expect(latestUserMessage([])).toBe('')
+  })
+
+  it('detects when the bot already answered the latest customer turn', () => {
+    expect(
+      alreadyRepliedToLatestCustomer([
+        { role: 'user', content: 'hi' },
+        { role: 'assistant', content: 'hello' },
+      ]),
+    ).toBe(true)
+    expect(
+      alreadyRepliedToLatestCustomer([{ role: 'user', content: 'hi' }]),
+    ).toBe(false)
   })
 })

@@ -1,12 +1,13 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseAdmin } from './admin-client'
 import { loadAiConfig } from './config'
 import { buildConversationContext } from './context'
 import { retrieveKnowledge } from './knowledge'
 import { generateReply } from './generate'
-import { buildSystemPrompt } from './defaults'
+import { aiAutoReplyGapMs, aiAutoReplyPauseMs, buildSystemPrompt, waitMs } from './defaults'
 import { buildHandoffSummary } from './handoff'
 import { logAiUsage } from './usage'
-import { latestUserMessage } from './query'
+import { latestUserMessage, alreadyRepliedToLatestCustomer } from './query'
 import { listAiMediaAssets } from './media-assets'
 import { sendMessageToConversation } from '@/lib/whatsapp/send-message'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
@@ -16,6 +17,7 @@ import {
   ensureSilenceHandoffLoop,
   scheduleSilenceHandoffCheck,
 } from './silence-handoff'
+import type { AiConfig } from './types'
 
 interface DispatchArgs {
   /** Tenancy key — drives config, contact, and whatsapp_config lookups. */
@@ -24,6 +26,24 @@ interface DispatchArgs {
   contactId: string
   /** WhatsApp config owner on the account. Kept on the call site. */
   configOwnerUserId: string
+}
+
+/** Pulls conversation-style docs even when the last customer line is a button tap. */
+const AUTO_REPLY_STYLE_QUERY =
+  'agente calificador mensajes cortos un dato por mensaje no folleto no repetir principios de conversación'
+
+function mergeKnowledge(groups: string[][]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const group of groups) {
+    for (const text of group) {
+      const key = text.trim()
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      out.push(text)
+    }
+  }
+  return out
 }
 
 /**
@@ -95,32 +115,7 @@ export async function dispatchInboundToAiReply(
       contactId,
       minutes: config.silenceHandoffMinutes,
     })
-    // Cheap early-out; the authoritative cap check is the atomic claim
-    // below (this read can race a concurrent inbound). At the cap the
-    // bot must not go quiet unassigned — hand the thread to an advisor.
-    if (conv.ai_reply_count >= config.autoReplyMaxPerConversation) {
-      await performAiHandoff(db, {
-        accountId,
-        conversationId,
-        contactId,
-        alreadyAssigned: (conv.assigned_agent_id as string | null) ?? null,
-        summary: `🤖 AI agent handed off after reaching the ${config.autoReplyMaxPerConversation} auto-reply cap.`,
-        messageText: '',
-      })
-      return
-    }
 
-    const messages = await buildConversationContext(db, conversationId, {
-      accountId,
-      config,
-    })
-    if (messages.length === 0) return
-
-    // Account-wide throttle on the shared BYO key. The per-conversation
-    // cap bounds one thread; this bounds a burst across many threads (a
-    // marketing blast landing 200 replies at once) so we never run the
-    // owner's key past the provider's rate limit. Over the limit → skip
-    // the auto-reply; the inbound still sits in the inbox for a human.
     const acctLimit = checkRateLimit(
       `ai-autoreply:${accountId}`,
       RATE_LIMITS.aiAutoReplyAccount,
@@ -132,167 +127,220 @@ export async function dispatchInboundToAiReply(
       return
     }
 
-    // Ground the reply in the account's knowledge base (best-effort).
-    const knowledge = await retrieveKnowledge(
-      db,
-      accountId,
-      config,
-      latestUserMessage(messages),
-    )
-    const mediaAssets = await listAiMediaAssets(db, accountId)
-
-    const systemPrompt = buildSystemPrompt({
-      userPrompt: config.systemPrompt,
-      mode: 'auto_reply',
-      knowledge,
-      mediaAssets,
+    // One generator per thread. Concurrent Cloud API + WAHA + retries
+    // used to each claim a slot and send the same pitch three times.
+    const { data: began, error: beginErr } = await db.rpc('begin_ai_reply', {
+      p_conversation_id: conversationId,
+      p_max_replies: config.autoReplyMaxPerConversation,
     })
-
-    const { text, handoff, usage, mediaAssetId } = await generateReply({
-      config,
-      systemPrompt,
-      messages,
-    })
-
-    // Record token spend on the account's BYO key. Fire-and-forget so it
-    // never adds latency to the customer-facing send: `logAiUsage`
-    // swallows its own errors, so the floating promise can't reject.
-    // Logged regardless of handoff — the provider call happened either
-    // way.
-    void logAiUsage(db, {
-      accountId,
-      conversationId,
-      mode: 'auto_reply',
-      provider: config.provider,
-      model: config.model,
-      usage,
-    })
-
-    if (handoff || (!text && !mediaAssetId)) {
-      // The model can't (or shouldn't) answer — stop auto-replying on
-      // this thread and hand it to the next advisor (round-robin).
-      // Assigning fires `conversation_assigned`, which notifies them.
+    if (beginErr) {
+      console.error('[ai auto-reply] begin_ai_reply failed:', beginErr)
+      return
+    }
+    if (began === 'capped') {
       await performAiHandoff(db, {
         accountId,
         conversationId,
         contactId,
         alreadyAssigned: (conv.assigned_agent_id as string | null) ?? null,
-        summary: buildHandoffSummary({
-          messages,
-          replyCount: conv.ai_reply_count ?? 0,
-        }),
-        messageText: latestUserMessage(messages) ?? '',
+        summary: `🤖 AI agent handed off after reaching the ${config.autoReplyMaxPerConversation} auto-reply cap.`,
+        messageText: '',
       })
       return
     }
-
-    // Atomically claim a reply slot: the cap check + increment happen in
-    // one UPDATE, so concurrent inbounds can never overshoot the cap. If
-    // another inbound just took the last slot, `claimed` is false and we
-    // skip the send. (We consume a slot slightly before the send lands —
-    // fail-safe: under-reply rather than over-reply.)
-    const { data: claimed, error: claimErr } = await db.rpc(
-      'claim_ai_reply_slot',
-      {
-        conversation_id: conversationId,
-        max_replies: config.autoReplyMaxPerConversation,
-      },
-    )
-    if (claimErr) {
-      // A real error here (vs. losing the cap race) is almost always a
-      // deploy issue — e.g. `claim_ai_reply_slot` not EXECUTE-able by the
-      // service role, or the migration not applied. Log it loudly: a
-      // silent return makes "auto-reply never fires" undiagnosable.
-      console.error('[ai auto-reply] claim_ai_reply_slot failed:', claimErr)
-      return
-    }
-    if (claimed !== true) return // lost the per-conversation cap race
-
-    const sendText = (body: string) =>
-      sendMessageToConversation(db, accountId, {
-        conversationId,
-        messageType: 'text',
-        contentText: body,
-        senderType: 'bot',
-        aiGenerated: true,
-      })
-
-    const asset = mediaAssetId
-      ? mediaAssets.find((a) => a.id === mediaAssetId)
-      : undefined
-    if (asset) {
-      try {
-        await sendMessageToConversation(db, accountId, {
-          conversationId,
-          messageType: asset.kind,
-          mediaUrl: asset.media_url,
-          contentText: asset.kind === 'audio' ? null : text || null,
-          filename: asset.filename,
-          senderType: 'bot',
-          aiGenerated: true,
-        })
-      } catch (err) {
-        console.error('[ai auto-reply] media send failed:', err)
-        if (text) {
-          try {
-            await sendText(text)
-          } catch (textErr) {
-            console.error('[ai auto-reply] text fallback send failed:', textErr)
-            await performAiHandoff(db, {
-              accountId,
-              conversationId,
-              contactId,
-              alreadyAssigned:
-                (conv.assigned_agent_id as string | null) ?? null,
-              summary:
-                '🤖 AI agent handed off because the WhatsApp send failed.',
-              messageText: latestUserMessage(messages) ?? '',
-            })
-            return
-          }
-          scheduleSilenceHandoffCheck({
-            accountId,
-            conversationId,
-            contactId,
-            minutes: config.silenceHandoffMinutes,
-          })
-        }
-        return
-      }
-      if (asset.kind === 'audio' && text) {
-        await sendText(text)
-      }
-      scheduleSilenceHandoffCheck({
-        accountId,
-        conversationId,
-        contactId,
-        minutes: config.silenceHandoffMinutes,
-      })
-      return
-    }
-
-    if (!text) return
+    if (began !== 'claimed') return
 
     try {
-      await sendText(text)
-      scheduleSilenceHandoffCheck({
+      await runClaimedAutoReply({
+        db,
+        config,
         accountId,
         conversationId,
         contactId,
-        minutes: config.silenceHandoffMinutes,
+        assignedAgentId: (conv.assigned_agent_id as string | null) ?? null,
+        replyCount: Number(conv.ai_reply_count) || 0,
       })
-    } catch (err) {
-      console.error('[ai auto-reply] text send failed:', err)
-      await performAiHandoff(db, {
-        accountId,
-        conversationId,
-        contactId,
-        alreadyAssigned: (conv.assigned_agent_id as string | null) ?? null,
-        summary: '🤖 AI agent handed off because the WhatsApp send failed.',
-        messageText: latestUserMessage(messages) ?? '',
+    } finally {
+      const { error: finishErr } = await db.rpc('finish_ai_reply', {
+        p_conversation_id: conversationId,
       })
+      if (finishErr) {
+        console.error('[ai auto-reply] finish_ai_reply failed:', finishErr)
+      }
     }
   } catch (err) {
     console.error('[ai auto-reply] dispatch failed:', err)
+  }
+}
+
+async function runClaimedAutoReply(args: {
+  db: SupabaseClient
+  config: AiConfig
+  accountId: string
+  conversationId: string
+  contactId: string
+  assignedAgentId: string | null
+  replyCount: number
+}): Promise<void> {
+  const {
+    db,
+    config,
+    accountId,
+    conversationId,
+    contactId,
+    assignedAgentId,
+    replyCount,
+  } = args
+
+  const messages = await buildConversationContext(db, conversationId, {
+    accountId,
+    config,
+  })
+  if (messages.length === 0) return
+  if (alreadyRepliedToLatestCustomer(messages)) return
+
+  const userText = latestUserMessage(messages)
+  const [facts, style] = await Promise.all([
+    retrieveKnowledge(db, accountId, config, userText),
+    retrieveKnowledge(db, accountId, config, AUTO_REPLY_STYLE_QUERY, 3),
+  ])
+  const knowledge = mergeKnowledge([style, facts])
+  const mediaAssets = await listAiMediaAssets(db, accountId)
+
+  const systemPrompt = buildSystemPrompt({
+    userPrompt: config.systemPrompt,
+    mode: 'auto_reply',
+    knowledge,
+    mediaAssets,
+  })
+
+  const { text, handoff, usage, mediaAssetId } = await generateReply({
+    config,
+    systemPrompt,
+    messages,
+  })
+
+  void logAiUsage(db, {
+    accountId,
+    conversationId,
+    mode: 'auto_reply',
+    provider: config.provider,
+    model: config.model,
+    usage,
+  })
+
+  if (handoff || (!text && !mediaAssetId)) {
+    await performAiHandoff(db, {
+      accountId,
+      conversationId,
+      contactId,
+      alreadyAssigned: assignedAgentId,
+      summary: buildHandoffSummary({
+        messages,
+        replyCount,
+      }),
+      messageText: latestUserMessage(messages) ?? '',
+    })
+    return
+  }
+
+  const { data: claimed, error: claimErr } = await db.rpc(
+    'claim_ai_reply_slot',
+    {
+      conversation_id: conversationId,
+      max_replies: config.autoReplyMaxPerConversation,
+    },
+  )
+  if (claimErr) {
+    console.error('[ai auto-reply] claim_ai_reply_slot failed:', claimErr)
+    return
+  }
+  if (claimed !== true) return
+
+  await waitMs(aiAutoReplyPauseMs())
+
+  const sendText = (body: string) =>
+    sendMessageToConversation(db, accountId, {
+      conversationId,
+      messageType: 'text',
+      contentText: body,
+      senderType: 'bot',
+      aiGenerated: true,
+    })
+
+  const asset = mediaAssetId
+    ? mediaAssets.find((a) => a.id === mediaAssetId)
+    : undefined
+  if (asset) {
+    try {
+      await sendMessageToConversation(db, accountId, {
+        conversationId,
+        messageType: asset.kind,
+        mediaUrl: asset.media_url,
+        contentText: asset.kind === 'audio' ? null : text || null,
+        filename: asset.filename,
+        senderType: 'bot',
+        aiGenerated: true,
+      })
+    } catch (err) {
+      console.error('[ai auto-reply] media send failed:', err)
+      if (text) {
+        try {
+          await sendText(text)
+        } catch (textErr) {
+          console.error('[ai auto-reply] text fallback send failed:', textErr)
+          await performAiHandoff(db, {
+            accountId,
+            conversationId,
+            contactId,
+            alreadyAssigned: assignedAgentId,
+            summary:
+              '🤖 AI agent handed off because the WhatsApp send failed.',
+            messageText: latestUserMessage(messages) ?? '',
+          })
+          return
+        }
+        scheduleSilenceHandoffCheck({
+          accountId,
+          conversationId,
+          contactId,
+          minutes: config.silenceHandoffMinutes,
+        })
+      }
+      return
+    }
+    if (asset.kind === 'audio' && text) {
+      await waitMs(aiAutoReplyGapMs())
+      await sendText(text)
+    }
+    scheduleSilenceHandoffCheck({
+      accountId,
+      conversationId,
+      contactId,
+      minutes: config.silenceHandoffMinutes,
+    })
+    return
+  }
+
+  if (!text) return
+
+  try {
+    await sendText(text)
+    scheduleSilenceHandoffCheck({
+      accountId,
+      conversationId,
+      contactId,
+      minutes: config.silenceHandoffMinutes,
+    })
+  } catch (err) {
+    console.error('[ai auto-reply] text send failed:', err)
+    await performAiHandoff(db, {
+      accountId,
+      conversationId,
+      contactId,
+      alreadyAssigned: assignedAgentId,
+      summary: '🤖 AI agent handed off because the WhatsApp send failed.',
+      messageText: latestUserMessage(messages) ?? '',
+    })
   }
 }

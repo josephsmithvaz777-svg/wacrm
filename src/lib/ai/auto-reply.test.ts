@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
     claim: true as boolean,
     updatePayload: null as Record<string, unknown> | null,
     rpcCalls: [] as { name: string; args: unknown }[],
+    begin: 'claimed' as string,
     handoffAgentRole: 'agent' as string,
   },
 }))
@@ -88,6 +89,25 @@ vi.mock('./admin-client', () => ({
     },
     rpc: (name: string, args: unknown) => {
       h.state.rpcCalls.push({ name, args })
+      if (name === 'begin_ai_reply') {
+        const count = Number(h.state.conv?.ai_reply_count) || 0
+        const max =
+          typeof args === 'object' &&
+          args !== null &&
+          'p_max_replies' in args
+            ? Number((args as { p_max_replies: number }).p_max_replies)
+            : 3
+        if (count >= max) {
+          return Promise.resolve({ data: 'capped', error: null })
+        }
+        return Promise.resolve({
+          data: h.state.begin ?? 'claimed',
+          error: null,
+        })
+      }
+      if (name === 'finish_ai_reply') {
+        return Promise.resolve({ data: null, error: null })
+      }
       return Promise.resolve({ data: h.state.claim, error: null })
     },
   }),
@@ -119,6 +139,8 @@ function aiConfig(overrides: Partial<AiConfig> = {}): AiConfig {
 }
 
 beforeEach(() => {
+  process.env.AI_AUTO_REPLY_PAUSE_MS = '0'
+  process.env.AI_AUTO_REPLY_GAP_MS = '0'
   h.state.conv = {
     assigned_agent_id: null,
     ai_autoreply_disabled: false,
@@ -128,6 +150,7 @@ beforeEach(() => {
   h.state.claim = true
   h.state.updatePayload = null
   h.state.rpcCalls = []
+  h.state.begin = 'claimed'
   h.state.handoffAgentRole = 'agent'
   h.contactBelongsToAccountStaff.mockResolvedValue(false)
   h.performAiHandoff.mockResolvedValue({ claimed: true, agentId: null })
@@ -152,11 +175,10 @@ beforeEach(() => {
 describe('dispatchInboundToAiReply — eligibility gates', () => {
   it('claims a slot and sends on the happy path', async () => {
     await dispatchInboundToAiReply(ARGS)
-    expect(h.state.rpcCalls).toEqual([
-      {
-        name: 'claim_ai_reply_slot',
-        args: { conversation_id: 'conv-1', max_replies: 3 },
-      },
+    expect(h.state.rpcCalls.map((c) => c.name)).toEqual([
+      'begin_ai_reply',
+      'claim_ai_reply_slot',
+      'finish_ai_reply',
     ])
     expect(h.sendMessageToConversation).toHaveBeenCalledWith(
       expect.anything(),
@@ -215,7 +237,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     h.state.claim = false
     await dispatchInboundToAiReply(ARGS)
     // It still attempts the claim, but the send is skipped.
-    expect(h.state.rpcCalls).toHaveLength(1)
+    expect(h.state.rpcCalls.map((c) => c.name)).toContain('claim_ai_reply_slot')
     expect(h.sendMessageToConversation).not.toHaveBeenCalled()
   })
 
@@ -252,6 +274,23 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     expect(h.sendMessageToConversation).not.toHaveBeenCalled()
   })
 
+  it('skips a duplicate inbound when another reply is already in flight', async () => {
+    h.state.begin = 'busy'
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.generateReply).not.toHaveBeenCalled()
+    expect(h.sendMessageToConversation).not.toHaveBeenCalled()
+  })
+
+  it('skips when the latest turn already has a bot reply', async () => {
+    h.buildConversationContext.mockResolvedValue([
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'Hello!' },
+    ])
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.generateReply).not.toHaveBeenCalled()
+    expect(h.sendMessageToConversation).not.toHaveBeenCalled()
+  })
+
   it('hands off when the per-conversation cap is reached', async () => {
     h.state.conv = {
       assigned_agent_id: null,
@@ -283,7 +322,10 @@ describe('dispatchInboundToAiReply — handoff', () => {
     h.generateReply.mockResolvedValue({ text: '', handoff: true })
     await dispatchInboundToAiReply(ARGS)
     expect(h.sendMessageToConversation).not.toHaveBeenCalled()
-    expect(h.state.rpcCalls).toHaveLength(0)
+    expect(h.state.rpcCalls.map((c) => c.name)).toEqual([
+      'begin_ai_reply',
+      'finish_ai_reply',
+    ])
     expect(h.performAiHandoff).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
