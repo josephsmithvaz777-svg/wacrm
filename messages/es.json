@@ -291,7 +291,14 @@
       "selectConversation": "Selecciona una conversación",
       "selectConversationHint": "Choose a conversation from the left to start messaging",
       "today": "Hoy",
-      "yesterday": "Ayer"
+      "yesterday": "Ayer",
+      "deleteConversation": "Eliminar chat",
+      "deleteTitle": "¿Eliminar este chat?",
+      "deleteDesc": "Se quita de la bandeja el chat con {name}. El contacto se conserva. Si vuelve a escribir, se abre un chat nuevo.",
+      "deleteCancel": "Cancelar",
+      "deleteConfirm": "Eliminar",
+      "deleted": "Chat eliminado",
+      "deleteFailed": "No se pudo eliminar el chat"
     },
     "sessionTimer": {
       "expired": "Expired",

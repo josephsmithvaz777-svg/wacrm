@@ -94,7 +94,7 @@ describe('resolveHandoffAssignee', () => {
     expect(id).toBeNull()
   })
 
-  it('includes the account owner in the handoff pool', async () => {
+  it('includes the account owner only when there are no agents', async () => {
     const id = await resolveHandoffAssignee(
       dbReturning({
         accounts: { round_robin_last_user_id: null },
@@ -103,6 +103,20 @@ describe('resolveHandoffAssignee', () => {
       'acct',
     )
     expect(id).toBe('owner-1')
+  })
+
+  it('skips the owner when at least one agent can take the lead', async () => {
+    const id = await resolveHandoffAssignee(
+      dbReturning({
+        accounts: { round_robin_last_user_id: 'owner-1' },
+        profiles: [
+          { user_id: 'owner-1', account_role: 'owner' },
+          { user_id: 'agent-1', account_role: 'agent' },
+        ],
+      }),
+      'acct',
+    )
+    expect(id).toBe('agent-1')
   })
 
   it('skips admin — they can watch but must never receive leads', async () => {

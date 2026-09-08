@@ -41,8 +41,9 @@ export async function agentCanReceiveLeads(
  * return the chosen user id (or null if no eligible members).
  *
  * Admins and viewers are excluded from the pool — they can watch
- * the inbox but must never be auto-assigned a conversation. Owners
- * stay in: a one-person workspace still has someone to hand to.
+ * the inbox but must never be auto-assigned a conversation. The
+ * owner is used only when the account has no agents (a one-person
+ * workspace still needs someone to hand to).
  */
 export async function pickRoundRobinAgent(
   db: Db,
@@ -72,14 +73,20 @@ export async function pickRoundRobinAgent(
     return null;
   }
 
+  // Prefer agents. The owner can still take a lead by hand, but
+  // auto-assigning them filled the owner's bell with "someone
+  // assigned you a conversation" while advisors sat idle.
+  const advisors = eligible.filter((a) => a.account_role === 'agent');
+  const pool = advisors.length > 0 ? advisors : eligible;
+
   const last =
     typeof account?.round_robin_last_user_id === 'string'
       ? (account.round_robin_last_user_id as string)
       : null;
   const idx = last
-    ? eligible.findIndex((a) => a.user_id === last)
+    ? pool.findIndex((a) => a.user_id === last)
     : -1;
-  const next = eligible[(idx + 1) % eligible.length];
+  const next = pool[(idx + 1) % pool.length];
   if (!next?.user_id) return null;
 
   const { error: updErr } = await db

@@ -6,13 +6,10 @@ import {
 } from '@/lib/assignments/staff-contact';
 import { canReceiveLeads, isAccountRole } from '@/lib/auth/roles';
 
-import { engineSendText } from '@/lib/automations/meta-send';
 import {
   formatAlertClock,
   formatAlertDateTime,
 } from '@/lib/automations/template-vars';
-import { findExistingContact, isUniqueViolation } from '@/lib/contacts/dedupe';
-import { findOrCreateConversation } from '@/lib/conversations/find-or-create';
 import { decrypt } from '@/lib/whatsapp/encryption';
 import { sendTextMessage } from '@/lib/whatsapp/meta-api';
 import {
@@ -268,11 +265,11 @@ export async function sendStaffWhatsApp(
     text: string;
   },
 ): Promise<void> {
-  const { accountId, toPhone, toName, text } = args;
+  const { accountId, toPhone, text } = args;
   const { data: config, error } = await db
     .from('whatsapp_config')
     .select(
-      'provider, waha_base_url, waha_session, access_token, phone_number_id, user_id',
+      'provider, waha_base_url, waha_session, access_token, phone_number_id',
     )
     .eq('account_id', accountId)
     .maybeSingle();
@@ -280,35 +277,9 @@ export async function sendStaffWhatsApp(
     throw new Error('WhatsApp is not configured');
   }
 
-  const ownerUserId = config.user_id as string | undefined;
-  if (ownerUserId) {
-    const contactId = await ensureStaffContact(
-      db,
-      accountId,
-      ownerUserId,
-      toPhone,
-      toName,
-    );
-    const conversationId = await findOrCreateConversation(
-      db,
-      accountId,
-      ownerUserId,
-      contactId,
-    );
-    if (conversationId) {
-      await engineSendText({
-        accountId,
-        userId: ownerUserId,
-        conversationId,
-        contactId,
-        text,
-      });
-      return;
-    }
-  }
-
-  // Fallback if we cannot open a thread: still send from the same
-  // WAHA session / Meta phone that receives inbound leads.
+  // Send on the inbox WhatsApp line. Do NOT open a CRM thread with the
+  // advisor's personal number — that stuffed "Nuevo lead asignado" into
+  // the owner's bandeja as if Brenda/Jimena were leads.
   const accessToken = config.access_token
     ? decrypt(config.access_token as string)
     : '';
@@ -338,35 +309,4 @@ export async function sendStaffWhatsApp(
     to: sanitized,
     text,
   });
-}
-
-async function ensureStaffContact(
-  db: SupabaseClient,
-  accountId: string,
-  ownerUserId: string,
-  phone: string,
-  name: string | null,
-): Promise<string> {
-  const existing = await findExistingContact(db, accountId, phone);
-  if (existing?.id) return existing.id as string;
-
-  const label = (name ?? '').trim() || phone;
-  const { data, error } = await db
-    .from('contacts')
-    .insert({
-      account_id: accountId,
-      user_id: ownerUserId,
-      phone,
-      name: label,
-    })
-    .select('id')
-    .single();
-  if (data?.id) return data.id as string;
-  if (error && isUniqueViolation(error)) {
-    const raced = await findExistingContact(db, accountId, phone);
-    if (raced?.id) return raced.id as string;
-  }
-  throw new Error(
-    error?.message || 'could not open a chat with the advisor number',
-  );
 }

@@ -594,7 +594,17 @@ function InboxPageInner() {
         );
       }
     },
-    [activeConversation]
+    [activeConversation?.id],
+  );
+
+  const handleConversationDeleted = useCallback(
+    (conversationId: string) => {
+      setConversations((prev) => prev.filter((c) => c.id !== conversationId));
+      if (activeConversation?.id === conversationId) {
+        handleCloseConversation();
+      }
+    },
+    [activeConversation?.id, handleCloseConversation],
   );
 
   // On mobile (<lg) we show a SINGLE pane — either the list or the
@@ -661,6 +671,7 @@ function InboxPageInner() {
             onUpdateMessage={handleUpdateMessage}
             onStatusChange={handleStatusChange}
             onAssignChange={handleAssignChange}
+            onDeleted={handleConversationDeleted}
             onBack={handleCloseConversation}
             resyncToken={resyncToken}
             onRefresh={handleManualRefresh}

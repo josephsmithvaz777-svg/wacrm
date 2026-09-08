@@ -291,7 +291,14 @@
       "selectConversation": "Select a conversation",
       "selectConversationHint": "Choose a conversation from the left to start messaging",
       "today": "Today",
-      "yesterday": "Yesterday"
+      "yesterday": "Yesterday",
+      "deleteConversation": "Delete chat",
+      "deleteTitle": "Delete this chat?",
+      "deleteDesc": "Removes the chat with {name} from the inbox. The contact stays. If they write again, a new chat opens.",
+      "deleteCancel": "Cancel",
+      "deleteConfirm": "Delete",
+      "deleted": "Chat deleted",
+      "deleteFailed": "Could not delete the chat"
     },
     "sessionTimer": {
       "expired": "Expired",

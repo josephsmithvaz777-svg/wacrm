@@ -29,10 +29,21 @@ import {
   RefreshCw,
   PanelRightOpen,
   PanelRightClose,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import { format, isToday, isYesterday, differenceInHours } from "date-fns";
 import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -114,6 +125,11 @@ interface MessageThreadProps {
   contactPanelOpen?: boolean;
   onToggleContactPanel?: () => void;
   /**
+   * Owner/admin: remove this thread from the inbox. The parent
+   * should drop it from the list and clear the active selection.
+   */
+  onDeleted?: (conversationId: string) => void;
+  /**
    * Meta Cloud API forbids freeform text outside the 24h customer
    * window. WAHA (linked WhatsApp) does not — username / LID leads
    * often have no inbound "customer" row yet and would be stuck.
@@ -194,13 +210,14 @@ export function MessageThread({
   onRefresh,
   contactPanelOpen,
   onToggleContactPanel,
+  onDeleted,
   enforceSessionWindow = true,
 }: MessageThreadProps) {
   const t = useTranslations("Inbox.messageThread");
   const tTimer = useTranslations("Inbox.sessionTimer");
   const tQuote = useTranslations("Inbox.replyQuote");
 
-  const { user } = useAuth();
+  const { user, canManageMembers } = useAuth();
   const { getPresence, getRow, now } = usePresence();
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -229,6 +246,30 @@ export function MessageThread({
       refreshTimerRef.current = null;
     }, 700);
   }, [isRefreshing, onRefresh]);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const handleDeleteConversation = useCallback(async () => {
+    if (!conversation) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/conversations/${conversation.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload?.error || `HTTP ${res.status}`);
+      }
+      setDeleteOpen(false);
+      onDeleted?.(conversation.id);
+      toast.success(t("deleted"));
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : t("deleteFailed"),
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }, [conversation, onDeleted, t]);
   const [replyTo, setReplyTo] = useState<ReplyDraft | null>(null);
   // Which attachment the media viewer is showing. Lives here rather than in
   // the bubble so the viewer can page through every image/video in the
@@ -1113,6 +1154,18 @@ export function MessageThread({
             </button>
           )}
 
+          {canManageMembers && onDeleted ? (
+            <button
+              type="button"
+              onClick={() => setDeleteOpen(true)}
+              aria-label={t("deleteConversation")}
+              title={t("deleteConversation")}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+
           {/* Status dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger className={cn(
@@ -1324,6 +1377,38 @@ export function MessageThread({
         onActiveIdChange={handleMediaChange}
         contactLabel={displayName}
       />
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="border-border bg-popover text-popover-foreground sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t("deleteTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("deleteDesc", { name: displayName })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteOpen(false)}
+              disabled={deleting}
+            >
+              {t("deleteCancel")}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleDeleteConversation()}
+              disabled={deleting}
+            >
+              {deleting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : null}
+              {t("deleteConfirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
