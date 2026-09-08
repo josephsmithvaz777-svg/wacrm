@@ -728,7 +728,19 @@
       "reminderPendingHint": "El aviso sale el día de la tarea, cuando corre el cron — no a la hora exacta.",
       "sendReminderNow": "Enviar aviso ahora",
       "reminderSendOk": "Aviso enviado al asesor",
-      "reminderSendFailed": "No se pudo enviar el aviso"
+      "reminderSendFailed": "No se pudo enviar el aviso",
+      "editTitle": "Título de la tarea",
+      "dueDate": "Fecha",
+      "dueTime": "Hora",
+      "saveAndNotify": "Guardar y avisar",
+      "newAppointmentTitle": "Nueva cita",
+      "newAppointmentHint": "Completa esta tarea y crea otra con la fecha nueva.",
+      "createNewAppointment": "Completar y crear nueva cita",
+      "rescheduleOk": "Cita actualizada y aviso enviado al asesor",
+      "rescheduleSaved": "Cita actualizada",
+      "newAppointmentOk": "Nueva cita creada y aviso enviado",
+      "newAppointmentSaved": "Nueva cita creada",
+      "toastSaveFailed": "No se pudo guardar la tarea"
     },
     "panel": {
       "title": "Tareas",
@@ -745,7 +757,15 @@
       "markOpen": "Marcar pendiente",
       "toastSaveFailed": "No se pudo guardar la tarea",
       "toastAssignFailed": "No se pudo asignar la tarea",
-      "toastDeleteFailed": "No se pudo eliminar la tarea"
+      "toastDeleteFailed": "No se pudo eliminar la tarea",
+      "editTitle": "Título de la tarea",
+      "saveAndNotify": "Guardar y avisar",
+      "newAppointmentTitle": "Nueva cita",
+      "createNewAppointment": "Completar y crear nueva cita",
+      "toastRescheduleOk": "Cita actualizada y aviso enviado",
+      "toastRescheduleSaved": "Cita actualizada",
+      "toastNewAppointmentOk": "Nueva cita creada y aviso enviado",
+      "toastNewAppointmentSaved": "Nueva cita creada"
     }
   },
   "Pipelines": {

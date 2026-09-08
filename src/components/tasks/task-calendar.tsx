@@ -36,6 +36,8 @@ export function TaskCalendar({
   onComplete,
   onRemind,
   onAssign,
+  onReschedule,
+  onCreateNext,
 }: {
   tasks: LeadTask[];
   view: "day" | "week" | "month";
@@ -48,6 +50,11 @@ export function TaskCalendar({
   onComplete: (task: LeadTask, result: string) => Promise<void>;
   onRemind?: (task: LeadTask) => Promise<void>;
   onAssign?: (task: LeadTask, agentId: string) => Promise<void>;
+  onReschedule?: (
+    task: LeadTask,
+    patch: { title: string; dueAt: string | null },
+  ) => Promise<void>;
+  onCreateNext?: (task: LeadTask, dueAt: string, result?: string) => Promise<void>;
 }) {
   const t = useTranslations("Tasks.page");
   const locale = useLocale();
@@ -144,6 +151,8 @@ export function TaskCalendar({
                       onComplete={onComplete}
                       onRemind={onRemind}
                       onAssign={onAssign}
+                      onReschedule={onReschedule}
+                      onCreateNext={onCreateNext}
                     />
                   ))}
                   {extra > 0 ? (
@@ -241,6 +250,8 @@ export function TaskCalendar({
                           onComplete={onComplete}
                           onRemind={onRemind}
                           onAssign={onAssign}
+                          onReschedule={onReschedule}
+                          onCreateNext={onCreateNext}
                           className="h-full"
                         />
                       </div>

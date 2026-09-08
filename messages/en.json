@@ -707,7 +707,19 @@
       "reminderPendingHint": "The reminder goes out on the due day when cron runs — not at the exact time.",
       "sendReminderNow": "Send reminder now",
       "reminderSendOk": "Reminder sent to the advisor",
-      "reminderSendFailed": "Couldn’t send the reminder"
+      "reminderSendFailed": "Couldn’t send the reminder",
+      "editTitle": "Task title",
+      "dueDate": "Date",
+      "dueTime": "Time",
+      "saveAndNotify": "Save and notify",
+      "newAppointmentTitle": "New appointment",
+      "newAppointmentHint": "Complete this task and create another with the new date.",
+      "createNewAppointment": "Complete and create new appointment",
+      "rescheduleOk": "Appointment updated and advisor notified",
+      "rescheduleSaved": "Appointment updated",
+      "newAppointmentOk": "New appointment created and advisor notified",
+      "newAppointmentSaved": "New appointment created",
+      "toastSaveFailed": "Couldn’t save the task"
     },
     "panel": {
       "title": "Tasks",
@@ -724,7 +736,15 @@
       "markOpen": "Mark open",
       "toastSaveFailed": "Couldn’t save the task",
       "toastAssignFailed": "Couldn’t assign the task",
-      "toastDeleteFailed": "Couldn’t delete the task"
+      "toastDeleteFailed": "Couldn’t delete the task",
+      "editTitle": "Task title",
+      "saveAndNotify": "Save and notify",
+      "newAppointmentTitle": "New appointment",
+      "createNewAppointment": "Complete and create new appointment",
+      "toastRescheduleOk": "Appointment updated and advisor notified",
+      "toastRescheduleSaved": "Appointment updated",
+      "toastNewAppointmentOk": "New appointment created and advisor notified",
+      "toastNewAppointmentSaved": "New appointment created"
     }
   },
   "Pipelines": {

@@ -1,23 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import { CalendarDays, ListTodo, MessageSquare } from "lucide-react";
+import { CalendarDays, ListTodo } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import { TaskCalendar } from "@/components/tasks/task-calendar";
-import {
-  assigneeName,
-  TaskAssigneeSelect,
-} from "@/components/tasks/task-assignee-select";
+import { TaskListItem } from "@/components/tasks/task-list-item";
 import { Button } from "@/components/ui/button";
 import { useAssignableMembers } from "@/hooks/use-assignable-members";
 import { useAuth } from "@/hooks/use-auth";
 import { useCan } from "@/hooks/use-can";
-import { formatAlertDateTime } from "@/lib/automations/template-vars";
+import { dueAtChanged } from "@/lib/datetime/zoned";
 import { createClient } from "@/lib/supabase/client";
-import { taskTone } from "@/lib/tasks/calendar";
+import { notifyTaskAdvisor, TASK_REMINDER_RESET } from "@/lib/tasks/notify";
 import { shouldLockTasksToSelf } from "@/lib/tasks/scope";
 import { cn } from "@/lib/utils";
 import type { LeadTask } from "@/types";
@@ -85,13 +81,8 @@ export default function TasksPage() {
 
   const remindTask = useCallback(
     async (task: LeadTask) => {
-      const res = await fetch(`/api/tasks/${task.id}/remind`, { method: "POST" });
-      const body = (await res.json().catch(() => ({}))) as {
-        whatsapp?: boolean;
-        email?: boolean;
-        errors?: string[];
-      };
-      if (!res.ok) {
+      const body = await notifyTaskAdvisor(task.id);
+      if (!body.ok) {
         toast.error(t("reminderSendFailed"));
         return;
       }
@@ -103,6 +94,88 @@ export default function TasksPage() {
       await load();
     },
     [load, t],
+  );
+
+  const rescheduleTask = useCallback(
+    async (task: LeadTask, patch: { title: string; dueAt: string | null }) => {
+      if (!canEdit) return;
+      const supabase = createClient();
+      const title = patch.title.trim() || task.title;
+      const moved = dueAtChanged(task.due_at, patch.dueAt);
+      const { error } = await supabase
+        .from("lead_tasks")
+        .update({
+          title,
+          due_at: patch.dueAt,
+          ...(moved ? TASK_REMINDER_RESET : {}),
+        })
+        .eq("id", task.id);
+      if (error) {
+        toast.error(t("toastSaveFailed"));
+        return;
+      }
+      if (moved && patch.dueAt) {
+        const body = await notifyTaskAdvisor(task.id, "reschedule");
+        if (body.ok && (body.whatsapp || body.email)) {
+          toast.success(t("rescheduleOk"));
+        } else if (body.ok) {
+          toast.success(t("rescheduleSaved"));
+        } else {
+          toast.error(body.errors?.[0] || t("reminderSendFailed"));
+        }
+      } else {
+        toast.success(t("rescheduleSaved"));
+      }
+      await load();
+    },
+    [canEdit, load, t],
+  );
+
+  const createNextTask = useCallback(
+    async (task: LeadTask, dueAt: string, result?: string) => {
+      if (!canEdit) return;
+      const supabase = createClient();
+      if (!task.completed_at) {
+        const { error: completeError } = await supabase
+          .from("lead_tasks")
+          .update({
+            completed_at: new Date().toISOString(),
+            result: result?.trim() || task.result || null,
+          })
+          .eq("id", task.id);
+        if (completeError) {
+          toast.error(t("toastSaveFailed"));
+          return;
+        }
+      }
+      const { data, error } = await supabase
+        .from("lead_tasks")
+        .insert({
+          account_id: task.account_id,
+          contact_id: task.contact_id,
+          conversation_id: task.conversation_id ?? null,
+          created_by: user?.id ?? null,
+          assigned_to: task.assigned_to ?? user?.id ?? null,
+          title: task.title,
+          icon: task.icon ?? null,
+          due_at: dueAt,
+        })
+        .select("id")
+        .single();
+      if (error || !data?.id) {
+        toast.error(t("toastSaveFailed"));
+        await load();
+        return;
+      }
+      const body = await notifyTaskAdvisor(data.id, "reschedule");
+      if (body.ok && (body.whatsapp || body.email)) {
+        toast.success(t("newAppointmentOk"));
+      } else {
+        toast.success(t("newAppointmentSaved"));
+      }
+      await load();
+    },
+    [canEdit, load, t, user?.id],
   );
 
   const toggleDone = useCallback(
@@ -220,6 +293,8 @@ export default function TasksPage() {
               onComplete={completeTask}
               onRemind={remindTask}
               onAssign={assignTask}
+              onReschedule={rescheduleTask}
+              onCreateNext={createNextTask}
             />
           )
         ) : tasks.length === 0 ? (
@@ -234,93 +309,19 @@ export default function TasksPage() {
           </div>
         ) : (
           <ul className="space-y-2">
-            {tasks.map((task) => {
-              const done = Boolean(task.completed_at);
-              const tone = taskTone(task);
-              const contactName =
-                task.contact?.name?.trim() ||
-                task.contact?.phone ||
-                t("unknownLead");
-              const href = task.conversation_id
-                ? `/inbox?c=${task.conversation_id}`
-                : "/inbox";
-              return (
-                <li
-                  key={task.id}
-                  className={cn(
-                    "flex items-start gap-3 rounded-xl border bg-card px-3 py-3",
-                    tone === "overdue" && "border-red-500/40",
-                    tone === "done" && "border-emerald-500/40",
-                    tone === "open" && "border-border",
-                  )}
-                >
-                  <button
-                    type="button"
-                    disabled={!canEdit}
-                    onClick={() => void toggleDone(task)}
-                    className={cn(
-                      "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border",
-                      done
-                        ? "border-emerald-500 bg-emerald-500"
-                        : tone === "overdue"
-                          ? "border-red-500 bg-background"
-                          : "border-border bg-background",
-                      !canEdit && "opacity-60",
-                    )}
-                    aria-label={done ? t("markOpen") : t("markDone")}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p
-                      className={cn(
-                        "text-sm",
-                        tone === "done" && "text-emerald-400 line-through",
-                        tone === "overdue" && "text-red-400",
-                        tone === "open" && "text-foreground",
-                      )}
-                    >
-                      {task.icon ? (
-                        <span className="mr-1" aria-hidden>
-                          {task.icon}
-                        </span>
-                      ) : null}
-                      {task.title}
-                    </p>
-                    <p
-                      className={cn(
-                        "mt-0.5 text-xs",
-                        tone === "overdue" && "text-red-400",
-                        tone === "done" && "text-emerald-400",
-                        tone === "open" && "text-muted-foreground",
-                      )}
-                    >
-                      {contactName}
-                      {task.due_at
-                        ? ` · ${t("due", { date: formatAlertDateTime(new Date(task.due_at)) })}`
-                        : ""}
-                      {` · ${assigneeName(members, task.assigned_to, t("unassigned"))}`}
-                    </p>
-                    {canManageMembers ? (
-                      <div className="mt-2 max-w-xs">
-                        <TaskAssigneeSelect
-                          value={task.assigned_to ?? ""}
-                          onChange={(id) => void assignTask(task, id)}
-                          members={members}
-                          placeholder={t("assignTo")}
-                          unassignedLabel={t("unassigned")}
-                        />
-                      </div>
-                    ) : null}
-                  </div>
-                  <Link
-                    href={href}
-                    className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                  >
-                    <MessageSquare className="h-3.5 w-3.5" />
-                    {t("openChat")}
-                  </Link>
-                </li>
-              );
-            })}
+            {tasks.map((task) => (
+              <TaskListItem
+                key={task.id}
+                task={task}
+                canEdit={canEdit}
+                canAssign={canManageMembers}
+                members={members}
+                onToggleDone={toggleDone}
+                onAssign={assignTask}
+                onReschedule={rescheduleTask}
+                onCreateNext={createNextTask}
+              />
+            ))}
           </ul>
         )}
       </div>

@@ -98,3 +98,35 @@ export function combineLocalDateAndTime(
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed.toISOString();
 }
+
+/** Split an ISO instant into `YYYY-MM-DD` + `HH:mm` in `timeZone`. */
+export function splitZonedDateTime(
+  iso: string | null | undefined,
+  timeZone: string,
+): { date: string; time: string } {
+  if (!iso) return { date: "", time: "" };
+  const instant = new Date(iso);
+  if (Number.isNaN(instant.getTime())) return { date: "", time: "" };
+  const time = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  })
+    .format(instant)
+    .replace(".", ":");
+  return { date: calendarDateInZone(instant, timeZone), time };
+}
+
+export function dueAtChanged(
+  prev: string | null | undefined,
+  next: string | null,
+): boolean {
+  const a = prev ? new Date(prev).getTime() : Number.NaN;
+  const b = next ? new Date(next).getTime() : Number.NaN;
+  const aOk = Number.isFinite(a);
+  const bOk = Number.isFinite(b);
+  if (!aOk && !bOk) return false;
+  if (!aOk || !bOk) return true;
+  return a !== b;
+}

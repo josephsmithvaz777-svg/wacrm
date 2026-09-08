@@ -10,7 +10,7 @@ import {
   AUTOMATION_GREETING_TZ,
   formatAlertDateTime,
 } from "@/lib/automations/template-vars";
-import { zonedDayRange } from "@/lib/datetime/zoned";
+import { calendarDateInZone, zonedDayRange } from "@/lib/datetime/zoned";
 import { sendPlainEmail } from "@/lib/email/send";
 
 export interface TaskReminderSummary {
@@ -35,7 +35,24 @@ export type DueTaskRow = {
   reminder_email_at?: string | null;
 };
 
-function reminderCopy(task: DueTaskRow, contactLabel: string): {
+export type TaskReminderKind = "due" | "reschedule";
+
+export function shouldPersistTaskReminder(
+  dueAt: string,
+  now: Date = new Date(),
+  timeZone: string = AUTOMATION_GREETING_TZ,
+): boolean {
+  return (
+    calendarDateInZone(new Date(dueAt), timeZone) <=
+    calendarDateInZone(now, timeZone)
+  );
+}
+
+export function buildTaskReminderCopy(
+  task: DueTaskRow,
+  contactLabel: string,
+  kind: TaskReminderKind = "due",
+): {
   title: string;
   body: string;
   whatsapp: string;
@@ -44,19 +61,33 @@ function reminderCopy(task: DueTaskRow, contactLabel: string): {
 } {
   const labeled = `${task.icon ? `${task.icon} ` : ""}${task.title}`.trim();
   const when = formatAlertDateTime(new Date(task.due_at));
+  if (kind === "reschedule") {
+    const body = `La tarea «${labeled}» con ${contactLabel} se reprogramó a ${when}.`;
+    return {
+      title: "Tarea reprogramada",
+      body,
+      whatsapp: [
+        "Tarea reprogramada",
+        `Lead: ${contactLabel}`,
+        `Tarea: ${labeled}`,
+        `Nueva hora: ${when}`,
+      ].join("\n"),
+      emailSubject: `Tarea reprogramada — ${task.title}`,
+      emailText: `${body}\n\nNueva hora: ${when}`,
+    };
+  }
   const title = "Tarea para hoy";
   const body = `Hoy tienes asignada la tarea «${labeled}» con ${contactLabel}.`;
-  const whatsapp = [
-    "Recordatorio de tarea",
-    `Hoy tienes asignada una tarea.`,
-    `Lead: ${contactLabel}`,
-    `Tarea: ${labeled}`,
-    `Hora: ${when}`,
-  ].join("\n");
   return {
     title,
     body,
-    whatsapp,
+    whatsapp: [
+      "Recordatorio de tarea",
+      `Hoy tienes asignada una tarea.`,
+      `Lead: ${contactLabel}`,
+      `Tarea: ${labeled}`,
+      `Hora: ${when}`,
+    ].join("\n"),
     emailSubject: `Recordatorio: tienes una tarea hoy — ${task.title}`,
     emailText: `${body}\n\nHora: ${when}`,
   };
@@ -82,12 +113,15 @@ export async function sendReminderForTask(
   db: SupabaseClient,
   task: DueTaskRow,
   now: Date = new Date(),
+  opts: { markSent?: boolean; kind?: TaskReminderKind } = {},
 ): Promise<{ whatsapp: boolean; email: boolean; errors: string[] }> {
   const errors: string[] = [];
-  let whatsapp = Boolean(task.reminder_whatsapp_at);
-  let emailSent = Boolean(task.reminder_email_at);
+  const markSent = opts.markSent !== false;
+  const kind = opts.kind ?? "due";
+  let whatsapp = kind === "reschedule" ? false : Boolean(task.reminder_whatsapp_at);
+  let emailSent = kind === "reschedule" ? false : Boolean(task.reminder_email_at);
 
-  if (!task.reminder_sent_at) {
+  if (markSent && !task.reminder_sent_at) {
     await db
       .from("lead_tasks")
       .update({ reminder_sent_at: now.toISOString() })
@@ -101,7 +135,7 @@ export async function sendReminderForTask(
   }
 
   const lead = await contactLabel(db, task.account_id, task.contact_id);
-  const copy = reminderCopy(task, lead);
+  const copy = buildTaskReminderCopy(task, lead, kind);
 
   const { data: profile } = await db
     .from("profiles")
@@ -113,7 +147,7 @@ export async function sendReminderForTask(
   const email = (profile?.email as string | null | undefined)?.trim() || "";
   const name = (profile?.full_name as string | null | undefined) ?? null;
 
-  if (!task.reminder_sent_at) {
+  if (!task.reminder_sent_at || kind === "reschedule") {
     try {
       await db.from("notifications").insert({
         account_id: task.account_id,
@@ -142,10 +176,12 @@ export async function sendReminderForTask(
           toName: name,
           text: copy.whatsapp,
         });
-        await db
-          .from("lead_tasks")
-          .update({ reminder_whatsapp_at: now.toISOString() })
-          .eq("id", task.id);
+        if (markSent) {
+          await db
+            .from("lead_tasks")
+            .update({ reminder_whatsapp_at: now.toISOString() })
+            .eq("id", task.id);
+        }
         whatsapp = true;
       } catch (err) {
         errors.push(
@@ -165,10 +201,12 @@ export async function sendReminderForTask(
         text: copy.emailText,
       });
       if (mail.ok) {
-        await db
-          .from("lead_tasks")
-          .update({ reminder_email_at: now.toISOString() })
-          .eq("id", task.id);
+        if (markSent) {
+          await db
+            .from("lead_tasks")
+            .update({ reminder_email_at: now.toISOString() })
+            .eq("id", task.id);
+        }
         emailSent = true;
       } else if (mail.skipped) {
         errors.push("email skipped: RESEND_API_KEY not set");

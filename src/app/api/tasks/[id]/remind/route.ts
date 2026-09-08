@@ -3,10 +3,16 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/automations/admin-client";
 import { getCurrentAccount, toErrorResponse } from "@/lib/auth/account";
 import { hasMinRole } from "@/lib/auth/roles";
-import { sendReminderForTask, type DueTaskRow } from "@/lib/tasks/reminders";
+import {
+  sendReminderForTask,
+  shouldPersistTaskReminder,
+  type DueTaskRow,
+  type TaskReminderKind,
+} from "@/lib/tasks/reminders";
+import { TASK_REMINDER_RESET } from "@/lib/tasks/constants";
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
@@ -15,6 +21,12 @@ export async function POST(
     if (!hasMinRole(role, "agent")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+
+    let kind: TaskReminderKind = "due";
+    const body = (await request.json().catch(() => ({}))) as {
+      reason?: string;
+    };
+    if (body.reason === "reschedule") kind = "reschedule";
 
     const admin = supabaseAdmin();
     const { data, error } = await admin
@@ -36,7 +48,23 @@ export async function POST(
       return NextResponse.json({ error: "Task has no due date" }, { status: 400 });
     }
 
-    const result = await sendReminderForTask(admin, data as DueTaskRow);
+    const task = data as DueTaskRow;
+    if (kind === "reschedule") {
+      await admin
+        .from("lead_tasks")
+        .update({ ...TASK_REMINDER_RESET })
+        .eq("id", id);
+      task.reminder_sent_at = null;
+      task.reminder_whatsapp_at = null;
+      task.reminder_email_at = null;
+    }
+
+    const markSent =
+      kind !== "reschedule" || shouldPersistTaskReminder(task.due_at);
+    const result = await sendReminderForTask(admin, task, new Date(), {
+      markSent,
+      kind,
+    });
     return NextResponse.json(result);
   } catch (err) {
     return toErrorResponse(err);

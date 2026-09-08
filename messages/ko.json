@@ -706,7 +706,19 @@
       "reminderPendingHint": "알림은 마감일 크론이 돌 때 발송됩니다. 정확한 시각이 아닙니다.",
       "sendReminderNow": "지금 알림 보내기",
       "reminderSendOk": "담당자에게 알림을 보냈습니다",
-      "reminderSendFailed": "알림을 보내지 못했습니다"
+      "reminderSendFailed": "알림을 보내지 못했습니다",
+      "editTitle": "작업 제목",
+      "dueDate": "날짜",
+      "dueTime": "시간",
+      "saveAndNotify": "저장하고 알림 보내기",
+      "newAppointmentTitle": "새 일정",
+      "newAppointmentHint": "이 작업을 완료하고 새 날짜로 다른 작업을 만듭니다.",
+      "createNewAppointment": "완료하고 새 일정 만들기",
+      "rescheduleOk": "일정을 바꾸고 담당자에게 알렸습니다",
+      "rescheduleSaved": "일정을 바꿨습니다",
+      "newAppointmentOk": "새 일정을 만들고 담당자에게 알렸습니다",
+      "newAppointmentSaved": "새 일정을 만들었습니다",
+      "toastSaveFailed": "작업을 저장하지 못했습니다"
     },
     "panel": {
       "title": "작업",
@@ -723,7 +735,15 @@
       "markOpen": "미완료로 표시",
       "toastSaveFailed": "작업을 저장하지 못했습니다",
       "toastAssignFailed": "작업을 배정하지 못했습니다",
-      "toastDeleteFailed": "작업을 삭제하지 못했습니다"
+      "toastDeleteFailed": "작업을 삭제하지 못했습니다",
+      "editTitle": "작업 제목",
+      "saveAndNotify": "저장하고 알림 보내기",
+      "newAppointmentTitle": "새 일정",
+      "createNewAppointment": "완료하고 새 일정 만들기",
+      "toastRescheduleOk": "일정을 바꾸고 담당자에게 알렸습니다",
+      "toastRescheduleSaved": "일정을 바꿨습니다",
+      "toastNewAppointmentOk": "새 일정을 만들고 담당자에게 알렸습니다",
+      "toastNewAppointmentSaved": "새 일정을 만들었습니다"
     }
   },
   "Pipelines": {

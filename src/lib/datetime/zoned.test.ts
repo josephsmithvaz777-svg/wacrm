@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   calendarDateInZone,
   combineLocalDateAndTime,
+  dueAtChanged,
   isSameCalendarDay,
   nextCalendarYmd,
+  splitZonedDateTime,
   wallTimeInZone,
   zonedDayRange,
 } from "./zoned";
@@ -49,5 +51,34 @@ describe("combineLocalDateAndTime", () => {
     expect(iso).toBeTruthy();
     expect(new Date(iso as string).getHours()).toBe(15);
     expect(new Date(iso as string).getMinutes()).toBe(30);
+  });
+});
+
+describe("splitZonedDateTime", () => {
+  it("splits a Lima afternoon into date and 24h time", () => {
+    const due = wallTimeInZone("2026-09-08", "14:00:00", "America/Lima");
+    expect(splitZonedDateTime(due.toISOString(), "America/Lima")).toEqual({
+      date: "2026-09-08",
+      time: "14:00",
+    });
+  });
+
+  it("returns empty parts without a value", () => {
+    expect(splitZonedDateTime(null, "America/Lima")).toEqual({
+      date: "",
+      time: "",
+    });
+  });
+});
+
+describe("dueAtChanged", () => {
+  it("detects a moved appointment", () => {
+    expect(
+      dueAtChanged("2026-09-08T18:00:00.000Z", "2026-09-10T20:00:00.000Z"),
+    ).toBe(true);
+    expect(
+      dueAtChanged("2026-09-08T18:00:00.000Z", "2026-09-08T18:00:00.000Z"),
+    ).toBe(false);
+    expect(dueAtChanged(null, "2026-09-08T18:00:00.000Z")).toBe(true);
   });
 });

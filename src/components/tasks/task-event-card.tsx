@@ -1,17 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 
 import { TaskAssigneeSelect, assigneeName } from "@/components/tasks/task-assignee-select";
+import { TaskDueFields } from "@/components/tasks/task-due-fields";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { formatAlertDateTime } from "@/lib/automations/template-vars";
+import { AUTOMATION_GREETING_TZ, formatAlertDateTime } from "@/lib/automations/template-vars";
+import { combineLocalDateAndTime, splitZonedDateTime } from "@/lib/datetime/zoned";
 import {
   dueRelativeParts,
   taskTone,
@@ -38,6 +40,8 @@ export function TaskEventChip({
   onComplete,
   onRemind,
   onAssign,
+  onReschedule,
+  onCreateNext,
   className,
 }: {
   task: LeadTask;
@@ -49,14 +53,35 @@ export function TaskEventChip({
   onComplete: (task: LeadTask, result: string) => Promise<void>;
   onRemind?: (task: LeadTask) => Promise<void>;
   onAssign?: (task: LeadTask, agentId: string) => Promise<void>;
+  onReschedule?: (
+    task: LeadTask,
+    patch: { title: string; dueAt: string | null },
+  ) => Promise<void>;
+  onCreateNext?: (task: LeadTask, dueAt: string, result?: string) => Promise<void>;
   className?: string;
 }) {
   const t = useTranslations("Tasks.page");
+  const split = splitZonedDateTime(task.due_at, AUTOMATION_GREETING_TZ);
   const [result, setResult] = useState(task.result ?? "");
+  const [editTitle, setEditTitle] = useState(task.title);
+  const [editDate, setEditDate] = useState(split.date);
+  const [editTime, setEditTime] = useState(split.time);
+  const [nextDate, setNextDate] = useState("");
+  const [nextTime, setNextTime] = useState("");
   const [saving, setSaving] = useState(false);
   const [reminding, setReminding] = useState(false);
+  const [rescheduling, setRescheduling] = useState(false);
+  const [creatingNext, setCreatingNext] = useState(false);
   const tone = taskTone(task);
   const name = leadLabel(task, fallbackLead);
+
+  useEffect(() => {
+    const next = splitZonedDateTime(task.due_at, AUTOMATION_GREETING_TZ);
+    setEditTitle(task.title);
+    setEditDate(next.date);
+    setEditTime(next.time);
+    setResult(task.result ?? "");
+  }, [task.id, task.title, task.due_at, task.result]);
 
   let when: string | null = null;
   if (task.due_at) {
@@ -136,6 +161,41 @@ export function TaskEventChip({
             {assigneeName(members, task.assigned_to, t("unassigned"))}
           </p>
         ) : null}
+        {canEdit && onReschedule && tone !== "done" ? (
+          <div className="space-y-1.5">
+            <input
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              disabled={rescheduling}
+              aria-label={t("editTitle")}
+              className="h-8 w-full rounded-md border border-border bg-muted px-2 text-xs text-foreground outline-none focus:border-primary/50"
+            />
+            <TaskDueFields
+              date={editDate}
+              time={editTime}
+              onDate={setEditDate}
+              onTime={setEditTime}
+              dateLabel={t("dueDate")}
+              timeLabel={t("dueTime")}
+              disabled={rescheduling}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 w-full"
+              disabled={rescheduling || !editTitle.trim()}
+              onClick={() => {
+                setRescheduling(true);
+                void onReschedule(task, {
+                  title: editTitle.trim(),
+                  dueAt: combineLocalDateAndTime(editDate, editTime),
+                }).finally(() => setRescheduling(false));
+              }}
+            >
+              {t("saveAndNotify")}
+            </Button>
+          </div>
+        ) : null}
         <div className="rounded-md bg-muted/70 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
           {task.reminder_whatsapp_at ? (
             <p>
@@ -159,7 +219,7 @@ export function TaskEventChip({
             <p className="mt-1">{t("reminderPendingHint")}</p>
           ) : null}
         </div>
-        {canEdit && onRemind && (!task.reminder_whatsapp_at || !task.reminder_email_at) ? (
+        {canEdit && onRemind && tone !== "done" && (!task.reminder_whatsapp_at || !task.reminder_email_at) ? (
           <Button
             size="sm"
             variant="outline"
@@ -196,6 +256,43 @@ export function TaskEventChip({
               }}
             >
               {t("completeTask")}
+            </Button>
+          </div>
+        ) : null}
+        {canEdit && onCreateNext ? (
+          <div className="space-y-1.5 border-t border-border pt-2">
+            <p className="text-[11px] font-medium text-foreground">
+              {t("newAppointmentTitle")}
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {t("newAppointmentHint")}
+            </p>
+            <TaskDueFields
+              date={nextDate}
+              time={nextTime}
+              onDate={setNextDate}
+              onTime={setNextTime}
+              dateLabel={t("dueDate")}
+              timeLabel={t("dueTime")}
+              disabled={creatingNext}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 w-full"
+              disabled={creatingNext || !nextDate}
+              onClick={() => {
+                const dueAt = combineLocalDateAndTime(nextDate, nextTime);
+                if (!dueAt) return;
+                setCreatingNext(true);
+                void onCreateNext(task, dueAt, result).finally(() => {
+                  setCreatingNext(false);
+                  setNextDate("");
+                  setNextTime("");
+                });
+              }}
+            >
+              {t("createNewAppointment")}
             </Button>
           </div>
         ) : null}
