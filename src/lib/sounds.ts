@@ -79,36 +79,65 @@ async function readyCtx(): Promise<AudioContext | null> {
   return ctx.state === "running" ? ctx : null;
 }
 
-async function tone(
-  freqs: number[],
-  {
-    duration = 0.12,
-    type = "sine" as OscillatorType,
-    gain = 0.08,
-    gap = 0.06,
-  }: {
-    duration?: number;
-    type?: OscillatorType;
-    gain?: number;
-    gap?: number;
-  } = {},
+function connectAlertBus(ctx: AudioContext): AudioNode {
+  const master = ctx.createGain();
+  // Loud enough to hear across a desk, compressor keeps peaks from
+  // clipping laptop speakers.
+  master.gain.value = 0.72;
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -14;
+  comp.knee.value = 8;
+  comp.ratio.value = 4;
+  comp.attack.value = 0.003;
+  comp.release.value = 0.12;
+  master.connect(comp);
+  comp.connect(ctx.destination);
+  return master;
+}
+
+function strike(
+  ctx: AudioContext,
+  dest: AudioNode,
+  freq: number,
+  t: number,
+  duration: number,
+  peak: number,
 ) {
+  const body = ctx.createOscillator();
+  const sparkle = ctx.createOscillator();
+  const g = ctx.createGain();
+  body.type = "sine";
+  sparkle.type = "triangle";
+  body.frequency.setValueAtTime(freq, t);
+  sparkle.frequency.setValueAtTime(freq * 2, t);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak, t + 0.012);
+  g.gain.exponentialRampToValueAtTime(peak * 0.55, t + duration * 0.45);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+  body.connect(g);
+  sparkle.connect(g);
+  g.connect(dest);
+  body.start(t);
+  sparkle.start(t);
+  body.stop(t + duration + 0.04);
+  sparkle.stop(t + duration + 0.04);
+}
+
+/**
+ * Original phone-style alert (not a copy of Apple/WhatsApp files):
+ * a bright rising tri-tone at desk volume so an inbound lead is hard
+ * to miss.
+ */
+async function playPhoneAlert(): Promise<void> {
   const ctx = await readyCtx();
   if (!ctx) return;
-
-  let t = ctx.currentTime;
-  for (const freq of freqs) {
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.type = type;
-    osc.frequency.value = freq;
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(gain, t + 0.015);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + duration);
-    osc.connect(g);
-    g.connect(ctx.destination);
-    osc.start(t);
-    osc.stop(t + duration + 0.02);
+  const dest = connectAlertBus(ctx);
+  let t = ctx.currentTime + 0.01;
+  const notes = [880, 1175, 1568];
+  const duration = 0.16;
+  const gap = 0.05;
+  for (const freq of notes) {
+    strike(ctx, dest, freq, t, duration, 0.42);
     t += duration + gap;
   }
 }
@@ -139,6 +168,7 @@ export function playCustomSoundUrl(url: string): Promise<boolean> {
       CUSTOM_SOUND_TIMEOUT_MS,
     );
     audio.preload = "auto";
+    audio.volume = 1;
     audio.onerror = () => finish(false);
     audio.onplaying = () => finish(true);
     audio.src = url;
@@ -153,8 +183,6 @@ export type NotificationSoundOpts = {
   url?: string | null;
 };
 
-const DEFAULT_CHIME = { duration: 0.1, gain: 0.07, gap: 0.05 } as const;
-
 /** Assignment / in-app notification chime. */
 export function playNotificationSound(opts: NotificationSoundOpts = {}): void {
   const source = notificationSoundSource({
@@ -167,11 +195,11 @@ export function playNotificationSound(opts: NotificationSoundOpts = {}): void {
       const played = await playCustomSoundUrl(opts.url.trim());
       if (played) return;
     }
-    await tone([880, 1175], DEFAULT_CHIME);
+    await playPhoneAlert();
   })();
 }
 
-/** Single soft blip for inbound customer messages. */
+/** Same loud phone alert for inbound customer messages / new leads. */
 export function playMessageSound(): void {
-  void tone([740], { duration: 0.09, gain: 0.06, type: "triangle" });
+  void playPhoneAlert();
 }

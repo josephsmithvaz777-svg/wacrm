@@ -1954,7 +1954,7 @@
       "accountSoundOff": "Notification sound muted for the team",
       "uploadSound": "Upload MP3",
       "customSoundActive": "Using a custom file.",
-      "defaultSoundActive": "Using the default chime.",
+      "defaultSoundActive": "iPhone/WhatsApp-style tone, loud volume.",
       "restoreDefault": "Use default sound",
       "restoredDefault": "Restored the default sound",
       "uploadSuccess": "Sound updated",

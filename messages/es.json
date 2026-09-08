@@ -1982,7 +1982,7 @@
       "accountSoundOff": "Sonido de notificaciones silenciado para el equipo",
       "uploadSound": "Subir MP3",
       "customSoundActive": "Usando un archivo personalizado.",
-      "defaultSoundActive": "Usando el sonido predeterminado.",
+      "defaultSoundActive": "Tono tipo iPhone/WhatsApp, volumen alto.",
       "restoreDefault": "Usar sonido predeterminado",
       "restoredDefault": "Volviste al sonido predeterminado",
       "uploadSuccess": "Sonido actualizado",

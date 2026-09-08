@@ -1953,7 +1953,7 @@
       "accountSoundOff": "팀 전체 알림음이 꺼졌습니다",
       "uploadSound": "MP3 올리기",
       "customSoundActive": "사용자 지정 파일을 사용 중입니다.",
-      "defaultSoundActive": "기본 알림음을 사용 중입니다.",
+      "defaultSoundActive": "아이폰/WhatsApp 스타일, 큰 볼륨.",
       "restoreDefault": "기본 소리로",
       "restoredDefault": "기본 소리로 되돌렸습니다",
       "uploadSuccess": "소리가 업데이트되었습니다",
