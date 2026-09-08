@@ -3,29 +3,28 @@
 // ============================================================
 
 import { contactBelongsToAccountStaff } from '@/lib/assignments/staff-contact';
-import {
-  canReceiveLeads,
-  isAccountRole,
-  ROLES_THAT_RECEIVE_LEADS,
-} from '@/lib/auth/roles';
+import { isAccountRole } from '@/lib/auth/roles';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = any;
 
+/** Owner is only a last-resort fallback when the account has no agents. */
+const AUTO_ASSIGN_LOOKUP_ROLES = ['owner', 'agent'] as const;
+
 /**
  * Advisors who may receive an auto-assigned lead. Agents always.
- * The owner is included only when the account has no agents — otherwise
- * auto-assign to the owner filled their bell while advisors sat idle.
- * Manual assign can still pick the owner (`agentCanReceiveLeads`).
+ * The owner is included only when the account has no agents — a
+ * one-person workspace still needs someone to hand to. Owner/admin
+ * otherwise watch and write without keeping the lead.
  */
 export function autoAssignPool(
   members: { user_id: string; account_role?: string }[],
 ): { user_id: string; account_role?: string }[] {
-  const eligible = members.filter(
-    (a) => isAccountRole(a.account_role) && canReceiveLeads(a.account_role),
+  const advisors = members.filter(
+    (a) => isAccountRole(a.account_role) && a.account_role === 'agent',
   );
-  const advisors = eligible.filter((a) => a.account_role === 'agent');
-  return advisors.length > 0 ? advisors : eligible;
+  if (advisors.length > 0) return advisors;
+  return members.filter((a) => a.account_role === 'owner');
 }
 
 async function loadAutoAssignPool(
@@ -36,7 +35,7 @@ async function loadAutoAssignPool(
     .from('profiles')
     .select('user_id, account_role')
     .eq('account_id', accountId)
-    .in('account_role', [...ROLES_THAT_RECEIVE_LEADS])
+    .in('account_role', [...AUTO_ASSIGN_LOOKUP_ROLES])
     .order('user_id', { ascending: true });
   if (error) {
     console.warn('[round-robin] load agents failed:', error);
@@ -57,26 +56,16 @@ export async function userIsInAutoAssignPool(
 }
 
 /**
- * True when `agentId` is a member of the account who may own a lead
- * (owner / agent). Admins and viewers are never eligible.
+ * True when `agentId` may keep a lead in this account: an agent, or
+ * the owner only when there are no agents. Matches the auto pool so
+ * Take over / Asignar cannot park a lead on the proprietor.
  */
 export async function agentCanReceiveLeads(
   db: Db,
   accountId: string,
   agentId: string,
 ): Promise<boolean> {
-  const { data, error } = await db
-    .from('profiles')
-    .select('account_role')
-    .eq('account_id', accountId)
-    .eq('user_id', agentId)
-    .maybeSingle();
-  if (error) {
-    console.warn('[round-robin] load assignee role failed:', error);
-    return false;
-  }
-  const role = data?.account_role;
-  return isAccountRole(role) && canReceiveLeads(role);
+  return userIsInAutoAssignPool(db, accountId, agentId);
 }
 
 /**
@@ -87,7 +76,8 @@ export async function agentCanReceiveLeads(
  * Admins and viewers are excluded from the pool — they can watch
  * the inbox but must never be auto-assigned a conversation. The
  * owner is used only when the account has no agents (a one-person
- * workspace still needs someone to hand to).
+ * workspace still needs someone to hand to). With advisors, the
+ * owner can see and write every thread without keeping the lead.
  */
 export async function pickRoundRobinAgent(
   db: Db,
@@ -237,9 +227,8 @@ export async function resolveHandoffAssignee(
  * sitting unassigned on the owner's inbox.
  *
  * Also reassigns when the current assignee is not in the auto pool
- * (owner while agents exist, admin, viewer). A race used to leave
- * the lead on the proprietor because `agentCanReceiveLeads` treated
- * the owner as "already assigned, keep them".
+ * (owner while agents exist, admin, viewer). The proprietor can
+ * still open and reply; they must not keep the lead.
  *
  * Never assigns when the contact's phone belongs to a teammate —
  * advisor numbers are inboxes, not leads.
@@ -263,9 +252,9 @@ export async function maybeRoundRobinAssignNewConversation(
 
   const current = opts.alreadyAssigned ?? null;
   if (current) {
-    // Owner/admin can sit on a thread by hand, but they are not in
-    // the auto pool when agents exist — reassign so the lead does
-    // not stick to the proprietor after a race or an old cursor.
+    // Owner/admin may reply on the thread, but they are not in the
+    // auto pool when agents exist — reassign so the lead does not
+    // stick to the proprietor.
     const inPool = await userIsInAutoAssignPool(
       db,
       opts.accountId,

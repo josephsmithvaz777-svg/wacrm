@@ -1,5 +1,5 @@
 import type { AccountMember } from '@/types';
-import { canReceiveLeads } from '@/lib/auth/roles';
+import { canReceiveLeads, canSendMessages } from '@/lib/auth/roles';
 
 /**
  * Fetch the current account's members from the API (which applies the
@@ -25,7 +25,12 @@ export function memberLabel(m: AccountMember): string {
   return m.full_name || m.email || m.user_id;
 }
 
-/** Members who may own a conversation. Admins and viewers stay out of assignment pickers. */
+/** Members who may own a conversation. Owner/admin watch and write but do not keep the lead. */
 export function assignableMembers(members: AccountMember[]): AccountMember[] {
   return members.filter((m) => canReceiveLeads(m.role));
+}
+
+/** Members who may own a task (anyone who can work the inbox). */
+export function taskAssignableMembers(members: AccountMember[]): AccountMember[] {
+  return members.filter((m) => canSendMessages(m.role));
 }

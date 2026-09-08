@@ -95,20 +95,17 @@ export function canSendMessages(role: AccountRole): boolean {
  * `canReceiveLeads` — round-robin queries it so admins never slip
  * into the assignment pool via a stale `.in(...)` filter.
  *
- * Owner stays assignable by hand (and is the auto-pool fallback
- * when the account has no agents). Admin is settings/oversight
- * only — they can watch every thread but must never be
- * auto-assigned a lead. Viewer is read-only.
+ * Only agents keep the lead. Owner and admin can still open every
+ * thread and write in it; they must not sit in Asignar / round-robin
+ * when the account has advisors. Viewer is read-only.
  */
 export const ROLES_THAT_RECEIVE_LEADS: readonly AccountRole[] = [
-  "owner",
   "agent",
 ] as const;
 
 /**
- * Owner / agent: may be assigned a conversation or contact.
- * Admins and viewers can watch the inbox but must never sit in
- * the assignment pool.
+ * Agent: may be assigned a conversation or contact.
+ * Owner and admin watch and write without keeping the lead.
  */
 export function canReceiveLeads(role: AccountRole): boolean {
   return (ROLES_THAT_RECEIVE_LEADS as readonly string[]).includes(role);

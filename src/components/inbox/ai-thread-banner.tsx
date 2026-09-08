@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/hooks/use-auth";
+import { canReceiveLeads } from "@/lib/auth/roles";
 
 // ------------------------------------------------------------
 // Account AI status is the same for every conversation, so cache it per
@@ -51,7 +52,7 @@ interface AiThreadBannerProps {
   /** Current assignee. The bot can still run while assigned; Take
    *  over / handoff pause it via `disabled`. */
   assignedAgentId?: string | null;
-  /** The acting agent — "Take over" assigns the thread to them. */
+  /** The acting user. Agents keep the lead on Take over; owner/admin do not. */
   currentUserId?: string | null;
   /** Called after a successful toggle so the parent can patch its local
    *  conversation state (the realtime UPDATE also arrives, but this keeps
@@ -73,11 +74,13 @@ export function AiThreadBanner({
   conversationId,
   disabled,
   handoffSummary,
-  currentUserId,
   onChange,
 }: AiThreadBannerProps) {
   const t = useTranslations("Inbox.aiBanner");
-  const { accountId } = useAuth();
+  const { accountId, accountRole } = useAuth();
+  const assignLeadOnTakeOver = accountRole
+    ? canReceiveLeads(accountRole)
+    : false;
   const [autoReplyOn, setAutoReplyOn] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   // Optimistic local mirror of the pause flag so the banner flips
@@ -102,22 +105,27 @@ export function AiThreadBanner({
         const res = await fetch(`/api/ai/autoreply/${conversationId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          // "Take over" also assigns the thread to the acting agent.
-          body: JSON.stringify({ paused, assign_to_me: paused }),
+          // Agents take the lead. Owner/admin only pause the bot.
+          body: JSON.stringify({
+            paused,
+            assign_to_me: paused && assignLeadOnTakeOver,
+          }),
         });
         if (!res.ok) {
           const j = await res.json().catch(() => ({}));
           toast.error(j?.error ?? t("updateError"));
           return;
         }
+        const j = (await res.json().catch(() => ({}))) as {
+          assigned_agent_id?: string | null;
+        };
         setPaused(paused);
         onChange?.({
           ai_autoreply_disabled: paused,
-          // Take over assigns to the acting agent. Resume keeps the
-          // current assignee so the lead does not vanish from their
-          // restricted inbox while the bot talks.
-          ...(paused && currentUserId
-            ? { assigned_agent_id: currentUserId }
+          // Take over: agents keep the lead. Owner/admin pause without
+          // claiming it — the API returns who actually owns the thread.
+          ...(paused && "assigned_agent_id" in j
+            ? { assigned_agent_id: j.assigned_agent_id ?? null }
             : {}),
         });
         toast.success(paused ? t("tookOver") : t("resumed"));
@@ -127,7 +135,7 @@ export function AiThreadBanner({
         setBusy(false);
       }
     },
-    [conversationId, currentUserId, onChange, t],
+    [assignLeadOnTakeOver, conversationId, onChange, t],
   );
 
   // Account has no auto-reply → nothing to show. (Still loading → nothing.)

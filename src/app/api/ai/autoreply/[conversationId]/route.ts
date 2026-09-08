@@ -1,4 +1,10 @@
 import { NextResponse } from 'next/server'
+import {
+  agentCanReceiveLeads,
+  assignConversationToAgent,
+  pickRoundRobinAgent,
+  userIsInAutoAssignPool,
+} from '@/lib/assignments/round-robin'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
 
@@ -12,9 +18,10 @@ type Params = { params: Promise<{ conversationId: string }> }
  *
  * Body: { paused: boolean, assign_to_me?: boolean }
  *   - paused: true  → pause the bot here (a human is taking over). When
- *                     `assign_to_me` is set, also assign the thread to the
- *                     caller (the usual "Take over" flow). Assignment
- *                     fires the `on_conversation_assigned` trigger.
+ *                     `assign_to_me` is set, assign the thread to the
+ *                     caller only if they may keep a lead (agents).
+ *                     Owner/admin pause the bot without taking the lead;
+ *                     if the thread was on them, it moves to an advisor.
  *   - paused: false → hand the thread back to the bot: clear the pause,
  *                     reset the per-conversation reply count so it gets
  *                     fresh slots, and clear the handoff note. Keep the
@@ -47,7 +54,7 @@ export async function POST(request: Request, { params }: Params) {
     // Confirm the conversation is in the caller's account before writing.
     const { data: conv, error: convErr } = await supabase
       .from('conversations')
-      .select('id')
+      .select('id, contact_id, assigned_agent_id')
       .eq('id', conversationId)
       .eq('account_id', accountId)
       .maybeSingle()
@@ -63,9 +70,41 @@ export async function POST(request: Request, { params }: Params) {
     }
 
     const update: Record<string, unknown> = { ai_autoreply_disabled: paused }
+    let assignedAgentId =
+      (conv.assigned_agent_id as string | null | undefined) ?? null
+    const contactId = (conv.contact_id as string | null | undefined) ?? null
 
     if (paused) {
-      if (assignToMe) update.assigned_agent_id = userId
+      const callerKeepsLead =
+        assignToMe &&
+        (await agentCanReceiveLeads(supabase, accountId, userId))
+      if (callerKeepsLead) {
+        update.assigned_agent_id = userId
+        assignedAgentId = userId
+      } else {
+        const keepAdvisor =
+          assignedAgentId &&
+          (await userIsInAutoAssignPool(
+            supabase,
+            accountId,
+            assignedAgentId,
+          ))
+        if (!keepAdvisor) {
+          const next = await pickRoundRobinAgent(supabase, accountId)
+          if (next && contactId) {
+            await assignConversationToAgent(supabase, {
+              accountId,
+              contactId,
+              conversationId,
+              agentId: next,
+            })
+            assignedAgentId = next
+          } else {
+            update.assigned_agent_id = null
+            assignedAgentId = null
+          }
+        }
+      }
     } else {
       // Keep whoever already owns the lead. The bot no longer stands
       // down just because a human is assigned.
@@ -86,7 +125,11 @@ export async function POST(request: Request, { params }: Params) {
       )
     }
 
-    return NextResponse.json({ success: true, paused })
+    return NextResponse.json({
+      success: true,
+      paused,
+      assigned_agent_id: assignedAgentId,
+    })
   } catch (err) {
     return toErrorResponse(err)
   }
