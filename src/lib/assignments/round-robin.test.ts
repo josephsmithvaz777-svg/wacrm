@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import {
   accountHasActiveAiAutoReply,
+  autoAssignPool,
   maybeRoundRobinAssignNewConversation,
   resolveHandoffAssignee,
 } from './round-robin'
@@ -197,5 +198,67 @@ describe('maybeRoundRobinAssignNewConversation', () => {
       conversationId: 'conv-ai',
     })
     expect(id).toBe('agent-2')
+  })
+
+  it('keeps the lead when it is already on an advisor in the pool', async () => {
+    const db = dbReturning({
+      contacts: { phone: '51911111111' },
+      profiles: [
+        { user_id: 'owner-1', phone: '51900000000', account_role: 'owner' },
+        { user_id: 'agent-1', phone: '51940912791', account_role: 'agent' },
+      ],
+      accounts: {
+        round_robin_enabled: true,
+        round_robin_last_user_id: 'agent-1',
+      },
+    })
+    const id = await maybeRoundRobinAssignNewConversation(db, {
+      accountId: 'acct',
+      contactId: 'contact-lead',
+      conversationId: 'conv-kept',
+      alreadyAssigned: 'agent-1',
+    })
+    expect(id).toBeNull()
+    expect(db.updates).toEqual([])
+  })
+
+  it('reassigns away from the owner when agents exist', async () => {
+    const db = dbReturning({
+      contacts: { phone: '51911111111' },
+      profiles: [
+        { user_id: 'owner-1', phone: '51900000000', account_role: 'owner' },
+        { user_id: 'agent-1', phone: '51940912791', account_role: 'agent' },
+      ],
+      accounts: {
+        round_robin_enabled: true,
+        round_robin_last_user_id: 'owner-1',
+      },
+    })
+    const id = await maybeRoundRobinAssignNewConversation(db, {
+      accountId: 'acct',
+      contactId: 'contact-lead',
+      conversationId: 'conv-owner',
+      alreadyAssigned: 'owner-1',
+    })
+    expect(id).toBe('agent-1')
+  })
+})
+
+describe('autoAssignPool', () => {
+  it('uses agents only when at least one exists', () => {
+    const pool = autoAssignPool([
+      { user_id: 'owner-1', account_role: 'owner' },
+      { user_id: 'agent-1', account_role: 'agent' },
+      { user_id: 'admin-1', account_role: 'admin' },
+    ])
+    expect(pool.map((a) => a.user_id)).toEqual(['agent-1'])
+  })
+
+  it('falls back to the owner when there are no agents', () => {
+    const pool = autoAssignPool([
+      { user_id: 'owner-1', account_role: 'owner' },
+      { user_id: 'admin-1', account_role: 'admin' },
+    ])
+    expect(pool.map((a) => a.user_id)).toEqual(['owner-1'])
   })
 })

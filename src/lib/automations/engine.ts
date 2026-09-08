@@ -532,7 +532,17 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
         .eq('account_id', args.automation.account_id)
         .maybeSingle()
       if (existing?.assigned_agent_id) {
-        return `already assigned to ${existing.assigned_agent_id}`
+        const { userIsInAutoAssignPool } = await import(
+          '@/lib/assignments/round-robin'
+        )
+        const inPool = await userIsInAutoAssignPool(
+          db,
+          args.automation.account_id,
+          existing.assigned_agent_id as string,
+        )
+        if (inPool) {
+          return `already assigned to ${existing.assigned_agent_id}`
+        }
       }
       let agentId = cfg.agent_id
       if (cfg.mode === 'round_robin') {

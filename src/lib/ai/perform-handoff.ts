@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   assignConversationToAgent,
   resolveHandoffAssignee,
+  userIsInAutoAssignPool,
 } from '@/lib/assignments/round-robin'
 import { contactBelongsToAccountStaff } from '@/lib/assignments/staff-contact'
 import { runAutomationsForTrigger } from '@/lib/automations/engine'
@@ -19,7 +20,8 @@ export interface AiHandoffResult {
  *
  * `claimIdle` is for the silence sweep: the disable-bot write only
  * lands if the bot is still on, so a late Take over or a concurrent
- * handoff wins. The lead may already be assigned — keep that advisor.
+ * handoff wins. If the lead is already on an advisor in the auto
+ * pool, keep them. Owner/admin are re-routed when agents exist.
  */
 export async function performAiHandoff(
   db: SupabaseClient,
@@ -54,6 +56,14 @@ export async function performAiHandoff(
   }
 
   let agentId: string | null = args.alreadyAssigned
+  if (agentId) {
+    const inPool = await userIsInAutoAssignPool(
+      db,
+      args.accountId,
+      agentId,
+    )
+    if (!inPool) agentId = null
+  }
   if (
     !agentId &&
     (await contactBelongsToAccountStaff(db, args.accountId, args.contactId))

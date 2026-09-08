@@ -13,6 +13,50 @@ import {
 type Db = any;
 
 /**
+ * Advisors who may receive an auto-assigned lead. Agents always.
+ * The owner is included only when the account has no agents — otherwise
+ * auto-assign to the owner filled their bell while advisors sat idle.
+ * Manual assign can still pick the owner (`agentCanReceiveLeads`).
+ */
+export function autoAssignPool(
+  members: { user_id: string; account_role?: string }[],
+): { user_id: string; account_role?: string }[] {
+  const eligible = members.filter(
+    (a) => isAccountRole(a.account_role) && canReceiveLeads(a.account_role),
+  );
+  const advisors = eligible.filter((a) => a.account_role === 'agent');
+  return advisors.length > 0 ? advisors : eligible;
+}
+
+async function loadAutoAssignPool(
+  db: Db,
+  accountId: string,
+): Promise<{ user_id: string; account_role?: string }[]> {
+  const { data: agents, error } = await db
+    .from('profiles')
+    .select('user_id, account_role')
+    .eq('account_id', accountId)
+    .in('account_role', [...ROLES_THAT_RECEIVE_LEADS])
+    .order('user_id', { ascending: true });
+  if (error) {
+    console.warn('[round-robin] load agents failed:', error);
+    return [];
+  }
+  return autoAssignPool(
+    (agents ?? []) as { user_id: string; account_role?: string }[],
+  );
+}
+
+export async function userIsInAutoAssignPool(
+  db: Db,
+  accountId: string,
+  userId: string,
+): Promise<boolean> {
+  const pool = await loadAutoAssignPool(db, accountId);
+  return pool.some((a) => a.user_id === userId);
+}
+
+/**
  * True when `agentId` is a member of the account who may own a lead
  * (owner / agent). Admins and viewers are never eligible.
  */
@@ -55,29 +99,8 @@ export async function pickRoundRobinAgent(
     .eq('id', accountId)
     .maybeSingle();
 
-  const { data: agents, error } = await db
-    .from('profiles')
-    .select('user_id, account_role')
-    .eq('account_id', accountId)
-    .in('account_role', [...ROLES_THAT_RECEIVE_LEADS])
-    .order('user_id', { ascending: true });
-
-  const eligible = (
-    (agents ?? []) as { user_id: string; account_role?: string }[]
-  ).filter(
-    (a) => isAccountRole(a.account_role) && canReceiveLeads(a.account_role),
-  );
-
-  if (error || !eligible.length) {
-    if (error) console.warn('[round-robin] load agents failed:', error);
-    return null;
-  }
-
-  // Prefer agents. The owner can still take a lead by hand, but
-  // auto-assigning them filled the owner's bell with "someone
-  // assigned you a conversation" while advisors sat idle.
-  const advisors = eligible.filter((a) => a.account_role === 'agent');
-  const pool = advisors.length > 0 ? advisors : eligible;
+  const pool = await loadAutoAssignPool(db, accountId);
+  if (!pool.length) return null;
 
   const last =
     typeof account?.round_robin_last_user_id === 'string'
@@ -213,9 +236,10 @@ export async function resolveHandoffAssignee(
  * over. Assignment used to wait until handoff, which left new ads
  * sitting unassigned on the owner's inbox.
  *
- * Also reassigns when the current assignee is an admin, viewer, or
- * otherwise ineligible. Leaving those threads in place kept sending
- * WhatsApp alerts to people who can only watch the inbox.
+ * Also reassigns when the current assignee is not in the auto pool
+ * (owner while agents exist, admin, viewer). A race used to leave
+ * the lead on the proprietor because `agentCanReceiveLeads` treated
+ * the owner as "already assigned, keep them".
  *
  * Never assigns when the contact's phone belongs to a teammate —
  * advisor numbers are inboxes, not leads.
@@ -239,8 +263,15 @@ export async function maybeRoundRobinAssignNewConversation(
 
   const current = opts.alreadyAssigned ?? null;
   if (current) {
-    const eligible = await agentCanReceiveLeads(db, opts.accountId, current);
-    if (eligible) return null;
+    // Owner/admin can sit on a thread by hand, but they are not in
+    // the auto pool when agents exist — reassign so the lead does
+    // not stick to the proprietor after a race or an old cursor.
+    const inPool = await userIsInAutoAssignPool(
+      db,
+      opts.accountId,
+      current,
+    );
+    if (inPool) return null;
   }
 
   const { data: account } = await db
