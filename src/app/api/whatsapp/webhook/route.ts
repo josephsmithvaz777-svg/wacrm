@@ -622,18 +622,19 @@ async function processMessage(
     })
   }
   try {
-    const { maybeRoundRobinAssignNewConversation } = await import(
+    const { claimRoundRobinAssignment } = await import(
       '@/lib/assignments/round-robin'
     )
-    assignedNow = await maybeRoundRobinAssignNewConversation(supabaseAdmin(), {
+    const claimed = await claimRoundRobinAssignment(supabaseAdmin(), {
       accountId,
       contactId: contactRecord.id,
       conversationId: conversation.id,
       alreadyAssigned: conversation.assigned_agent_id ?? null,
     })
-    if (assignedNow) {
-      conversation.assigned_agent_id = assignedNow
+    if (claimed.agentId) {
+      conversation.assigned_agent_id = claimed.agentId
     }
+    assignedNow = claimed.claimed ? claimed.agentId : null
   } catch (err) {
     console.warn('[webhook] round-robin assign failed:', err)
   }

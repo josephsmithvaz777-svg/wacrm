@@ -1,11 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-import {
-  assignConversationToAgent,
-  resolveHandoffAssignee,
-  userIsInAutoAssignPool,
-} from '@/lib/assignments/round-robin'
-import { contactBelongsToAccountStaff } from '@/lib/assignments/staff-contact'
+import { claimRoundRobinAssignment } from '@/lib/assignments/round-robin'
 import { runAutomationsForTrigger } from '@/lib/automations/engine'
 
 export interface AiHandoffResult {
@@ -56,34 +51,14 @@ export async function performAiHandoff(
   }
 
   let agentId: string | null = args.alreadyAssigned
-  if (agentId) {
-    const inPool = await userIsInAutoAssignPool(
-      db,
-      args.accountId,
-      agentId,
-    )
-    if (!inPool) agentId = null
-  }
-  if (
-    !agentId &&
-    (await contactBelongsToAccountStaff(db, args.accountId, args.contactId))
-  ) {
-    console.info(
-      '[ai handoff] skip assign: contact is a staff phone',
-      args.contactId,
-    )
-  } else if (!agentId) {
-    const next = await resolveHandoffAssignee(db, args.accountId)
-    if (next) {
-      const assigned = await assignConversationToAgent(db, {
-        accountId: args.accountId,
-        contactId: args.contactId,
-        conversationId: args.conversationId,
-        agentId: next,
-      })
-      if (assigned) agentId = next
-    }
-  }
+  const claim = await claimRoundRobinAssignment(db, {
+    accountId: args.accountId,
+    contactId: args.contactId,
+    conversationId: args.conversationId,
+    alreadyAssigned: args.alreadyAssigned,
+  })
+  if (claim.agentId) agentId = claim.agentId
+  const newlyAssigned = claim.claimed
 
   if (!args.claimIdle) {
     const update = agentId
@@ -98,10 +73,10 @@ export async function performAiHandoff(
       return { claimed: false, agentId: null }
     }
   } else if (agentId && agentId !== args.alreadyAssigned) {
-    // assignConversationToAgent already wrote assigned_agent_id.
+    // claimRoundRobinAssignment already wrote assigned_agent_id.
   }
 
-  const notifyId = agentId && agentId !== args.alreadyAssigned ? agentId : null
+  const notifyId = newlyAssigned ? agentId : null
   if (notifyId) {
     await runAutomationsForTrigger({
       accountId: args.accountId,

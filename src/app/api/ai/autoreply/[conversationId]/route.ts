@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server'
 import {
   agentCanReceiveLeads,
-  assignConversationToAgent,
-  pickRoundRobinAgent,
-  userIsInAutoAssignPool,
+  claimRoundRobinAssignment,
 } from '@/lib/assignments/round-robin'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
@@ -81,29 +79,23 @@ export async function POST(request: Request, { params }: Params) {
       if (callerKeepsLead) {
         update.assigned_agent_id = userId
         assignedAgentId = userId
-      } else {
-        const keepAdvisor =
-          assignedAgentId &&
-          (await userIsInAutoAssignPool(
-            supabase,
-            accountId,
-            assignedAgentId,
-          ))
-        if (!keepAdvisor) {
-          const next = await pickRoundRobinAgent(supabase, accountId)
-          if (next && contactId) {
-            await assignConversationToAgent(supabase, {
-              accountId,
-              contactId,
-              conversationId,
-              agentId: next,
-            })
-            assignedAgentId = next
-          } else {
-            update.assigned_agent_id = null
-            assignedAgentId = null
-          }
+      } else if (contactId) {
+        const claim = await claimRoundRobinAssignment(supabase, {
+          accountId,
+          contactId,
+          conversationId,
+          alreadyAssigned: assignedAgentId,
+        })
+        if (claim.agentId) {
+          assignedAgentId = claim.agentId
+          update.assigned_agent_id = claim.agentId
+        } else {
+          update.assigned_agent_id = null
+          assignedAgentId = null
         }
+      } else {
+        update.assigned_agent_id = null
+        assignedAgentId = null
       }
     } else {
       // Keep whoever already owns the lead. The bot no longer stands

@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest'
 import {
   accountHasActiveAiAutoReply,
   autoAssignPool,
+  claimRoundRobinAssignment,
   maybeRoundRobinAssignNewConversation,
   resolveHandoffAssignee,
 } from './round-robin'
@@ -260,5 +261,57 @@ describe('autoAssignPool', () => {
       { user_id: 'admin-1', account_role: 'admin' },
     ])
     expect(pool.map((a) => a.user_id)).toEqual(['owner-1'])
+  })
+})
+
+describe('claimRoundRobinAssignment', () => {
+  it('uses the atomic RPC and does not fall back to a second pick', async () => {
+    const db = dbReturning({
+      contacts: { phone: '51911111111' },
+      profiles: [{ phone: '51940912791' }],
+    }) as ReturnType<typeof dbReturning> & {
+      rpc: (
+        name: string,
+        args: Record<string, unknown>,
+      ) => Promise<{ data: unknown; error: unknown }>
+    }
+    let calls = 0
+    db.rpc = async (name, args) => {
+      calls += 1
+      expect(name).toBe('claim_round_robin_assignment')
+      expect(args.p_conversation_id).toBe('conv-emilio')
+      return {
+        data: { agent_id: 'agent-isaac', claimed: true },
+        error: null,
+      }
+    }
+    const first = await claimRoundRobinAssignment(db, {
+      accountId: 'acct',
+      contactId: 'contact-emilio',
+      conversationId: 'conv-emilio',
+    })
+    db.rpc = async () => {
+      calls += 1
+      return {
+        data: { agent_id: 'agent-isaac', claimed: false },
+        error: null,
+      }
+    }
+    const second = await claimRoundRobinAssignment(db, {
+      accountId: 'acct',
+      contactId: 'contact-emilio',
+      conversationId: 'conv-emilio',
+    })
+    expect(first).toEqual({ agentId: 'agent-isaac', claimed: true })
+    expect(second).toEqual({ agentId: 'agent-isaac', claimed: false })
+    expect(calls).toBe(2)
+    expect(db.updates).toEqual([])
+    expect(
+      await maybeRoundRobinAssignNewConversation(db, {
+        accountId: 'acct',
+        contactId: 'contact-emilio',
+        conversationId: 'conv-emilio',
+      }),
+    ).toBeNull()
   })
 })

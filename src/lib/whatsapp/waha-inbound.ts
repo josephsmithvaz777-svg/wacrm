@@ -519,18 +519,19 @@ export async function processWahaEvent(
     });
   }
   try {
-    const { maybeRoundRobinAssignNewConversation } = await import(
+    const { claimRoundRobinAssignment } = await import(
       '@/lib/assignments/round-robin'
     );
-    assignedNow = await maybeRoundRobinAssignNewConversation(admin(), {
+    const claimed = await claimRoundRobinAssignment(admin(), {
       accountId: config.account_id,
       contactId: contactOutcome.contact.id,
       conversationId: convResult.conversation.id,
       alreadyAssigned: convResult.conversation.assigned_agent_id ?? null,
     });
-    if (assignedNow) {
-      convResult.conversation.assigned_agent_id = assignedNow;
+    if (claimed.agentId) {
+      convResult.conversation.assigned_agent_id = claimed.agentId;
     }
+    assignedNow = claimed.claimed ? claimed.agentId : null;
   } catch (err) {
     console.warn('[waha-inbound] round-robin assign failed:', err);
   }

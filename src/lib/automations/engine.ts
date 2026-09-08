@@ -525,6 +525,33 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
         return 'skipped: contact is a staff phone'
       }
       const conversationId = await resolveConversationId(args)
+      if (cfg.mode === 'round_robin') {
+        const { claimRoundRobinAssignment } = await import(
+          '@/lib/assignments/round-robin'
+        )
+        const claim = await claimRoundRobinAssignment(db, {
+          accountId: args.automation.account_id,
+          contactId: args.contactId,
+          conversationId,
+          alreadyAssigned: null,
+        })
+        if (!claim.claimed) {
+          return claim.agentId
+            ? `already assigned to ${claim.agentId}`
+            : 'no agent resolved'
+        }
+        await runAutomationsForTrigger({
+          accountId: args.automation.account_id,
+          triggerType: 'conversation_assigned',
+          contactId: args.contactId,
+          context: {
+            ...args.context,
+            conversation_id: conversationId,
+            agent_id: claim.agentId ?? undefined,
+          },
+        })
+        return `assigned to ${claim.agentId}`
+      }
       const { data: existing } = await db
         .from('conversations')
         .select('assigned_agent_id')
@@ -544,15 +571,7 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
           return `already assigned to ${existing.assigned_agent_id}`
         }
       }
-      let agentId = cfg.agent_id
-      if (cfg.mode === 'round_robin') {
-        const { pickRoundRobinAgent } = await import(
-          '@/lib/assignments/round-robin'
-        )
-        agentId =
-          (await pickRoundRobinAgent(db, args.automation.account_id)) ??
-          undefined
-      }
+      const agentId = cfg.agent_id
       if (!agentId) return 'no agent resolved'
       const { agentCanReceiveLeads, assignConversationToAgent } = await import(
         '@/lib/assignments/round-robin'

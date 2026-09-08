@@ -216,6 +216,122 @@ export async function resolveHandoffAssignee(
   return pickRoundRobinAgent(db, accountId);
 }
 
+export type RoundRobinClaim = {
+  agentId: string | null;
+  claimed: boolean;
+};
+
+function parseClaimPayload(data: unknown): RoundRobinClaim | null {
+  if (!data || typeof data !== 'object') return null;
+  const row = data as { agent_id?: unknown; claimed?: unknown };
+  const agentId =
+    typeof row.agent_id === 'string' && row.agent_id.length > 0
+      ? row.agent_id
+      : null;
+  return { agentId, claimed: row.claimed === true && Boolean(agentId) };
+}
+
+/**
+ * Assign the next advisor, or keep the one already on the thread.
+ * Prefers the atomic RPC so Cloud API + WAHA + AI handoff cannot
+ * each advance the cursor on the same new lead.
+ */
+export async function claimRoundRobinAssignment(
+  db: Db,
+  opts: {
+    accountId: string;
+    contactId: string;
+    conversationId: string;
+    alreadyAssigned?: string | null;
+  },
+): Promise<RoundRobinClaim> {
+  if (await contactBelongsToAccountStaff(db, opts.accountId, opts.contactId)) {
+    console.info(
+      '[round-robin] skip assign: contact is a staff phone',
+      opts.contactId,
+    );
+    return { agentId: null, claimed: false };
+  }
+
+  if (typeof db.rpc === 'function') {
+    const { data, error } = await db.rpc('claim_round_robin_assignment', {
+      p_account_id: opts.accountId,
+      p_conversation_id: opts.conversationId,
+      p_contact_id: opts.contactId,
+    });
+    if (!error) {
+      const parsed = parseClaimPayload(data);
+      if (parsed) return parsed;
+    } else {
+      console.warn('[round-robin] claim rpc failed, falling back:', error);
+    }
+  }
+
+  return claimRoundRobinAssignmentJs(db, opts);
+}
+
+async function loadConversationAssignee(
+  db: Db,
+  conversationId: string,
+): Promise<string | null | undefined> {
+  const { data, error } = await db
+    .from('conversations')
+    .select('assigned_agent_id')
+    .eq('id', conversationId)
+    .maybeSingle();
+  if (error) {
+    console.warn('[round-robin] reload assignee failed:', error);
+    return undefined;
+  }
+  if (!data) return undefined;
+  const value = data.assigned_agent_id;
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+async function claimRoundRobinAssignmentJs(
+  db: Db,
+  opts: {
+    accountId: string;
+    contactId: string;
+    conversationId: string;
+    alreadyAssigned?: string | null;
+  },
+): Promise<RoundRobinClaim> {
+  const fromDb = await loadConversationAssignee(db, opts.conversationId);
+  const current = fromDb ?? opts.alreadyAssigned ?? null;
+
+  if (current) {
+    const inPool = await userIsInAutoAssignPool(
+      db,
+      opts.accountId,
+      current,
+    );
+    if (inPool) return { agentId: current, claimed: false };
+  }
+
+  const { data: account } = await db
+    .from('accounts')
+    .select('round_robin_enabled')
+    .eq('id', opts.accountId)
+    .maybeSingle();
+
+  if (!account?.round_robin_enabled) {
+    return { agentId: null, claimed: false };
+  }
+
+  const agentId = await pickRoundRobinAgent(db, opts.accountId);
+  if (!agentId) return { agentId: null, claimed: false };
+
+  const assigned = await assignConversationToAgent(db, {
+    accountId: opts.accountId,
+    contactId: opts.contactId,
+    conversationId: opts.conversationId,
+    agentId,
+  });
+  if (!assigned) return { agentId: null, claimed: false };
+  return { agentId, claimed: true };
+}
+
 /**
  * If the account has round_robin_enabled and the conversation is new /
  * unassigned, pick the next agent and assign.
@@ -232,6 +348,10 @@ export async function resolveHandoffAssignee(
  *
  * Never assigns when the contact's phone belongs to a teammate —
  * advisor numbers are inboxes, not leads.
+ *
+ * Returns the newly chosen agent, or null when the thread already
+ * had an advisor (so callers do not fire `conversation_assigned`
+ * again). Concurrent inbound + handoff share one cursor advance.
  */
 export async function maybeRoundRobinAssignNewConversation(
   db: Db,
@@ -242,53 +362,12 @@ export async function maybeRoundRobinAssignNewConversation(
     alreadyAssigned?: string | null;
   },
 ): Promise<string | null> {
-  if (await contactBelongsToAccountStaff(db, opts.accountId, opts.contactId)) {
-    console.info(
-      '[round-robin] skip assign: contact is a staff phone',
-      opts.contactId,
-    );
-    return null;
-  }
-
-  const current = opts.alreadyAssigned ?? null;
-  if (current) {
-    // Owner/admin may reply on the thread, but they are not in the
-    // auto pool when agents exist — reassign so the lead does not
-    // stick to the proprietor.
-    const inPool = await userIsInAutoAssignPool(
-      db,
-      opts.accountId,
-      current,
-    );
-    if (inPool) return null;
-  }
-
-  const { data: account } = await db
-    .from('accounts')
-    .select('round_robin_enabled')
-    .eq('id', opts.accountId)
-    .maybeSingle();
-
-  if (!account?.round_robin_enabled) {
-    if (current) {
+  const result = await claimRoundRobinAssignment(db, opts);
+  if (!result.agentId) {
+    if (opts.alreadyAssigned) {
       await clearConversationAssignment(db, opts);
     }
     return null;
   }
-
-  const agentId = await pickRoundRobinAgent(db, opts.accountId);
-  if (!agentId) {
-    if (current) {
-      await clearConversationAssignment(db, opts);
-    }
-    return null;
-  }
-
-  await assignConversationToAgent(db, {
-    accountId: opts.accountId,
-    contactId: opts.contactId,
-    conversationId: opts.conversationId,
-    agentId,
-  });
-  return agentId;
+  return result.claimed ? result.agentId : null;
 }
