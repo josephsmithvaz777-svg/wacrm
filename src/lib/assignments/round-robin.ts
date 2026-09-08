@@ -166,8 +166,8 @@ async function clearConversationAssignment(
 
 /**
  * True when the account's AI assistant is live and will auto-reply.
- * New inbound threads should stay unassigned in that case so the bot
- * can qualify the lead; round-robin assignment runs later, on handoff.
+ * Round-robin still assigns on inbound; this is a status helper, not
+ * a reason to leave the lead unowned.
  */
 export async function accountHasActiveAiAutoReply(
   db: Db,
@@ -200,8 +200,11 @@ export async function resolveHandoffAssignee(
  * If the account has round_robin_enabled and the conversation is new /
  * unassigned, pick the next agent and assign.
  *
- * Skips assignment when AI auto-reply is on: the bot owns the first
- * stretch of the chat, and the advisor is assigned on handoff.
+ * Runs even while the AI auto-reply bot is qualifying the lead: the
+ * advisor owns the thread in the inbox (so restrict-agent-contacts
+ * does not hide it), and the bot keeps talking until handoff / Take
+ * over. Assignment used to wait until handoff, which left new ads
+ * sitting unassigned on the owner's inbox.
  *
  * Also reassigns when the current assignee is an admin, viewer, or
  * otherwise ineligible. Leaving those threads in place kept sending
@@ -231,13 +234,6 @@ export async function maybeRoundRobinAssignNewConversation(
   if (current) {
     const eligible = await agentCanReceiveLeads(db, opts.accountId, current);
     if (eligible) return null;
-  }
-
-  if (await accountHasActiveAiAutoReply(db, opts.accountId)) {
-    if (current) {
-      await clearConversationAssignment(db, opts);
-    }
-    return null;
   }
 
   const { data: account } = await db

@@ -134,6 +134,7 @@ describe('sweepSilentAiConversations', () => {
       expect.objectContaining({
         conversationId: 'conv-1',
         claimIdle: true,
+        alreadyAssigned: null,
         messageText: 'Quiero un terreno',
       }),
     )
@@ -203,6 +204,21 @@ describe('sweepSilentAiConversations', () => {
     const result = await sweepSilentAiConversations(db() as never, now)
     expect(result).toEqual({ handedOff: 0 })
     expect(h.performAiHandoff).not.toHaveBeenCalled()
+  })
+
+  it('hands off an assigned thread without dropping the advisor', async () => {
+    h.convs[0].assigned_agent_id = 'agent-keep'
+    const now = new Date('2026-01-01T00:10:00.000Z')
+    const result = await sweepSilentAiConversations(db() as never, now)
+    expect(result).toEqual({ handedOff: 1 })
+    expect(h.performAiHandoff).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        conversationId: 'conv-1',
+        alreadyAssigned: 'agent-keep',
+        claimIdle: true,
+      }),
+    )
   })
 
   it('does not resurrect leads whose last message is older than the lookback', async () => {

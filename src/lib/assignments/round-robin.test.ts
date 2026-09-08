@@ -159,4 +159,29 @@ describe('maybeRoundRobinAssignNewConversation', () => {
     expect(db.updates).toContain('accounts')
     expect(db.updates).toContain('conversations')
   })
+
+  it('assigns even while the AI auto-reply bot is qualifying the lead', async () => {
+    const db = dbReturning({
+      contacts: { phone: '51911111111' },
+      profiles: [
+        { user_id: 'agent-1', phone: '51940912791', account_role: 'agent' },
+        { user_id: 'agent-2', phone: '51988824220', account_role: 'agent' },
+      ],
+      accounts: {
+        round_robin_enabled: true,
+        round_robin_last_user_id: 'agent-1',
+      },
+      ai_configs: {
+        is_active: true,
+        auto_reply_enabled: true,
+        api_key: 'enc',
+      },
+    })
+    const id = await maybeRoundRobinAssignNewConversation(db, {
+      accountId: 'acct',
+      contactId: 'contact-lead',
+      conversationId: 'conv-ai',
+    })
+    expect(id).toBe('agent-2')
+  })
 })

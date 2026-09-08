@@ -621,23 +621,21 @@ async function processMessage(
       contact_id: contactRecord.id,
     })
   }
-  if (convResult.created || conversation.assigned_agent_id) {
-    try {
-      const { maybeRoundRobinAssignNewConversation } = await import(
-        '@/lib/assignments/round-robin'
-      )
-      assignedNow = await maybeRoundRobinAssignNewConversation(supabaseAdmin(), {
-        accountId,
-        contactId: contactRecord.id,
-        conversationId: conversation.id,
-        alreadyAssigned: conversation.assigned_agent_id ?? null,
-      })
-      if (assignedNow) {
-        conversation.assigned_agent_id = assignedNow
-      }
-    } catch (err) {
-      console.warn('[webhook] round-robin assign failed:', err)
+  try {
+    const { maybeRoundRobinAssignNewConversation } = await import(
+      '@/lib/assignments/round-robin'
+    )
+    assignedNow = await maybeRoundRobinAssignNewConversation(supabaseAdmin(), {
+      accountId,
+      contactId: contactRecord.id,
+      conversationId: conversation.id,
+      alreadyAssigned: conversation.assigned_agent_id ?? null,
+    })
+    if (assignedNow) {
+      conversation.assigned_agent_id = assignedNow
     }
+  } catch (err) {
+    console.warn('[webhook] round-robin assign failed:', err)
   }
 
   // Reactions short-circuit here — they aren't messages. We never insert

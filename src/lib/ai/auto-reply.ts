@@ -37,8 +37,9 @@ interface DispatchArgs {
  * Eligibility gates (any → silent no-op):
  *   - AI off / auto-reply disabled for the account
  *   - the contact phone belongs to a teammate (not a lead)
- *   - a human agent is assigned (they own the thread)
- *   - auto-reply was disabled for this conversation (prior handoff)
+ *   - auto-reply was disabled for this conversation (prior handoff /
+ *     Take over). Assignment alone does not pause the bot: the lead
+ *     is owned by an advisor while the AI still qualifies.
  *   - the per-conversation reply cap is reached
  *   - there's nothing to reply to
  *
@@ -83,8 +84,7 @@ export async function dispatchInboundToAiReply(
       .eq('id', conversationId)
       .maybeSingle()
     if (convErr || !conv) return
-    if (conv.assigned_agent_id) return // a human owns this thread
-    if (conv.ai_autoreply_disabled) return // handed off / turned off here
+    if (conv.ai_autoreply_disabled) return // handed off / Take over
     // Arm the silence timer before the LLM call. If DeepSeek/OpenAI
     // hangs, throws, or the host kills `after()`, the customer is still
     // handed to an advisor after `silenceHandoffMinutes` instead of

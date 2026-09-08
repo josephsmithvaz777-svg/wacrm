@@ -18,8 +18,8 @@ export interface AiHandoffResult {
  * and when the customer goes silent after a bot reply.
  *
  * `claimIdle` is for the silence sweep: the disable-bot write only
- * lands if the thread is still unassigned and the bot is still on, so
- * a late customer message or a concurrent handoff wins.
+ * lands if the bot is still on, so a late Take over or a concurrent
+ * handoff wins. The lead may already be assigned — keep that advisor.
  */
 export async function performAiHandoff(
   db: SupabaseClient,
@@ -44,7 +44,6 @@ export async function performAiHandoff(
       .update(baseUpdate)
       .eq('id', args.conversationId)
       .eq('ai_autoreply_disabled', false)
-      .is('assigned_agent_id', null)
       .select('id')
       .maybeSingle()
     if (error) {

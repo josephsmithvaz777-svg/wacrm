@@ -17,9 +17,9 @@ type Params = { params: Promise<{ conversationId: string }> }
  *                     fires the `on_conversation_assigned` trigger.
  *   - paused: false → hand the thread back to the bot: clear the pause,
  *                     reset the per-conversation reply count so it gets
- *                     fresh slots, and clear the handoff note. If the
- *                     caller currently owns the thread, unassign it too so
- *                     the bot isn't blocked by the "human owns this" gate.
+ *                     fresh slots, and clear the handoff note. Keep the
+ *                     current assignee so the lead stays in their inbox
+ *                     while the bot talks.
  *
  * Writes go through the RLS-scoped SSR client, so a conversation outside
  * the caller's account simply isn't found (404).
@@ -67,18 +67,8 @@ export async function POST(request: Request, { params }: Params) {
     if (paused) {
       if (assignToMe) update.assigned_agent_id = userId
     } else {
-      // Resuming hands the thread *back to the bot*. Clear the pause and
-      // the handoff note, and — crucially — release ANY assignment, not
-      // just the caller's own: the auto-reply eligibility gate stands
-      // down whenever a human is assigned, so leaving a stale assignee
-      // (e.g. the agent a prior handoff routed to) would silently keep
-      // the bot muted and make "Resume AI" a no-op. This is the explicit
-      // choice to let the bot own the thread again.
-      update.assigned_agent_id = null
-      // Give the bot a fresh reply budget on this thread. This is a
-      // deliberate, manual, rate-limited action (not automatable), so it
-      // can't be used to bypass the per-conversation cap at scale — it's
-      // a human choosing to re-engage the assistant.
+      // Keep whoever already owns the lead. The bot no longer stands
+      // down just because a human is assigned.
       update.ai_reply_count = 0
       update.ai_handoff_summary = null
     }

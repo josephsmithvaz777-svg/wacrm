@@ -232,15 +232,14 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     expect(h.sendMessageToConversation).not.toHaveBeenCalled()
   })
 
-  it('skips when a human agent is assigned', async () => {
+  it('still replies when an advisor is assigned and the bot is not paused', async () => {
     h.state.conv = {
       assigned_agent_id: 'agent-9',
       ai_autoreply_disabled: false,
       ai_reply_count: 0,
     }
     await dispatchInboundToAiReply(ARGS)
-    expect(h.sendMessageToConversation).not.toHaveBeenCalled()
-    expect(h.scheduleSilenceHandoffCheck).not.toHaveBeenCalled()
+    expect(h.sendMessageToConversation).toHaveBeenCalled()
   })
 
   it('skips when auto-reply was disabled on this conversation', async () => {

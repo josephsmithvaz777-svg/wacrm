@@ -22,6 +22,7 @@ interface SilentCandidate {
   id: string
   account_id: string
   contact_id: string
+  assigned_agent_id?: string | null
   ai_reply_count: number
   last_message_at: string | null
 }
@@ -84,9 +85,10 @@ export async function sweepSilentAiConversations(
 
     const { data: convs, error: convErr } = await db
       .from('conversations')
-      .select('id, account_id, contact_id, ai_reply_count, last_message_at')
+      .select(
+        'id, account_id, contact_id, assigned_agent_id, ai_reply_count, last_message_at',
+      )
       .eq('account_id', account.account_id)
-      .is('assigned_agent_id', null)
       .eq('ai_autoreply_disabled', false)
       .lte('last_message_at', cutoff)
       .gte('last_message_at', floor)
@@ -166,7 +168,9 @@ async function handOffConversationIfSilent(
     const db = supabaseAdmin()
     const { data: conv, error } = await db
       .from('conversations')
-      .select('id, account_id, contact_id, ai_reply_count, last_message_at')
+      .select(
+        'id, account_id, contact_id, assigned_agent_id, ai_reply_count, last_message_at',
+      )
       .eq('id', args.conversationId)
       .maybeSingle()
     if (error || !conv) return
@@ -238,7 +242,7 @@ async function maybeHandOffSilentThread(
     accountId: account.account_id,
     conversationId: conv.id,
     contactId: conv.contact_id,
-    alreadyAssigned: null,
+    alreadyAssigned: conv.assigned_agent_id ?? null,
     summary,
     messageText,
     claimIdle: true,

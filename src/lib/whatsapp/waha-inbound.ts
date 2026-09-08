@@ -518,23 +518,21 @@ export async function processWahaEvent(
       contact_id: contactOutcome.contact.id,
     });
   }
-  if (convResult.created || convResult.conversation.assigned_agent_id) {
-    try {
-      const { maybeRoundRobinAssignNewConversation } = await import(
-        '@/lib/assignments/round-robin'
-      );
-      assignedNow = await maybeRoundRobinAssignNewConversation(admin(), {
-        accountId: config.account_id,
-        contactId: contactOutcome.contact.id,
-        conversationId: convResult.conversation.id,
-        alreadyAssigned: convResult.conversation.assigned_agent_id ?? null,
-      });
-      if (assignedNow) {
-        convResult.conversation.assigned_agent_id = assignedNow;
-      }
-    } catch (err) {
-      console.warn('[waha-inbound] round-robin assign failed:', err);
+  try {
+    const { maybeRoundRobinAssignNewConversation } = await import(
+      '@/lib/assignments/round-robin'
+    );
+    assignedNow = await maybeRoundRobinAssignNewConversation(admin(), {
+      accountId: config.account_id,
+      contactId: contactOutcome.contact.id,
+      conversationId: convResult.conversation.id,
+      alreadyAssigned: convResult.conversation.assigned_agent_id ?? null,
+    });
+    if (assignedNow) {
+      convResult.conversation.assigned_agent_id = assignedNow;
     }
+  } catch (err) {
+    console.warn('[waha-inbound] round-robin assign failed:', err);
   }
 
   const messageId = extractWahaMessageId(payload) || `waha-${Date.now()}`;

@@ -48,8 +48,8 @@ interface AiThreadBannerProps {
   disabled: boolean;
   /** `conversations.ai_handoff_summary` — note the bot left on handoff. */
   handoffSummary?: string | null;
-  /** Current assignee; when a human owns the thread the bot won't run,
-   *  so the "AI active" banner is suppressed. */
+  /** Current assignee. The bot can still run while assigned; Take
+   *  over / handoff pause it via `disabled`. */
   assignedAgentId?: string | null;
   /** The acting agent — "Take over" assigns the thread to them. */
   currentUserId?: string | null;
@@ -67,14 +67,12 @@ interface AiThreadBannerProps {
  * conversation:
  *   - bot active here → "AI is replying automatically" + [Take over]
  *   - bot paused here → the handoff note (if any) + [Resume AI]
- * Renders nothing when the account has no auto-reply configured, or when
- * the bot is active but a human already owns the thread (nothing to do).
+ * Renders nothing when the account has no auto-reply configured.
  */
 export function AiThreadBanner({
   conversationId,
   disabled,
   handoffSummary,
-  assignedAgentId,
   currentUserId,
   onChange,
 }: AiThreadBannerProps) {
@@ -115,14 +113,12 @@ export function AiThreadBanner({
         setPaused(paused);
         onChange?.({
           ai_autoreply_disabled: paused,
-          // Take over assigns to the acting agent; resume releases only
-          // the caller's own assignment. The realtime UPDATE reconciles
-          // the exact value either way.
-          ...(paused
-            ? currentUserId
-              ? { assigned_agent_id: currentUserId }
-              : {}
-            : { assigned_agent_id: null }),
+          // Take over assigns to the acting agent. Resume keeps the
+          // current assignee so the lead does not vanish from their
+          // restricted inbox while the bot talks.
+          ...(paused && currentUserId
+            ? { assigned_agent_id: currentUserId }
+            : {}),
         });
         toast.success(paused ? t("tookOver") : t("resumed"));
       } catch {
@@ -156,10 +152,8 @@ export function AiThreadBanner({
     );
   }
 
-  // Active, but a human already owns it → the bot won't fire; no banner.
-  if (assignedAgentId) return null;
-
-  // Active on this thread.
+  // Active on this thread (even if an advisor already owns it — the
+  // bot keeps qualifying until Take over / handoff).
   return (
     <Banner tone="primary">
       <div className="flex min-w-0 flex-1 items-center gap-1.5">
