@@ -140,10 +140,14 @@ export function MembersTab() {
   const [restrictAgents, setRestrictAgents] = useState(
     Boolean(account?.restrict_agent_contacts),
   );
+  const [restrictTasks, setRestrictTasks] = useState(
+    account?.restrict_agent_tasks !== false,
+  );
   const [roundRobin, setRoundRobin] = useState(
     Boolean(account?.round_robin_enabled),
   );
   const [savingRestrict, setSavingRestrict] = useState(false);
+  const [savingRestrictTasks, setSavingRestrictTasks] = useState(false);
   const [savingRoundRobin, setSavingRoundRobin] = useState(false);
 
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -154,8 +158,13 @@ export function MembersTab() {
 
   useEffect(() => {
     setRestrictAgents(Boolean(account?.restrict_agent_contacts));
+    setRestrictTasks(account?.restrict_agent_tasks !== false);
     setRoundRobin(Boolean(account?.round_robin_enabled));
-  }, [account?.restrict_agent_contacts, account?.round_robin_enabled]);
+  }, [
+    account?.restrict_agent_contacts,
+    account?.restrict_agent_tasks,
+    account?.round_robin_enabled,
+  ]);
 
   async function handleToggleRestrict(next: boolean) {
     if (!accountId || !canManageMembers) return;
@@ -176,6 +185,27 @@ export function MembersTab() {
     }
     await refreshProfile();
     toast.success(next ? t('restrictEnabled') : t('restrictDisabled'));
+  }
+
+  async function handleToggleRestrictTasks(next: boolean) {
+    if (!accountId || !canManageMembers) return;
+    setSavingRestrictTasks(true);
+    setRestrictTasks(next);
+    const { error } = await supabase
+      .from('accounts')
+      .update({
+        restrict_agent_tasks: next,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', accountId);
+    setSavingRestrictTasks(false);
+    if (error) {
+      setRestrictTasks(!next);
+      toast.error(t('restrictTasksSaveFailed'));
+      return;
+    }
+    await refreshProfile();
+    toast.success(next ? t('restrictTasksEnabled') : t('restrictTasksDisabled'));
   }
 
   async function handleToggleRoundRobin(next: boolean) {
@@ -374,6 +404,31 @@ export function MembersTab() {
                 onChange={(e) => void handleToggleRestrict(e.target.checked)}
               />
               {savingRestrict ? t('restrictSaving') : t('restrictToggle')}
+            </label>
+          </RequireRole>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm font-medium text-foreground">
+              {t('restrictTasksTitle')}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {t('restrictTasksDesc')}
+            </p>
+          </div>
+          <RequireRole min="admin">
+            <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                className="size-4 rounded border-border"
+                checked={restrictTasks}
+                disabled={savingRestrictTasks || !canManageMembers}
+                onChange={(e) => void handleToggleRestrictTasks(e.target.checked)}
+              />
+              {savingRestrictTasks ? t('restrictTasksSaving') : t('restrictTasksToggle')}
             </label>
           </RequireRole>
         </CardContent>

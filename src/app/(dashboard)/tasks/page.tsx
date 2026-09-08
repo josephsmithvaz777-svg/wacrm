@@ -13,6 +13,7 @@ import { useCan } from "@/hooks/use-can";
 import { formatAlertDateTime } from "@/lib/automations/template-vars";
 import { createClient } from "@/lib/supabase/client";
 import { taskTone } from "@/lib/tasks/calendar";
+import { shouldLockTasksToSelf } from "@/lib/tasks/scope";
 import { cn } from "@/lib/utils";
 import type { LeadTask } from "@/types";
 
@@ -21,12 +22,18 @@ type TasksView = "list" | "day" | "week" | "month";
 export default function TasksPage() {
   const t = useTranslations("Tasks.page");
   const canEdit = useCan("send-messages");
-  const { account } = useAuth();
+  const { account, accountRole, isAgent, profileLoading, user } = useAuth();
+  const lockToSelf = shouldLockTasksToSelf(
+    accountRole,
+    account?.restrict_agent_tasks !== false,
+  );
   const [tasks, setTasks] = useState<LeadTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDone, setShowDone] = useState(false);
+  const [mineOnly, setMineOnly] = useState<boolean | null>(null);
   const [view, setView] = useState<TasksView>("week");
   const [anchor, setAnchor] = useState(() => new Date());
+  const scopedToSelf = lockToSelf || (mineOnly ?? isAgent);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -37,14 +44,21 @@ export default function TasksPage() {
       .order("due_at", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: false });
     if (!showDone) query = query.is("completed_at", null);
+    const userId = user?.id;
+    if (scopedToSelf && userId) {
+      query = query.or(
+        `assigned_to.eq.${userId},and(assigned_to.is.null,created_by.eq.${userId})`,
+      );
+    }
     const { data } = await query;
     setTasks((data as LeadTask[]) ?? []);
     setLoading(false);
-  }, [showDone]);
+  }, [scopedToSelf, showDone, user?.id]);
 
   useEffect(() => {
+    if (profileLoading) return;
     void load();
-  }, [load]);
+  }, [load, profileLoading]);
 
   const completeTask = useCallback(
     async (task: LeadTask, result: string) => {
@@ -111,7 +125,9 @@ export default function TasksPage() {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 py-4">
         <div>
           <h1 className="text-lg font-semibold text-foreground">{t("title")}</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">{t("subtitle")}</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {scopedToSelf ? t("subtitleMine") : t("subtitle")}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-lg border border-border p-0.5">
@@ -132,6 +148,18 @@ export default function TasksPage() {
             ))}
           </div>
           <Button
+            variant={scopedToSelf ? "secondary" : "outline"}
+            size="sm"
+            disabled={lockToSelf}
+            title={lockToSelf ? t("onlyMineLocked") : undefined}
+            onClick={() => {
+              if (lockToSelf) return;
+              setMineOnly(!scopedToSelf);
+            }}
+          >
+            {t("onlyMine")}
+          </Button>
+          <Button
             variant={showDone ? "secondary" : "outline"}
             size="sm"
             onClick={() => setShowDone((v) => !v)}
@@ -149,10 +177,10 @@ export default function TasksPage() {
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <CalendarDays className="h-8 w-8 text-muted-foreground" />
               <p className="mt-3 text-sm font-medium text-foreground">
-                {t("emptyCalendarTitle")}
+                {scopedToSelf ? t("emptyCalendarMineTitle") : t("emptyCalendarTitle")}
               </p>
               <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-                {t("emptyCalendarBody")}
+                {scopedToSelf ? t("emptyCalendarMineBody") : t("emptyCalendarBody")}
               </p>
             </div>
           ) : (
@@ -171,10 +199,10 @@ export default function TasksPage() {
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <ListTodo className="h-8 w-8 text-muted-foreground" />
             <p className="mt-3 text-sm font-medium text-foreground">
-              {t("emptyTitle")}
+              {scopedToSelf ? t("emptyMineTitle") : t("emptyTitle")}
             </p>
             <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-              {t("emptyBody")}
+              {scopedToSelf ? t("emptyMineBody") : t("emptyBody")}
             </p>
           </div>
         ) : (
