@@ -183,6 +183,22 @@ export type NotificationSoundOpts = {
   url?: string | null;
 };
 
+/** A new lead fires both an assignment ping and a message ping. One alert. */
+export const ALERT_DEBOUNCE_MS = 2200;
+
+let lastAlertAt = 0;
+
+export function claimAlertSlot(now = Date.now()): boolean {
+  if (now - lastAlertAt < ALERT_DEBOUNCE_MS) return false;
+  lastAlertAt = now;
+  return true;
+}
+
+/** Test helper: do not use in UI. */
+export function resetAlertSlot(): void {
+  lastAlertAt = 0;
+}
+
 /** Assignment / in-app notification chime. */
 export function playNotificationSound(opts: NotificationSoundOpts = {}): void {
   const source = notificationSoundSource({
@@ -190,6 +206,7 @@ export function playNotificationSound(opts: NotificationSoundOpts = {}): void {
     url: opts.url,
   });
   if (source === "silent") return;
+  if (!claimAlertSlot()) return;
   void (async () => {
     if (source === "custom" && opts.url) {
       const played = await playCustomSoundUrl(opts.url.trim());
@@ -201,5 +218,6 @@ export function playNotificationSound(opts: NotificationSoundOpts = {}): void {
 
 /** Same loud phone alert for inbound customer messages / new leads. */
 export function playMessageSound(): void {
+  if (!claimAlertSlot()) return;
   void playPhoneAlert();
 }

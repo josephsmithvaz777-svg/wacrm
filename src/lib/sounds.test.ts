@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ALERT_DEBOUNCE_MS,
   CUSTOM_SOUND_TIMEOUT_MS,
   NOTIFICATION_SOUND_MAX_BYTES,
+  claimAlertSlot,
   isNotificationSoundFile,
   notificationSoundSource,
+  resetAlertSlot,
 } from "./sounds";
 
 describe("notificationSoundSource", () => {
@@ -31,6 +34,15 @@ describe("notificationSoundSource", () => {
 
   it("gives up on a custom file in time to fall back", () => {
     expect(CUSTOM_SOUND_TIMEOUT_MS).toBeLessThanOrEqual(3000);
+  });
+});
+
+describe("claimAlertSlot", () => {
+  it("lets the first alert through and drops a second one in the same window", () => {
+    resetAlertSlot();
+    expect(claimAlertSlot(1_000)).toBe(true);
+    expect(claimAlertSlot(1_000 + ALERT_DEBOUNCE_MS - 1)).toBe(false);
+    expect(claimAlertSlot(1_000 + ALERT_DEBOUNCE_MS)).toBe(true);
   });
 });
 

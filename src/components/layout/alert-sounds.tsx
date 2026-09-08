@@ -5,13 +5,14 @@ import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useSoundPrefs } from "@/hooks/use-sound-prefs";
 import {
+  ALERT_DEBOUNCE_MS,
   playMessageSound,
   playNotificationSound,
   unlockAudio,
 } from "@/lib/sounds";
 import type { Message, Notification } from "@/types";
 
-const MESSAGE_THROTTLE_MS = 1600;
+const MESSAGE_THROTTLE_MS = ALERT_DEBOUNCE_MS;
 
 /**
  * Dashboard-wide listeners: unlock audio on first gesture, play chimes
