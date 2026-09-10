@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useTotalUnread } from "@/hooks/use-total-unread";
 import {
   Bot,
+  Calculator,
   Crown,
   GitBranch,
   LayoutDashboard,
@@ -97,6 +98,7 @@ const navItems: NavItem[] = [
   { href: "/contacts", labelKey: "contacts", icon: Users },
   { href: "/tasks", labelKey: "tasks", icon: ListTodo },
   { href: "/pipelines", labelKey: "pipelines", icon: GitBranch },
+  { href: "/cotizador", labelKey: "cotizador", icon: Calculator },
   { href: "/broadcasts", labelKey: "broadcasts", icon: Radio },
   { href: "/automations", labelKey: "automations", icon: Zap },
   { href: "/logs", labelKey: "logs", icon: ScrollText, adminOnly: true },

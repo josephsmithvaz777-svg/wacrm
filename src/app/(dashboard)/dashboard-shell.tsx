@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { SoundPrefsProvider } from "@/hooks/use-sound-prefs";
 import { Sidebar } from "@/components/layout/sidebar";
@@ -13,10 +13,13 @@ import {
   clearStaleReloadFlag,
   reloadOnceIfStale,
 } from "@/lib/navigation/stale-client";
+import { cn } from "@/lib/utils";
 
 function DashboardShellInner({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const fullBleed = pathname.startsWith("/cotizador");
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
@@ -65,7 +68,16 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
       <Sidebar open={sidebarOpen} onClose={closeSidebar} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header onOpenSidebar={() => setSidebarOpen(true)} />
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
+        <main
+          className={cn(
+            "flex-1",
+            fullBleed
+              ? "overflow-hidden p-0"
+              : "overflow-y-auto p-4 sm:p-6",
+          )}
+        >
+          {children}
+        </main>
       </div>
     </div>
   );

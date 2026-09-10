@@ -115,6 +115,7 @@
     "contacts": "Contactos",
     "tasks": "Tareas",
     "pipelines": "Embudos",
+    "cotizador": "Cotizador",
     "broadcasts": "Difusiones",
     "automations": "Automatizaciones",
     "flows": "Flujos",
@@ -143,6 +144,7 @@
     "contacts": "Contactos",
     "tasks": "Tareas",
     "pipelines": "Embudos",
+    "cotizador": "Cotizador",
     "broadcasts": "Difusiones",
     "automations": "Automatizaciones",
     "logs": "Logs",
@@ -155,6 +157,11 @@
     "menuSettings": "Configuración",
     "menuLanguage": "Idioma",
     "menuSignOut": "Cerrar sesión"
+  },
+  "Cotizador": {
+    "openExternal": "Abrir en pestaña nueva",
+    "loading": "Cargando cotizador…",
+    "iframeTitle": "Cotizador Altaterra"
   },
   "NotificationsPage": {
     "title": "Notificaciones",

@@ -115,6 +115,7 @@
     "contacts": "연락처",
     "tasks": "작업",
     "pipelines": "파이프라인",
+    "cotizador": "견적",
     "broadcasts": "브로드캐스트",
     "automations": "자동화",
     "flows": "플로우",
@@ -143,6 +144,7 @@
     "contacts": "연락처",
     "tasks": "작업",
     "pipelines": "파이프라인",
+    "cotizador": "견적",
     "broadcasts": "브로드캐스트",
     "automations": "자동화",
     "logs": "로그",
@@ -155,6 +157,11 @@
     "menuSettings": "설정",
     "menuLanguage": "언어",
     "menuSignOut": "로그아웃"
+  },
+  "Cotizador": {
+    "openExternal": "새 탭에서 열기",
+    "loading": "견적 도구 불러오는 중…",
+    "iframeTitle": "Altaterra 견적 도구"
   },
   "NotificationsPage": {
     "title": "알림",

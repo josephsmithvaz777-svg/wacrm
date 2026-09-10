@@ -3,6 +3,18 @@ import createNextIntlPlugin from "next-intl/plugin";
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
+const DEFAULT_COTIZADOR_ORIGIN = "https://cotizador-altaterra.netlify.app";
+
+function cotizadorFrameOrigin(): string {
+  const raw =
+    process.env.NEXT_PUBLIC_COTIZADOR_URL?.trim() || DEFAULT_COTIZADOR_ORIGIN;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return DEFAULT_COTIZADOR_ORIGIN;
+  }
+}
+
 /**
  * Baseline security headers applied to every response.
  *
@@ -56,6 +68,8 @@ const SECURITY_HEADERS = [
       // Supabase REST + realtime (WSS). All Meta API calls happen
       // server-side, so graph.facebook.com does not belong here.
       "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+      // Embedded Altaterra quote tool (iframe on /cotizador).
+      `frame-src ${cotizadorFrameOrigin()}`,
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

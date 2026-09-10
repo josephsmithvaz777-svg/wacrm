@@ -75,6 +75,7 @@ export async function middleware(request: NextRequest) {
     '/inbox',
     '/contacts',
     '/pipelines',
+    '/cotizador',
     '/broadcasts',
     '/automations',
     '/settings',

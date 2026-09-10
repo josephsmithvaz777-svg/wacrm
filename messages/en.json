@@ -115,6 +115,7 @@
     "contacts": "Contacts",
     "tasks": "Tasks",
     "pipelines": "Pipelines",
+    "cotizador": "Quotes",
     "broadcasts": "Broadcasts",
     "automations": "Automations",
     "flows": "Flows",
@@ -143,6 +144,7 @@
     "contacts": "Contacts",
     "tasks": "Tasks",
     "pipelines": "Pipelines",
+    "cotizador": "Quotes",
     "broadcasts": "Broadcasts",
     "automations": "Automations",
     "logs": "Logs",
@@ -155,6 +157,11 @@
     "menuSettings": "Settings",
     "menuLanguage": "Language",
     "menuSignOut": "Sign out"
+  },
+  "Cotizador": {
+    "openExternal": "Open in new tab",
+    "loading": "Loading quote tool…",
+    "iframeTitle": "Altaterra quote tool"
   },
   "NotificationsPage": {
     "title": "Notifications",
