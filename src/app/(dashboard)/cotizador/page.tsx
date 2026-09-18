@@ -36,7 +36,7 @@ export default function CotizadorPage() {
           title={t("iframeTitle")}
           className="h-full w-full border-0 bg-background"
           referrerPolicy="strict-origin-when-cross-origin"
-          allow="clipboard-write"
+          allow="clipboard-write; downloads"
           onLoad={() => setLoaded(true)}
         />
       </div>
