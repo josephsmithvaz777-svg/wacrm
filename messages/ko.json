@@ -811,6 +811,18 @@
         "weekly": "매주",
         "yearly": "매년"
       },
+      "weekdayLabel": "요일",
+      "weeklyHint": "매주 {day} {time}에 반복됩니다.",
+      "weeklyShort": "매주 {day}",
+      "weekday": {
+        "0": "일",
+        "1": "월",
+        "2": "화",
+        "3": "수",
+        "4": "목",
+        "5": "금",
+        "6": "토"
+      },
       "notesPlaceholder": "메모(선택)…",
       "members": "CRM에 있는 직원",
       "membersHint": "앱 알림, WhatsApp(번호가 있으면), 이메일을 받습니다.",

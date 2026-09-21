@@ -17,7 +17,7 @@ import { isUsableStaffPhone, staffPhoneDigits } from "@/lib/automations/staff-no
 import { AUTOMATION_GREETING_TZ, formatAlertDateTime } from "@/lib/automations/template-vars";
 import { calendarDateInZone, combineLocalDateAndTime } from "@/lib/datetime/zoned";
 import { createClient } from "@/lib/supabase/client";
-import { type StaffRecurrence } from "@/lib/tasks/staff-reminder";
+import { type StaffRecurrence, WEEKDAYS, nextYmdForWeekday, weekdayFromYmd, type Weekday } from "@/lib/tasks/staff-reminder";
 import { cn } from "@/lib/utils";
 import type { StaffReminder, StaffReminderRecipient } from "@/types";
 
@@ -102,6 +102,13 @@ export function StaffRemindersPanel({ canEdit }: { canEdit: boolean }) {
     setRecurrence(preset.recurrence);
     setTitle(id === "cleaning" ? t("presetCleaningTitle") : t("presetBirthdayTitle"));
   }
+
+  function selectWeekday(day: Weekday) {
+    setDueDate(nextYmdForWeekday(day, dueDate));
+    if (recurrence !== "weekly") setRecurrence("weekly");
+  }
+
+  const selectedWeekday = weekdayFromYmd(dueDate);
 
   function toggleMember(id: string) {
     setMemberIds((prev) =>
@@ -316,6 +323,38 @@ export function StaffRemindersPanel({ canEdit }: { canEdit: boolean }) {
                   </button>
                 ))}
               </div>
+              {recurrence === "weekly" && (
+                <div className="mt-2">
+                  <p className="mb-1 text-[11px] text-muted-foreground">
+                    {t("weekdayLabel")}
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {WEEKDAYS.map((day) => (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => selectWeekday(day)}
+                        className={cn(
+                          "rounded-md px-2 py-1 text-[11px] font-medium",
+                          selectedWeekday === day
+                            ? "bg-primary text-primary-foreground"
+                            : "border border-border text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {t(`weekday.${day}`)}
+                      </button>
+                    ))}
+                  </div>
+                  {selectedWeekday != null && (
+                    <p className="mt-1.5 text-[11px] text-muted-foreground">
+                      {t("weeklyHint", {
+                        day: t(`weekday.${selectedWeekday}`),
+                        time: dueTime || "09:00",
+                      })}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -459,6 +498,13 @@ function StaffReminderRow({
 }) {
   const due = formatAlertDateTime(new Date(item.due_at));
   const people = (item.recipients ?? []).map(recipientLabel).filter(Boolean);
+  const weekday = weekdayFromYmd(
+    calendarDateInZone(new Date(item.due_at), AUTOMATION_GREETING_TZ),
+  );
+  const recurrenceLabel =
+    item.recurrence === "weekly" && weekday != null
+      ? t("weeklyShort", { day: t(`weekday.${weekday}`) })
+      : t(`recurrence.${item.recurrence}`);
 
   return (
     <li className="rounded-xl border border-border bg-card px-4 py-3">
@@ -469,7 +515,7 @@ function StaffReminderRow({
             {item.title}
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            {due} · {t(`recurrence.${item.recurrence}`)}
+            {due} · {recurrenceLabel}
           </p>
           {people.length > 0 && (
             <p className="mt-1 text-xs text-muted-foreground">{people.join(" · ")}</p>

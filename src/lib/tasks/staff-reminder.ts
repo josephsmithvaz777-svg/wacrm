@@ -1,5 +1,10 @@
 export type StaffRecurrence = "once" | "weekly" | "yearly";
 
+/** JS `Date#getDay()`: 0 = Sunday … 6 = Saturday. */
+export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+export const WEEKDAYS: readonly Weekday[] = [0, 1, 2, 3, 4, 5, 6];
+
 export const STAFF_RECURRENCES: readonly StaffRecurrence[] = [
   "once",
   "weekly",
@@ -11,6 +16,52 @@ export function isStaffRecurrence(value: unknown): value is StaffRecurrence {
     typeof value === "string" &&
     (STAFF_RECURRENCES as readonly string[]).includes(value)
   );
+}
+
+/** Weekday of a calendar `YYYY-MM-DD` (local civil date). */
+export function weekdayFromYmd(ymd: string): Weekday | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day, 12, 0, 0, 0);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.getDay() as Weekday;
+}
+
+/**
+ * Next (or same) calendar day for `weekday`, starting from `fromYmd`
+ * or today. Keeps weekly cleaning on Tuesday/Saturday without guessing.
+ */
+export function nextYmdForWeekday(
+  weekday: Weekday,
+  fromYmd?: string,
+): string {
+  const base = (() => {
+    if (fromYmd) {
+      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fromYmd.trim());
+      if (match) {
+        return new Date(
+          Number(match[1]),
+          Number(match[2]) - 1,
+          Number(match[3]),
+          12,
+          0,
+          0,
+          0,
+        );
+      }
+    }
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
+  })();
+  const diff = (weekday - base.getDay() + 7) % 7;
+  base.setDate(base.getDate() + diff);
+  const y = base.getFullYear();
+  const m = String(base.getMonth() + 1).padStart(2, "0");
+  const d = String(base.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 /**

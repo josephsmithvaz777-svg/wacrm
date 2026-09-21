@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildStaffReminderCopy,
   nextStaffReminderDue,
+  nextYmdForWeekday,
+  weekdayFromYmd,
 } from "./staff-reminder";
 
 describe("nextStaffReminderDue", () => {
@@ -55,5 +57,21 @@ describe("buildStaffReminderCopy", () => {
     expect(copy.whatsapp).toContain("Día de limpieza");
     expect(copy.whatsapp).not.toMatch(/Lead/i);
     expect(copy.title).toBe("Recordatorio del equipo");
+  });
+});
+
+describe("weekday helpers", () => {
+  it("reads weekday from YYYY-MM-DD", () => {
+    // 2026-09-22 is a Tuesday
+    expect(weekdayFromYmd("2026-09-22")).toBe(2);
+  });
+
+  it("keeps today when it already matches", () => {
+    expect(nextYmdForWeekday(2, "2026-09-22")).toBe("2026-09-22");
+  });
+
+  it("advances to the next Saturday", () => {
+    // 2026-09-21 is Monday → next Saturday is 2026-09-26
+    expect(nextYmdForWeekday(6, "2026-09-21")).toBe("2026-09-26");
   });
 });

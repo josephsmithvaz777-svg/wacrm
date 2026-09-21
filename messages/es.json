@@ -833,6 +833,18 @@
         "weekly": "Cada semana",
         "yearly": "Cada año"
       },
+      "weekdayLabel": "Día de la semana",
+      "weeklyHint": "Se repetirá cada {day} a las {time}.",
+      "weeklyShort": "Cada {day}",
+      "weekday": {
+        "0": "Dom",
+        "1": "Lun",
+        "2": "Mar",
+        "3": "Mié",
+        "4": "Jue",
+        "5": "Vie",
+        "6": "Sáb"
+      },
       "notesPlaceholder": "Notas (opcional)…",
       "members": "Personal en el CRM",
       "membersHint": "Reciben aviso en la app, WhatsApp (si tienen número) y correo.",
