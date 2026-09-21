@@ -6,7 +6,6 @@ import {
   canEditSettings,
   canExportContacts,
   canManageMembers,
-  canManageStaffReminders,
   canReceiveLeads,
   canSendMessages,
   canTransferOwnership,
@@ -108,14 +107,6 @@ describe("capability predicates", () => {
     expect(canExportContacts("admin")).toBe(true);
     expect(canExportContacts("agent")).toBe(false);
     expect(canExportContacts("viewer")).toBe(false);
-  });
-
-  it("canManageStaffReminders: admin+ or designated agent", () => {
-    expect(canManageStaffReminders("owner")).toBe(true);
-    expect(canManageStaffReminders("admin")).toBe(true);
-    expect(canManageStaffReminders("agent")).toBe(false);
-    expect(canManageStaffReminders("agent", true)).toBe(true);
-    expect(canManageStaffReminders("viewer", true)).toBe(false);
   });
 
   it("canSendMessages: agent+ only", () => {

@@ -6,7 +6,6 @@ import {
   canEditSettings,
   canExportContacts,
   canManageMembers,
-  canManageStaffReminders,
   canSendMessages,
   canTransferOwnership,
   canViewOnly,
@@ -23,7 +22,6 @@ export type CanAction =
   | "edit-settings"
   | "export-contacts"
   | "send-messages"
-  | "manage-staff-reminders"
   | "view-only"
   | "delete-account"
   | "transfer-ownership";
@@ -42,7 +40,7 @@ export type CanAction =
  *   <Button disabled={!canEdit} title={canEdit ? "Save" : "Read-only"} />
  */
 export function useCan(action: CanAction): boolean {
-  const { profileLoading, accountRole, profile } = useAuth();
+  const { profileLoading, accountRole } = useAuth();
   if (profileLoading || !accountRole) return false;
 
   switch (action) {
@@ -54,11 +52,6 @@ export function useCan(action: CanAction): boolean {
       return canExportContacts(accountRole);
     case "send-messages":
       return canSendMessages(accountRole);
-    case "manage-staff-reminders":
-      return canManageStaffReminders(
-        accountRole,
-        Boolean(profile?.can_manage_staff_reminders),
-      );
     case "view-only":
       return canViewOnly(accountRole);
     case "delete-account":

@@ -90,18 +90,6 @@ export function canExportContacts(role: AccountRole): boolean {
 }
 
 /**
- * Team reminders (cleaning day, birthdays). Owner/admin always;
- * an agent only when the admin set `can_manage_staff_reminders`.
- */
-export function canManageStaffReminders(
-  role: AccountRole,
-  designated = false,
-): boolean {
-  if (hasMinRole(role, "admin")) return true;
-  return role === "agent" && designated;
-}
-
-/**
  * Owner / admin / agent: write operational data — send messages,
  * create contacts, move deals, run broadcasts, edit automations.
  * Viewers are read-only.

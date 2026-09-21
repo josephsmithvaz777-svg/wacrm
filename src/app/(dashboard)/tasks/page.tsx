@@ -25,7 +25,6 @@ type TasksView = "list" | "day" | "week" | "month";
 export default function TasksPage() {
   const t = useTranslations("Tasks.page");
   const canEdit = useCan("send-messages");
-  const canEditStaff = useCan("manage-staff-reminders");
   const { account, accountRole, canManageMembers, isAgent, profileLoading, user } =
     useAuth();
   const members = useAssignableMembers();
@@ -313,7 +312,7 @@ export default function TasksPage() {
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-4">
         {board === "staff" ? (
-          <StaffRemindersPanel canEdit={canEditStaff} />
+          <StaffRemindersPanel canEdit={canEdit} />
         ) : loading ? (
           <p className="text-sm text-muted-foreground">{t("loading")}</p>
         ) : view !== "list" ? (

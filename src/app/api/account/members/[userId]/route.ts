@@ -58,30 +58,13 @@ export async function PATCH(
     const { userId } = await params;
 
     const body = (await request.json().catch(() => null)) as
-      | { role?: unknown; can_manage_staff_reminders?: unknown }
+      | { role?: unknown }
       | null;
-
-    if (
-      body &&
-      typeof body.can_manage_staff_reminders === "boolean" &&
-      body.role === undefined
-    ) {
-      const { error } = await ctx.supabase.rpc("set_member_staff_reminders", {
-        p_user_id: userId,
-        p_enabled: body.can_manage_staff_reminders,
-      });
-      if (error) return rpcErrorToResponse(error);
-      return NextResponse.json({ ok: true });
-    }
-
     const role = body?.role;
 
     if (!isAccountRole(role)) {
       return NextResponse.json(
-        {
-          error:
-            "'role' must be one of owner, admin, agent, viewer — or pass can_manage_staff_reminders",
-        },
+        { error: "'role' must be one of owner, admin, agent, viewer" },
         { status: 400 },
       );
     }

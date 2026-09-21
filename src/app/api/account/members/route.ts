@@ -25,7 +25,6 @@ interface ProfileRow {
   avatar_url: string | null;
   account_role: string;
   created_at: string;
-  can_manage_staff_reminders?: boolean | null;
 }
 
 export async function GET() {
@@ -36,9 +35,7 @@ export async function GET() {
     // the caller's, so this query is naturally account-scoped.
     const { data, error } = await ctx.supabase
       .from("profiles")
-      .select(
-        "user_id, full_name, email, avatar_url, account_role, created_at, can_manage_staff_reminders",
-      )
+      .select("user_id, full_name, email, avatar_url, account_role, created_at")
       .eq("account_id", ctx.accountId)
       .order("created_at", { ascending: true });
 
@@ -65,7 +62,6 @@ export async function GET() {
           avatar_url: row.avatar_url,
           role: row.account_role,
           joined_at: row.created_at,
-          can_manage_staff_reminders: Boolean(row.can_manage_staff_reminders),
         },
       ];
     });

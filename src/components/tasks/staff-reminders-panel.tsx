@@ -259,11 +259,6 @@ export function StaffRemindersPanel({ canEdit }: { canEdit: boolean }) {
 
   return (
     <div className="space-y-6">
-      {!canEdit && (
-        <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-          {t("readOnlyHint")}
-        </p>
-      )}
       {canEdit && (
         <section className="rounded-xl border border-border bg-card p-4">
           <h2 className="text-sm font-semibold text-foreground">{t("createTitle")}</h2>
