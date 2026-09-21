@@ -50,3 +50,55 @@ export function mondayIndex(d: Date): number {
 }
 
 export const DOW_SHORT_MON_FIRST = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
+
+export function startOfLocalMonth(d: Date = new Date()): Date {
+  return new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0)
+}
+
+export function monthsAgoStart(months: number, d: Date = new Date()): Date {
+  return new Date(d.getFullYear(), d.getMonth() - months, 1, 0, 0, 0, 0)
+}
+
+/** YYYY-MM key for bucketing rows by local calendar month. */
+export function localMonthKey(d: Date | string): string {
+  const date = typeof d === 'string' ? new Date(d) : d
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  return `${y}-${m}`
+}
+
+/**
+ * Inclusive list of local-month keys spanning the last `n` months,
+ * chronological, ending this month.
+ */
+export function lastNMonthKeys(n: number): string[] {
+  const keys: string[] = []
+  const start = monthsAgoStart(n - 1)
+  for (let i = 0; i < n; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth() + i, 1)
+    keys.push(localMonthKey(d))
+  }
+  return keys
+}
+
+export function bucketByMonth(
+  timestamps: string[],
+  monthKeys: string[],
+): { month: string; leads: number }[] {
+  const buckets = new Map<string, number>()
+  for (const key of monthKeys) buckets.set(key, 0)
+  for (const ts of timestamps) {
+    const key = localMonthKey(ts)
+    if (!buckets.has(key)) continue
+    buckets.set(key, (buckets.get(key) ?? 0) + 1)
+  }
+  return monthKeys.map((month) => ({ month, leads: buckets.get(month) ?? 0 }))
+}
+
+/** Compact duration for KPI cards (1s / 4.2m / 1.5h). */
+export function formatMinutes(mins: number | null): string {
+  if (mins == null) return '—'
+  if (mins < 1) return `${Math.max(1, Math.round(mins * 60))}s`
+  if (mins < 60) return `${mins.toFixed(1)}m`
+  return `${(mins / 60).toFixed(1)}h`
+}

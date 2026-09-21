@@ -9,11 +9,16 @@ import {
   UserPlus,
   DollarSign,
   Send,
+  Clock,
+  Inbox,
+  Trophy,
+  CalendarDays,
 } from 'lucide-react'
 
 import {
   loadActivity,
   loadConversationsSeries,
+  loadLeadsByMonth,
   loadMetrics,
   loadPipelineDonut,
   loadResponseTime,
@@ -21,16 +26,19 @@ import {
 import type {
   ActivityItem,
   ConversationsSeriesPoint,
+  LeadsMonthPoint,
   MetricsBundle,
   PipelineDonutData,
   ResponseTimeSummary,
 } from '@/lib/dashboard/types'
+import { formatMinutes } from '@/lib/dashboard/date-utils'
 
 import { MetricCard } from '@/components/dashboard/metric-card'
 import { SkeletonCard } from '@/components/dashboard/skeleton'
 import { QuickActions } from '@/components/dashboard/quick-actions'
 import { ConversationsChart } from '@/components/dashboard/conversations-chart'
 import { PipelineDonut } from '@/components/dashboard/pipeline-donut'
+import { LeadsChart } from '@/components/dashboard/leads-chart'
 import { ResponseTimeChart } from '@/components/dashboard/response-time-chart'
 import { ActivityFeed } from '@/components/dashboard/activity-feed'
 
@@ -61,6 +69,9 @@ export default function DashboardPage() {
   const [responseTime, setResponseTime] = useState<ResponseTimeSummary | null>(null)
   const [responseTimeLoading, setResponseTimeLoading] = useState(true)
 
+  const [leadsByMonth, setLeadsByMonth] = useState<LeadsMonthPoint[] | null>(null)
+  const [leadsLoading, setLeadsLoading] = useState(true)
+
   const [activity, setActivity] = useState<ActivityItem[] | null>(null)
   const [activityLoading, setActivityLoading] = useState(true)
 
@@ -89,6 +100,11 @@ export default function DashboardPage() {
       .then((r) => setResponseTime(r))
       .catch((err) => console.error('[dashboard] response time failed:', err))
       .finally(() => setResponseTimeLoading(false))
+
+    void loadLeadsByMonth(db, 12)
+      .then((l) => setLeadsByMonth(l))
+      .catch((err) => console.error('[dashboard] leads by month failed:', err))
+      .finally(() => setLeadsLoading(false))
 
     // Fetch up to 50 so the biggest page-size option in the feed
     // (50 rows) is already in memory — switching sizes then becomes
@@ -188,6 +204,59 @@ export default function DashboardPage() {
         )}
       </div>
 
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {metricsLoading || !metrics ? (
+          Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={`k2-${i}`} />)
+        ) : (
+          <>
+            <MetricCard
+              title={t('leadsThisMonth')}
+              value={metrics.leadsThisMonth.current.toLocaleString()}
+              icon={CalendarDays}
+              delta={{
+                sign:
+                  metrics.leadsThisMonth.current - metrics.leadsThisMonth.previous,
+                label: deltaLabel(
+                  metrics.leadsThisMonth.current - metrics.leadsThisMonth.previous,
+                  t('vsLastMonth'),
+                  t('noChange', { suffix: t('vsLastMonth') })
+                ),
+              }}
+            />
+            <MetricCard
+              title={t('avgFirstResponse')}
+              value={formatMinutes(responseTime?.thisWeekAvg ?? null)}
+              icon={Clock}
+              subtitle={
+                responseTime?.lastWeekAvg != null
+                  ? t('lastWeekAvg', { value: formatMinutes(responseTime.lastWeekAvg) })
+                  : t('avgFirstResponseHint')
+              }
+            />
+            <MetricCard
+              title={t('waitingReply')}
+              value={metrics.waitingReply.toLocaleString()}
+              icon={Inbox}
+              subtitle={t('waitingReplyHint')}
+            />
+            <MetricCard
+              title={t('wonThisMonth')}
+              value={metrics.wonDealsThisMonth.current.toLocaleString()}
+              icon={Trophy}
+              delta={{
+                sign:
+                  metrics.wonDealsThisMonth.current - metrics.wonDealsThisMonth.previous,
+                label: deltaLabel(
+                  metrics.wonDealsThisMonth.current - metrics.wonDealsThisMonth.previous,
+                  t('vsLastMonth'),
+                  t('noChange', { suffix: t('vsLastMonth') })
+                ),
+              }}
+            />
+          </>
+        )}
+      </div>
+
       {/* Quick actions */}
       <QuickActions />
 
@@ -216,8 +285,14 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Response time */}
-      <ResponseTimeChart data={responseTime} loading={responseTimeLoading} />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+        <div className="h-full lg:col-span-3">
+          <LeadsChart data={leadsByMonth} loading={leadsLoading} />
+        </div>
+        <div className="h-full lg:col-span-2">
+          <ResponseTimeChart data={responseTime} loading={responseTimeLoading} />
+        </div>
+      </div>
 
       {/* Activity feed */}
       <ActivityFeed items={activity} loading={activityLoading} />

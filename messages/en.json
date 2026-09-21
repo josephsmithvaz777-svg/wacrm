@@ -202,8 +202,16 @@
       "messagesSentToday": "Messages Sent Today",
       "newTodayVsYesterday": "new today vs yesterday",
       "vsYesterday": "vs yesterday",
+      "vsLastMonth": "vs last month",
       "openDeals": "{count} open {count, plural, =1 {deal} other {deals}}",
-      "noChange": "No change {suffix}"
+      "noChange": "No change {suffix}",
+      "leadsThisMonth": "Leads this month",
+      "avgFirstResponse": "First response speed",
+      "avgFirstResponseHint": "Average time to first reply this week",
+      "lastWeekAvg": "Last week: {value}",
+      "waitingReply": "Waiting for a reply",
+      "waitingReplyHint": "Open chats with unread messages",
+      "wonThisMonth": "Deals won this month"
     },
     "quickActions": {
       "newContact": "New Contact",
@@ -252,6 +260,13 @@
       "lastWeek": "Last week:",
       "noReplies": "No replies recorded yet",
       "noRepliesHint": "This chart fills in as you reply to customer messages."
+    },
+    "leadsChart": {
+      "title": "Leads by month",
+      "description": "New contacts over the last 12 months",
+      "total": "Total",
+      "noLeads": "No leads in this range yet",
+      "noLeadsHint": "New contacts will show up here month by month."
     },
     "emptyState": {
       "title": "Not enough data yet"
@@ -463,6 +478,8 @@
       "subtitle": "Manage your contact list. {count} total contacts.",
       "subtitleZero": "Manage your contact list.",
       "customFieldsBtn": "Custom fields",
+      "exportBtn": "Export",
+      "exportSelected": "Export selected",
       "importBtn": "Import",
       "addContactBtn": "Add Contact",
       "searchPlaceholder": "Search by name, phone, or email...",
@@ -504,7 +521,11 @@
       "toastFailedDelete": "Failed to delete contact",
       "toastDeleted": "Contact deleted",
       "toastBulkFailedDelete": "Failed to delete contacts",
-      "toastBulkDeleted": "{count} contacts deleted"
+      "toastBulkDeleted": "{count} contacts deleted",
+      "toastExported": "{count, plural, =1 {1 contact exported} other {# contacts exported}}",
+      "toastExportFailed": "Failed to export contacts",
+      "toastExportForbidden": "Only an admin can export contacts",
+      "toastExportEmpty": "No contacts to export"
     },
     "form": {
       "addTitle": "Add Contact",

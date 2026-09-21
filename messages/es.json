@@ -200,10 +200,18 @@
       "newContactsToday": "Contactos nuevos hoy",
       "openDealsValue": "Valor de deals abiertos",
       "messagesSentToday": "Mensajes enviados hoy",
-      "newTodayVsYesterday": "new today vs yesterday",
-      "vsYesterday": "vs yesterday",
-      "openDeals": "{count} open {count, plural, =1 {deal} other {deals}}",
-      "noChange": "No change {suffix}"
+      "newTodayVsYesterday": "nuevas hoy vs ayer",
+      "vsYesterday": "vs ayer",
+      "vsLastMonth": "vs mes anterior",
+      "openDeals": "{count} {count, plural, =1 {deal abierto} other {deals abiertos}}",
+      "noChange": "Sin cambio {suffix}",
+      "leadsThisMonth": "Leads este mes",
+      "avgFirstResponse": "Velocidad de respuesta",
+      "avgFirstResponseHint": "Tiempo medio de la primera respuesta esta semana",
+      "lastWeekAvg": "Semana pasada: {value}",
+      "waitingReply": "Esperando respuesta",
+      "waitingReplyHint": "Chats abiertos con mensajes sin leer",
+      "wonThisMonth": "Deals ganados este mes"
     },
     "quickActions": {
       "newContact": "Nuevo contacto",
@@ -245,13 +253,20 @@
       "ariaLabel": "Pipeline value by stage"
     },
     "responseTimeChart": {
-      "title": "Average First Response Time",
-      "description": "Minutes to reply to a customer's first unreplied message, by weekday",
-      "target": "target {minutes}m",
-      "thisWeek": "This week:",
-      "lastWeek": "Last week:",
-      "noReplies": "No replies recorded yet",
-      "noRepliesHint": "This chart fills in as you reply to customer messages."
+      "title": "Velocidad de primera respuesta",
+      "description": "Minutos hasta responder el primer mensaje del cliente, por día",
+      "target": "objetivo {minutes}m",
+      "thisWeek": "Esta semana:",
+      "lastWeek": "Semana pasada:",
+      "noReplies": "Aún no hay respuestas registradas",
+      "noRepliesHint": "Este gráfico se llena cuando contestas a los clientes."
+    },
+    "leadsChart": {
+      "title": "Leads por mes",
+      "description": "Contactos nuevos en los últimos 12 meses",
+      "total": "Total",
+      "noLeads": "Aún no hay leads en este periodo",
+      "noLeadsHint": "Los contactos nuevos aparecerán aquí mes a mes."
     },
     "emptyState": {
       "title": "Not enough data yet"
@@ -463,6 +478,8 @@
       "subtitle": "Gestiona tu lista de contactos. {count} contactos en total.",
       "subtitleZero": "Gestiona tu lista de contactos.",
       "customFieldsBtn": "Campos personalizados",
+      "exportBtn": "Exportar",
+      "exportSelected": "Exportar seleccionados",
       "importBtn": "Importar",
       "addContactBtn": "Agregar contacto",
       "searchPlaceholder": "Buscar contactos…",
@@ -505,6 +522,10 @@
       "toastDeleted": "Contacto eliminado",
       "toastBulkFailedDelete": "No se pudieron eliminar los contactos",
       "toastBulkDeleted": "{count} contactos eliminados",
+      "toastExported": "{count, plural, =1 {1 contacto exportado} other {# contactos exportados}}",
+      "toastExportFailed": "No se pudieron exportar los contactos",
+      "toastExportForbidden": "Solo un administrador puede exportar contactos",
+      "toastExportEmpty": "No hay contactos para exportar",
       "newContact": "Nuevo contacto",
       "noContacts": "No hay contactos",
       "description": "Gestiona tus contactos de WhatsApp.",

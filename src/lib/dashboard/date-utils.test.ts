@@ -1,11 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DOW_SHORT_MON_FIRST,
+  bucketByMonth,
   daysAgoStart,
+  formatMinutes,
   lastNDayKeys,
+  lastNMonthKeys,
   localDayKey,
   mondayIndex,
   startOfLocalDay,
+  startOfLocalMonth,
 } from "./date-utils";
 
 describe("startOfLocalDay", () => {
@@ -119,5 +123,52 @@ describe("mondayIndex", () => {
     expect(DOW_SHORT_MON_FIRST[mondayIndex(new Date("2026-05-24"))]).toBe(
       "Sun",
     );
+  });
+});
+
+describe("startOfLocalMonth", () => {
+  it("lands on the 1st at midnight", () => {
+    const out = startOfLocalMonth(new Date("2026-08-19T15:22:00"));
+    expect(out.getDate()).toBe(1);
+    expect(out.getMonth()).toBe(7);
+    expect(out.getHours()).toBe(0);
+  });
+});
+
+describe("lastNMonthKeys", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-21T10:00:00"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("ends on the current month", () => {
+    expect(lastNMonthKeys(3)).toEqual(["2026-07", "2026-08", "2026-09"]);
+  });
+});
+
+describe("bucketByMonth", () => {
+  it("counts timestamps into the provided month keys", () => {
+    expect(
+      bucketByMonth(
+        ["2026-08-02T12:00:00", "2026-08-19T08:00:00", "2026-09-01T00:00:00"],
+        ["2026-07", "2026-08", "2026-09"],
+      ),
+    ).toEqual([
+      { month: "2026-07", leads: 0 },
+      { month: "2026-08", leads: 2 },
+      { month: "2026-09", leads: 1 },
+    ]);
+  });
+});
+
+describe("formatMinutes", () => {
+  it("formats seconds, minutes, and hours", () => {
+    expect(formatMinutes(null)).toBe("—");
+    expect(formatMinutes(0.4)).toBe("24s");
+    expect(formatMinutes(4.2)).toBe("4.2m");
+    expect(formatMinutes(90)).toBe("1.5h");
   });
 });

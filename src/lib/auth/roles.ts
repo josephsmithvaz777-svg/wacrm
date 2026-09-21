@@ -81,6 +81,15 @@ export function canEditSettings(role: AccountRole): boolean {
 }
 
 /**
+ * Owner / admin: download the contact list (phone, tags, dates)
+ * to build a campaign group. Agents and viewers must not take a
+ * full dump of the book.
+ */
+export function canExportContacts(role: AccountRole): boolean {
+  return hasMinRole(role, "admin");
+}
+
+/**
  * Owner / admin / agent: write operational data — send messages,
  * create contacts, move deals, run broadcasts, edit automations.
  * Viewers are read-only.

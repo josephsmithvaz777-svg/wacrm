@@ -13,6 +13,9 @@ export interface MetricsBundle {
   openDealsValue: number
   openDealsCount: number
   messagesSentToday: MetricDelta
+  leadsThisMonth: MetricDelta
+  waitingReply: number
+  wonDealsThisMonth: MetricDelta
 }
 
 export interface ConversationsSeriesPoint {
@@ -46,6 +49,11 @@ export interface ResponseTimeSummary {
   buckets: ResponseTimeBucket[]
   thisWeekAvg: number | null
   lastWeekAvg: number | null
+}
+
+export interface LeadsMonthPoint {
+  month: string // YYYY-MM
+  leads: number
 }
 
 export type ActivityKind =

@@ -202,8 +202,16 @@
       "messagesSentToday": "오늘 보낸 메시지",
       "newTodayVsYesterday": "어제 대비 신규",
       "vsYesterday": "어제 대비",
+      "vsLastMonth": "지난달 대비",
       "openDeals": "진행 중인 딜 {count}건",
-      "noChange": "변동 없음 {suffix}"
+      "noChange": "변동 없음 {suffix}",
+      "leadsThisMonth": "이번 달 리드",
+      "avgFirstResponse": "응답 속도",
+      "avgFirstResponseHint": "이번 주 첫 응답까지 걸린 평균 시간",
+      "lastWeekAvg": "지난주: {value}",
+      "waitingReply": "답변 대기",
+      "waitingReplyHint": "읽지 않은 메시지가 있는 열린 채팅",
+      "wonThisMonth": "이번 달 성사된 딜"
     },
     "quickActions": {
       "newContact": "새 연락처",
@@ -252,6 +260,13 @@
       "lastWeek": "지난 주:",
       "noReplies": "아직 기록된 응답이 없습니다",
       "noRepliesHint": "고객 메시지에 답변하면 이 차트가 채워집니다."
+    },
+    "leadsChart": {
+      "title": "월별 리드",
+      "description": "최근 12개월의 신규 연락처",
+      "total": "합계",
+      "noLeads": "이 기간에는 아직 리드가 없습니다",
+      "noLeadsHint": "신규 연락처가 월별로 여기에 표시됩니다."
     },
     "emptyState": {
       "title": "아직 데이터가 충분하지 않습니다"
@@ -462,6 +477,8 @@
       "subtitle": "연락처 목록을 관리하세요. 전체 연락처 {count}개.",
       "subtitleZero": "연락처 목록을 관리하세요.",
       "customFieldsBtn": "커스텀 필드",
+      "exportBtn": "내보내기",
+      "exportSelected": "선택 항목 내보내기",
       "importBtn": "가져오기",
       "addContactBtn": "연락처 추가",
       "searchPlaceholder": "이름, 전화번호, 이메일로 검색...",
@@ -503,7 +520,11 @@
       "toastFailedDelete": "연락처를 삭제하지 못했습니다",
       "toastDeleted": "연락처가 삭제되었습니다",
       "toastBulkFailedDelete": "연락처를 삭제하지 못했습니다",
-      "toastBulkDeleted": "연락처 {count}개가 삭제되었습니다"
+      "toastBulkDeleted": "연락처 {count}개가 삭제되었습니다",
+      "toastExported": "연락처 {count}개를 내보냈습니다",
+      "toastExportFailed": "연락처를 내보내지 못했습니다",
+      "toastExportForbidden": "관리자만 연락처를 내보낼 수 있습니다",
+      "toastExportEmpty": "내보낼 연락처가 없습니다"
     },
     "form": {
       "addTitle": "연락처 추가",

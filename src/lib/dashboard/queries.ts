@@ -1,15 +1,20 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
+  bucketByMonth,
   daysAgoStart,
   DOW_SHORT_MON_FIRST,
   lastNDayKeys,
+  lastNMonthKeys,
   localDayKey,
   mondayIndex,
+  monthsAgoStart,
   startOfLocalDay,
+  startOfLocalMonth,
 } from './date-utils'
 import type {
   ActivityItem,
   ConversationsSeriesPoint,
+  LeadsMonthPoint,
   MetricsBundle,
   PipelineDonutData,
   PipelineStageSlice,
@@ -32,6 +37,8 @@ type DB = SupabaseClient
 export async function loadMetrics(db: DB): Promise<MetricsBundle> {
   const todayStart = startOfLocalDay().toISOString()
   const yesterdayStart = daysAgoStart(1).toISOString()
+  const thisMonthStart = startOfLocalMonth().toISOString()
+  const lastMonthStart = monthsAgoStart(1).toISOString()
 
   const [
     openConvCur,
@@ -42,6 +49,11 @@ export async function loadMetrics(db: DB): Promise<MetricsBundle> {
     openDeals,
     messagesToday,
     messagesYesterday,
+    leadsThisMonth,
+    leadsLastMonth,
+    waitingReply,
+    wonThisMonth,
+    wonLastMonth,
   ] = await Promise.all([
     db.from('conversations').select('id', { count: 'exact', head: true }).eq('status', 'open'),
     db
@@ -73,6 +85,31 @@ export async function loadMetrics(db: DB): Promise<MetricsBundle> {
       .eq('sender_type', 'agent')
       .gte('created_at', yesterdayStart)
       .lt('created_at', todayStart),
+    db
+      .from('contacts')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', thisMonthStart),
+    db
+      .from('contacts')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', lastMonthStart)
+      .lt('created_at', thisMonthStart),
+    db
+      .from('conversations')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'open')
+      .gt('unread_count', 0),
+    db
+      .from('deals')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'won')
+      .gte('updated_at', thisMonthStart),
+    db
+      .from('deals')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'won')
+      .gte('updated_at', lastMonthStart)
+      .lt('updated_at', thisMonthStart),
   ])
 
   const openDealsRows = (openDeals.data ?? []) as { value: number | null }[]
@@ -95,6 +132,15 @@ export async function loadMetrics(db: DB): Promise<MetricsBundle> {
     messagesSentToday: {
       current: messagesToday.count ?? 0,
       previous: messagesYesterday.count ?? 0,
+    },
+    leadsThisMonth: {
+      current: leadsThisMonth.count ?? 0,
+      previous: leadsLastMonth.count ?? 0,
+    },
+    waitingReply: waitingReply.count ?? 0,
+    wonDealsThisMonth: {
+      current: wonThisMonth.count ?? 0,
+      previous: wonLastMonth.count ?? 0,
     },
   }
 }
@@ -126,6 +172,36 @@ export async function loadConversationsSeries(
   }
 
   return keys.map((day) => ({ day, ...(buckets.get(day) ?? { incoming: 0, outgoing: 0 }) }))
+}
+
+// --- 2b. Leads per month ----------------------------------------------
+
+const LEADS_PAGE = 1000
+const LEADS_MAX = 20_000
+
+export async function loadLeadsByMonth(
+  db: DB,
+  months = 12,
+): Promise<LeadsMonthPoint[]> {
+  const keys = lastNMonthKeys(months)
+  const start = monthsAgoStart(months - 1).toISOString()
+  const timestamps: string[] = []
+
+  for (let offset = 0; offset < LEADS_MAX; offset += LEADS_PAGE) {
+    const { data, error } = await db
+      .from('contacts')
+      .select('created_at')
+      .gte('created_at', start)
+      .order('created_at', { ascending: true })
+      .range(offset, offset + LEADS_PAGE - 1)
+    if (error) throw error
+    const page = (data ?? []) as { created_at: string }[]
+    if (page.length === 0) break
+    for (const row of page) timestamps.push(row.created_at)
+    if (page.length < LEADS_PAGE) break
+  }
+
+  return bucketByMonth(timestamps, keys)
 }
 
 // --- 3. Pipeline donut -------------------------------------------------

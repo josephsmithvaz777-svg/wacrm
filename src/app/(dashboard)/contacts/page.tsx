@@ -39,6 +39,7 @@ import {
   Search,
   Plus,
   Upload,
+  Download,
   MoreHorizontal,
   Pencil,
   Trash2,
@@ -77,6 +78,7 @@ export default function ContactsPage() {
   const supabase = createClient();
   const canEdit = useCan('send-messages');
   const canEditSettings = useCan('edit-settings');
+  const canExport = useCan('export-contacts');
 
   const [contacts, setContacts] = useState<ContactWithTags[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,6 +104,7 @@ export default function ContactsPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Contact | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Bulk selection (page-scoped — only the loaded rows are selectable)
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -451,6 +454,65 @@ export default function ContactsPage() {
     clearAgentFilters();
   }
 
+  async function handleExport(scope: 'filters' | 'selected') {
+    if (!canExport || exporting) return;
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (scope === 'selected') {
+        if (selected.size === 0) {
+          toast.error(t('toastExportEmpty'));
+          return;
+        }
+        params.set('ids', [...selected].join(','));
+      } else {
+        if (selectedTagIds.length > 0) {
+          params.set('tag_ids', selectedTagIds.join(','));
+        }
+        if (selectedAgentIds.length > 0) {
+          params.set('assigned_to', selectedAgentIds.join(','));
+        }
+        if (includeUnassigned) params.set('include_unassigned', '1');
+        const term = search.trim();
+        if (term) params.set('search', term);
+      }
+
+      const query = params.toString();
+      const response = await fetch(
+        `/api/contacts/export${query ? `?${query}` : ''}`,
+      );
+      if (response.status === 403) {
+        toast.error(t('toastExportForbidden'));
+        return;
+      }
+      if (!response.ok) {
+        toast.error(t('toastExportFailed'));
+        return;
+      }
+
+      const blob = await response.blob();
+      const disposition = response.headers.get('Content-Disposition') ?? '';
+      const match = disposition.match(/filename="([^"]+)"/);
+      const filename = match?.[1] ?? 'contactos.csv';
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+
+      const count = Number(response.headers.get('X-Export-Count') ?? 0);
+      toast.success(t('toastExported', { count }));
+    } catch (error) {
+      console.error('[contacts] export failed:', error);
+      toast.error(t('toastExportFailed'));
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -470,6 +532,21 @@ export default function ContactsPage() {
             >
               <SlidersHorizontal className="size-4" />
               {t('customFieldsBtn')}
+            </Button>
+          )}
+          {canExport && (
+            <Button
+              variant="outline"
+              onClick={() => handleExport(selected.size > 0 ? 'selected' : 'filters')}
+              disabled={exporting || (totalCount === 0 && selected.size === 0)}
+              className="border-border text-muted-foreground hover:bg-muted"
+            >
+              {exporting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Download className="size-4" />
+              )}
+              {t('exportBtn')}
             </Button>
           )}
           <GatedButton
@@ -723,6 +800,22 @@ export default function ContactsPage() {
             >
               {t('clearSelection')}
             </Button>
+            {canExport && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleExport('selected')}
+                disabled={exporting}
+                className="border-border text-muted-foreground hover:bg-muted"
+              >
+                {exporting ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Download className="size-4" />
+                )}
+                {t('exportSelected')}
+              </Button>
+            )}
             <GatedButton
               variant="destructive"
               size="sm"
