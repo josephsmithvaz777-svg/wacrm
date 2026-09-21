@@ -1,4 +1,9 @@
 import type { ExportContactRow } from "./export-csv";
+import {
+  contactCreatedInRange,
+  createdAtRange,
+  type CreatedAtRange,
+} from "./date-range";
 
 const PAGE_SIZE = 500;
 const MAX_ROWS = 10_000;
@@ -13,6 +18,8 @@ export interface LoadExportContactsOpts {
   assignedTo?: string[];
   includeUnassigned?: boolean;
   search?: string | null;
+  createdFromYmd?: string | null;
+  createdToYmd?: string | null;
 }
 
 interface ContactRow {
@@ -24,13 +31,25 @@ interface ContactRow {
   created_at: string;
 }
 
-function hasFilters(opts: LoadExportContactsOpts): boolean {
+function hasJoinFilters(opts: LoadExportContactsOpts): boolean {
   return Boolean(
     (opts.tagIds && opts.tagIds.length > 0) ||
       (opts.assignedTo && opts.assignedTo.length > 0) ||
       opts.includeUnassigned ||
       opts.search,
   );
+}
+
+function applyDateRange<T extends { gte: Function; lt: Function }>(
+  query: T,
+  range: CreatedAtRange,
+): T {
+  let next = query;
+  if (range.fromIso) next = next.gte("created_at", range.fromIso) as T;
+  if (range.toIsoExclusive) {
+    next = next.lt("created_at", range.toIsoExclusive) as T;
+  }
+  return next;
 }
 
 async function fetchContactsByIds(db: Db, ids: string[]): Promise<ContactRow[]> {
@@ -53,17 +72,34 @@ async function fetchContactsByIds(db: Db, ids: string[]): Promise<ContactRow[]> 
 async function fetchFilteredContacts(
   db: Db,
   opts: LoadExportContactsOpts,
+  range: CreatedAtRange,
 ): Promise<ContactRow[]> {
+  const baseArgs = {
+    p_tag_ids: opts.tagIds?.length ? opts.tagIds : null,
+    p_assigned_to: opts.assignedTo?.length ? opts.assignedTo : null,
+    p_include_unassigned: Boolean(opts.includeUnassigned),
+    p_search: opts.search || null,
+  };
+  let passCreatedAt = Boolean(range.fromIso || range.toIsoExclusive);
   const rows: ContactRow[] = [];
   for (let offset = 0; offset < MAX_ROWS; offset += PAGE_SIZE) {
-    const { data, error } = await db.rpc("filter_contacts", {
-      p_tag_ids: opts.tagIds?.length ? opts.tagIds : null,
-      p_assigned_to: opts.assignedTo?.length ? opts.assignedTo : null,
-      p_include_unassigned: Boolean(opts.includeUnassigned),
-      p_search: opts.search || null,
+    const args = {
+      ...baseArgs,
       p_limit: PAGE_SIZE,
       p_offset: offset,
-    });
+      ...(passCreatedAt
+        ? {
+            p_created_from: range.fromIso,
+            p_created_to: range.toIsoExclusive,
+          }
+        : {}),
+    };
+    const { data, error } = await db.rpc("filter_contacts", args);
+    if (error && passCreatedAt) {
+      passCreatedAt = false;
+      offset -= PAGE_SIZE;
+      continue;
+    }
     if (error) throw error;
     const page = (data ?? []) as { contact: ContactRow }[];
     if (page.length === 0) break;
@@ -75,14 +111,19 @@ async function fetchFilteredContacts(
   return rows.slice(0, MAX_ROWS);
 }
 
-async function fetchAllContacts(db: Db): Promise<ContactRow[]> {
+async function fetchAllContacts(
+  db: Db,
+  range: CreatedAtRange,
+): Promise<ContactRow[]> {
   const rows: ContactRow[] = [];
   for (let offset = 0; offset < MAX_ROWS; offset += PAGE_SIZE) {
-    const { data, error } = await db
+    let query = db
       .from("contacts")
       .select("id, phone, name, email, company, created_at")
       .order("created_at", { ascending: false })
       .range(offset, offset + PAGE_SIZE - 1);
+    query = applyDateRange(query, range);
+    const { data, error } = await query;
     if (error) throw error;
     const page = (data ?? []) as ContactRow[];
     if (page.length === 0) break;
@@ -126,13 +167,21 @@ export async function loadExportContacts(
   db: Db,
   opts: LoadExportContactsOpts,
 ): Promise<ExportContactRow[]> {
+  const range = createdAtRange(opts.createdFromYmd, opts.createdToYmd);
+  if (range.invalid) {
+    throw new InvalidExportRangeError();
+  }
+
   let contacts: ContactRow[];
   if (opts.ids && opts.ids.length > 0) {
     contacts = await fetchContactsByIds(db, opts.ids);
-  } else if (hasFilters(opts)) {
-    contacts = await fetchFilteredContacts(db, opts);
+  } else if (hasJoinFilters(opts)) {
+    contacts = await fetchFilteredContacts(db, opts, range);
+    contacts = contacts.filter((row) =>
+      contactCreatedInRange(row.created_at, range),
+    );
   } else {
-    contacts = await fetchAllContacts(db);
+    contacts = await fetchAllContacts(db, range);
   }
 
   const tagMap = await tagsByContact(
@@ -148,6 +197,14 @@ export async function loadExportContacts(
     tags: tagMap.get(c.id) ?? [],
     createdAt: c.created_at,
   }));
+}
+
+export class InvalidExportRangeError extends Error {
+  readonly status = 400 as const;
+  constructor() {
+    super("Invalid created_from / created_to date range");
+    this.name = "InvalidExportRangeError";
+  }
 }
 
 const UUID_RE =

@@ -95,6 +95,30 @@ describe("/api/contacts/export", () => {
     );
   });
 
+  it("forwards a created_at window for a campaign dump", async () => {
+    await GET(
+      new Request(
+        "http://localhost/api/contacts/export?created_from=2026-08-01&created_to=2026-08-31",
+      ),
+    );
+
+    expect(mocks.loadExportContacts).toHaveBeenCalledWith(
+      context.supabase,
+      expect.objectContaining({
+        createdFromYmd: "2026-08-01",
+        createdToYmd: "2026-08-31",
+      }),
+    );
+  });
+
+  it("rejects a malformed created_from", async () => {
+    const response = await GET(
+      new Request("http://localhost/api/contacts/export?created_from=agosto"),
+    );
+    expect(response.status).toBe(400);
+    expect(mocks.loadExportContacts).not.toHaveBeenCalled();
+  });
+
   it("rejects a malformed UUID list", async () => {
     const response = await GET(
       new Request("http://localhost/api/contacts/export?ids=not-a-uuid"),

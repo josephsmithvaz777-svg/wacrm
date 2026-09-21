@@ -50,6 +50,7 @@ import {
   SlidersHorizontal,
   Filter,
   UserRound,
+  CalendarDays,
   X,
 } from 'lucide-react';
 import { ContactForm } from '@/components/contacts/contact-form';
@@ -58,6 +59,14 @@ import { ImportModal } from '@/components/contacts/import-modal';
 import { CustomFieldsManager } from '@/components/contacts/custom-fields-manager';
 import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
+import { Label } from '@/components/ui/label';
+import {
+  createdAtRange,
+  formatYmdChip,
+  lastMonthYmd,
+  lastNDaysYmd,
+  thisMonthYmd,
+} from '@/lib/contacts/date-range';
 import { useTranslations } from 'next-intl';
 
 const PAGE_SIZE = 25;
@@ -92,6 +101,8 @@ export default function ContactsPage() {
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const [includeUnassigned, setIncludeUnassigned] = useState(false);
   const [agents, setAgents] = useState<AgentOption[]>([]);
+  const [createdFrom, setCreatedFrom] = useState('');
+  const [createdTo, setCreatedTo] = useState('');
 
   // Modals
   const [formOpen, setFormOpen] = useState(false);
@@ -105,6 +116,9 @@ export default function ContactsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Contact | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportFrom, setExportFrom] = useState('');
+  const [exportTo, setExportTo] = useState('');
 
   // Bulk selection (page-scoped — only the loaded rows are selectable)
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -170,19 +184,37 @@ export default function ContactsPage() {
     const hasTagFilter = selectedTagIds.length > 0;
     const hasAssigneeFilter =
       selectedAgentIds.length > 0 || includeUnassigned;
+    const dateRange = createdAtRange(createdFrom, createdTo);
+    if (dateRange.invalid) {
+      toast.error(t('toastExportInvalidRange'));
+      setLoading(false);
+      return;
+    }
 
     if (hasTagFilter || hasAssigneeFilter) {
       // Server-side join + distinct + windowed total + pagination so
       // tag/agent filters cannot silently truncate or overflow an IN
       // clause. See migrations 025 and 052.
-      const { data, error } = await supabase.rpc('filter_contacts', {
+      const rpcArgs: {
+        p_tag_ids: string[] | null;
+        p_assigned_to: string[] | null;
+        p_include_unassigned: boolean;
+        p_search: string | null;
+        p_limit: number;
+        p_offset: number;
+        p_created_from?: string;
+        p_created_to?: string;
+      } = {
         p_tag_ids: hasTagFilter ? selectedTagIds : null,
         p_assigned_to: selectedAgentIds.length ? selectedAgentIds : null,
         p_include_unassigned: includeUnassigned,
         p_search: term || null,
         p_limit: PAGE_SIZE,
         p_offset: from,
-      });
+      };
+      if (dateRange.fromIso) rpcArgs.p_created_from = dateRange.fromIso;
+      if (dateRange.toIsoExclusive) rpcArgs.p_created_to = dateRange.toIsoExclusive;
+      const { data, error } = await supabase.rpc('filter_contacts', rpcArgs);
       if (seq !== fetchSeq.current) return; // superseded by a newer fetch
       if (error) {
         toast.error(t('toastFailedLoad'));
@@ -198,6 +230,13 @@ export default function ContactsPage() {
         .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(from, to);
+
+      if (dateRange.fromIso) {
+        query = query.gte('created_at', dateRange.fromIso);
+      }
+      if (dateRange.toIsoExclusive) {
+        query = query.lt('created_at', dateRange.toIsoExclusive);
+      }
 
       if (term) {
         const like = `%${term}%`;
@@ -289,6 +328,8 @@ export default function ContactsPage() {
     selectedTagIds,
     selectedAgentIds,
     includeUnassigned,
+    createdFrom,
+    createdTo,
     tagsMap,
     t,
   ]);
@@ -410,10 +451,12 @@ export default function ContactsPage() {
   );
   const assigneeFilterCount =
     selectedAgentIds.length + (includeUnassigned ? 1 : 0);
+  const hasDateFilter = Boolean(createdFrom || createdTo);
   const hasActiveFilters =
     search.trim().length > 0 ||
     selectedTagIds.length > 0 ||
-    assigneeFilterCount > 0;
+    assigneeFilterCount > 0 ||
+    hasDateFilter;
 
   function toggleTagFilter(tagId: string) {
     setSelectedTagIds((prev) =>
@@ -449,13 +492,46 @@ export default function ContactsPage() {
     setPage(0);
   }
 
+  function clearDateFilters() {
+    setCreatedFrom('');
+    setCreatedTo('');
+    setPage(0);
+  }
+
   function clearAllFilters() {
     clearTagFilters();
     clearAgentFilters();
+    clearDateFilters();
+  }
+
+  function openExportDialog() {
+    setExportFrom(createdFrom);
+    setExportTo(createdTo);
+    setExportOpen(true);
+  }
+
+  function applyExportPreset(preset: 'thisMonth' | 'lastMonth' | 'last7') {
+    const range =
+      preset === 'thisMonth'
+        ? thisMonthYmd()
+        : preset === 'lastMonth'
+          ? lastMonthYmd()
+          : lastNDaysYmd(7);
+    setExportFrom(range.from);
+    setExportTo(range.to);
   }
 
   async function handleExport(scope: 'filters' | 'selected') {
     if (!canExport || exporting) return;
+    const fromYmd = scope === 'filters' ? exportFrom : '';
+    const toYmd = scope === 'filters' ? exportTo : '';
+    if (scope === 'filters') {
+      const range = createdAtRange(fromYmd, toYmd);
+      if (range.invalid) {
+        toast.error(t('toastExportInvalidRange'));
+        return;
+      }
+    }
     setExporting(true);
     try {
       const params = new URLSearchParams();
@@ -475,6 +551,8 @@ export default function ContactsPage() {
         if (includeUnassigned) params.set('include_unassigned', '1');
         const term = search.trim();
         if (term) params.set('search', term);
+        if (fromYmd) params.set('created_from', fromYmd);
+        if (toYmd) params.set('created_to', toYmd);
       }
 
       const query = params.toString();
@@ -505,6 +583,7 @@ export default function ContactsPage() {
 
       const count = Number(response.headers.get('X-Export-Count') ?? 0);
       toast.success(t('toastExported', { count }));
+      setExportOpen(false);
     } catch (error) {
       console.error('[contacts] export failed:', error);
       toast.error(t('toastExportFailed'));
@@ -537,8 +616,8 @@ export default function ContactsPage() {
           {canExport && (
             <Button
               variant="outline"
-              onClick={() => handleExport(selected.size > 0 ? 'selected' : 'filters')}
-              disabled={exporting || (totalCount === 0 && selected.size === 0)}
+              onClick={openExportDialog}
+              disabled={exporting}
               className="border-border text-muted-foreground hover:bg-muted"
             >
               {exporting ? (
@@ -716,10 +795,74 @@ export default function ContactsPage() {
               </div>
             </PopoverContent>
           </Popover>
+
+          <Popover>
+            <PopoverTrigger
+              render={
+                <Button
+                  variant="outline"
+                  className="border-border text-muted-foreground hover:bg-muted shrink-0"
+                />
+              }
+            >
+              <CalendarDays className="size-4" />
+              {t('filterByDate')}
+              {hasDateFilter && (
+                <span className="ml-1 inline-flex items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                  1
+                </span>
+              )}
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-72 p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-popover-foreground">
+                  {t('filterByDate')}
+                </span>
+                {hasDateFilter && (
+                  <button
+                    onClick={clearDateFilters}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    {t('clearAll')}
+                  </button>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contacts-from" className="text-xs text-muted-foreground">
+                  {t('dateFrom')}
+                </Label>
+                <Input
+                  id="contacts-from"
+                  type="date"
+                  value={createdFrom}
+                  onChange={(e) => {
+                    setCreatedFrom(e.target.value);
+                    setPage(0);
+                  }}
+                  className="bg-card border-border text-foreground"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contacts-to" className="text-xs text-muted-foreground">
+                  {t('dateTo')}
+                </Label>
+                <Input
+                  id="contacts-to"
+                  type="date"
+                  value={createdTo}
+                  onChange={(e) => {
+                    setCreatedTo(e.target.value);
+                    setPage(0);
+                  }}
+                  className="bg-card border-border text-foreground"
+                />
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
 
         {/* Active filter chips */}
-        {(selectedTagIds.length > 0 || assigneeFilterCount > 0) && (
+        {(selectedTagIds.length > 0 || assigneeFilterCount > 0 || hasDateFilter) && (
           <div className="flex flex-wrap items-center gap-1.5">
             {selectedTagIds.map((id) => {
               const tag = tagsMap[id];
@@ -775,6 +918,18 @@ export default function ContactsPage() {
                 </span>
               );
             })}
+            {hasDateFilter && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground">
+                {formatYmdChip(createdFrom || null, createdTo || null)}
+                <button
+                  onClick={clearDateFilters}
+                  aria-label={t('filterByDate')}
+                  className="hover:opacity-70"
+                >
+                  <X className="size-3" />
+                </button>
+              </span>
+            )}
             <button
               onClick={clearAllFilters}
               className="text-xs text-muted-foreground hover:text-foreground px-1"
@@ -1077,6 +1232,103 @@ export default function ContactsPage() {
         contactId={detailContactId}
         onUpdated={fetchContacts}
       />
+
+      {canExport && (
+        <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+          <DialogContent className="bg-popover border-border text-popover-foreground sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-popover-foreground">
+                {t('exportTitle')}
+              </DialogTitle>
+              <DialogDescription className="text-muted-foreground">
+                {t('exportDesc')}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => applyExportPreset('lastMonth')}
+                  className="border-border text-muted-foreground hover:bg-muted"
+                >
+                  {t('exportPresetLastMonth')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => applyExportPreset('thisMonth')}
+                  className="border-border text-muted-foreground hover:bg-muted"
+                >
+                  {t('exportPresetThisMonth')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => applyExportPreset('last7')}
+                  className="border-border text-muted-foreground hover:bg-muted"
+                >
+                  {t('exportPresetLast7')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setExportFrom('');
+                    setExportTo('');
+                  }}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  {t('exportAllDates')}
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="export-from">{t('dateFrom')}</Label>
+                  <Input
+                    id="export-from"
+                    type="date"
+                    value={exportFrom}
+                    onChange={(e) => setExportFrom(e.target.value)}
+                    className="bg-card border-border text-foreground"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="export-to">{t('dateTo')}</Label>
+                  <Input
+                    id="export-to"
+                    type="date"
+                    value={exportTo}
+                    onChange={(e) => setExportTo(e.target.value)}
+                    className="bg-card border-border text-foreground"
+                  />
+                </div>
+              </div>
+            </div>
+            <DialogFooter className="bg-popover border-border">
+              <Button
+                variant="outline"
+                onClick={() => setExportOpen(false)}
+                className="border-border text-muted-foreground hover:bg-muted"
+              >
+                {t('cancel')}
+              </Button>
+              <Button
+                onClick={() => handleExport('filters')}
+                disabled={exporting}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              >
+                {exporting && <Loader2 className="size-4 animate-spin" />}
+                {t('exportConfirm')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Import Modal */}
       <ImportModal

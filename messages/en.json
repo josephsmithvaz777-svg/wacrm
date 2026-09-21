@@ -485,6 +485,16 @@
       "searchPlaceholder": "Search by name, phone, or email...",
       "filterByTags": "Filter by tags",
       "filterByAgent": "Filter by agent",
+      "filterByDate": "Filter by date",
+      "dateFrom": "From",
+      "dateTo": "To",
+      "exportTitle": "Export contacts",
+      "exportDesc": "Pick a created-at date range (for example August). Tag and agent filters also apply.",
+      "exportConfirm": "Download CSV",
+      "exportPresetLastMonth": "Last month",
+      "exportPresetThisMonth": "This month",
+      "exportPresetLast7": "Last 7 days",
+      "exportAllDates": "All dates",
       "clearAll": "Clear all",
       "noTagsYet": "No tags yet.",
       "noAgentsYet": "No agents yet.",
@@ -525,7 +535,8 @@
       "toastExported": "{count, plural, =1 {1 contact exported} other {# contacts exported}}",
       "toastExportFailed": "Failed to export contacts",
       "toastExportForbidden": "Only an admin can export contacts",
-      "toastExportEmpty": "No contacts to export"
+      "toastExportEmpty": "No contacts to export",
+      "toastExportInvalidRange": "The date range is not valid"
     },
     "form": {
       "addTitle": "Add Contact",

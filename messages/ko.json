@@ -484,6 +484,16 @@
       "searchPlaceholder": "이름, 전화번호, 이메일로 검색...",
       "filterByTags": "태그로 필터링",
       "filterByAgent": "담당자로 필터링",
+      "filterByDate": "날짜로 필터링",
+      "dateFrom": "시작",
+      "dateTo": "종료",
+      "exportTitle": "연락처 내보내기",
+      "exportDesc": "생성일 범위를 선택하세요. 태그·담당자 필터도 함께 적용됩니다.",
+      "exportConfirm": "CSV 다운로드",
+      "exportPresetLastMonth": "지난달",
+      "exportPresetThisMonth": "이번 달",
+      "exportPresetLast7": "최근 7일",
+      "exportAllDates": "전체 기간",
       "clearAll": "모두 지우기",
       "noTagsYet": "아직 태그가 없습니다.",
       "noAgentsYet": "아직 담당자가 없습니다.",
@@ -524,7 +534,8 @@
       "toastExported": "연락처 {count}개를 내보냈습니다",
       "toastExportFailed": "연락처를 내보내지 못했습니다",
       "toastExportForbidden": "관리자만 연락처를 내보낼 수 있습니다",
-      "toastExportEmpty": "내보낼 연락처가 없습니다"
+      "toastExportEmpty": "내보낼 연락처가 없습니다",
+      "toastExportInvalidRange": "날짜 범위가 올바르지 않습니다"
     },
     "form": {
       "addTitle": "연락처 추가",
