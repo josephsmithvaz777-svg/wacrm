@@ -58,6 +58,11 @@ export interface Profile {
    * `@/lib/auth/roles` rather than comparing this string directly.
    */
   account_role?: AccountRole;
+  /**
+   * Agent-only: admin designated this member to create team
+   * reminders (migration 071). Owner/admin ignore this flag.
+   */
+  can_manage_staff_reminders?: boolean;
   created_at: string;
 }
 
@@ -88,6 +93,8 @@ export interface AccountMember {
   avatar_url: string | null;
   role: AccountRole;
   joined_at: string;
+  /** True when an agent may manage team reminders (admin designates). */
+  can_manage_staff_reminders?: boolean;
 }
 
 /**

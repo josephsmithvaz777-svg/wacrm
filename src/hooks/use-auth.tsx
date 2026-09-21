@@ -16,6 +16,7 @@ import { DEFAULT_CURRENCY } from "@/lib/currency";
 import {
   canEditSettings as canEditSettingsFor,
   canManageMembers as canManageMembersFor,
+  canManageStaffReminders as canManageStaffRemindersFor,
   canSendMessages as canSendMessagesFor,
   isAccountRole,
   type AccountRole,
@@ -40,6 +41,8 @@ interface Profile {
   sound_notifications?: boolean | null;
   sound_messages?: boolean | null;
   phone?: string | null;
+  /** Agent designation for team reminders (migration 071). Optional. */
+  can_manage_staff_reminders?: boolean;
 }
 
 interface AccountSummary {
@@ -121,6 +124,8 @@ interface AuthContextValue {
   canEditSettings: boolean;
   /** True if the caller can send messages and edit operational data (agent+). */
   canSendMessages: boolean;
+  /** Owner/admin, or an agent designated for team reminders. */
+  canManageStaffReminders: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -258,8 +263,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               ? data.sound_messages
               : null,
           phone: typeof data.phone === "string" ? data.phone : null,
+          // Loaded in a separate query below so a missing column never
+          // blanks name/avatar (that broke the sidebar as "Usuario").
+          can_manage_staff_reminders: false,
         });
         setAccount(accountRow);
+
+        // Optional flag — never block profile hydration on this.
+        void supabase
+          .from("profiles")
+          .select("can_manage_staff_reminders")
+          .eq("user_id", userId)
+          .maybeSingle()
+          .then(({ data: flagRow, error: flagErr }) => {
+            if (flagErr || !flagRow) return;
+            const enabled = Boolean(
+              (flagRow as { can_manage_staff_reminders?: boolean })
+                .can_manage_staff_reminders,
+            );
+            setProfile((prev) =>
+              prev && prev.id === data.id
+                ? { ...prev, can_manage_staff_reminders: enabled }
+                : prev,
+            );
+          });
       } else {
         lastFetchedUserIdRef.current = null;
       }
@@ -376,8 +403,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       canManageMembers: role ? canManageMembersFor(role) : false,
       canEditSettings: role ? canEditSettingsFor(role) : false,
       canSendMessages: role ? canSendMessagesFor(role) : false,
+      canManageStaffReminders: role
+        ? canManageStaffRemindersFor(
+            role,
+            Boolean(profile?.can_manage_staff_reminders),
+          )
+        : false,
     };
-  }, [profile?.account_role, profile?.account_id]);
+  }, [
+    profile?.account_role,
+    profile?.account_id,
+    profile?.can_manage_staff_reminders,
+  ]);
 
   return (
     <AuthContext.Provider
@@ -429,6 +466,7 @@ export function useAuth(): AuthContextValue {
       canManageMembers: false,
       canEditSettings: false,
       canSendMessages: false,
+      canManageStaffReminders: false,
     };
   }
   return ctx;

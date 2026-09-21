@@ -49,6 +49,7 @@ import {
 } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -85,6 +86,7 @@ interface Member {
   avatar_url: string | null;
   role: AccountRole;
   joined_at: string;
+  can_manage_staff_reminders?: boolean;
 }
 
 interface Invitation {
@@ -269,16 +271,72 @@ export function MembersTab() {
     void loadEverything();
   }, [loadEverything]);
 
+  async function handleStaffRemindersToggle(member: Member, enabled: boolean) {
+    if (!canManageMembers || member.role !== 'agent') return;
+    if (Boolean(member.can_manage_staff_reminders) === enabled) return;
+    const previous = Boolean(member.can_manage_staff_reminders);
+    setPendingMemberAction(member.user_id);
+    setMembers((prev) =>
+      prev.map((m) =>
+        m.user_id === member.user_id
+          ? { ...m, can_manage_staff_reminders: enabled }
+          : m,
+      ),
+    );
+    try {
+      const res = await fetch(`/api/account/members/${member.user_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ can_manage_staff_reminders: enabled }),
+      });
+      if (!res.ok) {
+        setMembers((prev) =>
+          prev.map((m) =>
+            m.user_id === member.user_id
+              ? { ...m, can_manage_staff_reminders: previous }
+              : m,
+          ),
+        );
+        const payload = await res.json().catch(() => ({}));
+        toast.error(payload.error || t('staffRemindersSaveFailed'));
+        return;
+      }
+      toast.success(
+        enabled ? t('staffRemindersEnabled') : t('staffRemindersDisabled'),
+      );
+    } catch (err) {
+      setMembers((prev) =>
+        prev.map((m) =>
+          m.user_id === member.user_id
+            ? { ...m, can_manage_staff_reminders: previous }
+            : m,
+        ),
+      );
+      console.error('[MembersTab] staff reminders toggle error:', err);
+      toast.error(t('staffRemindersSaveFailed'));
+    } finally {
+      setPendingMemberAction(null);
+    }
+  }
+
   async function handleRoleChange(member: Member, nextRole: AccountRole) {
     if (member.role === nextRole) return;
     // Optimistic update — flip the dropdown immediately so the UI
     // feels snappy. If the server PATCH fails we revert below so
     // the dropdown doesn't lie about the persisted state.
     const previousRole = member.role;
+    const previousStaff = Boolean(member.can_manage_staff_reminders);
     setPendingMemberAction(member.user_id);
     setMembers((prev) =>
       prev.map((m) =>
-        m.user_id === member.user_id ? { ...m, role: nextRole } : m,
+        m.user_id === member.user_id
+          ? {
+              ...m,
+              role: nextRole,
+              can_manage_staff_reminders:
+                nextRole === 'agent' ? m.can_manage_staff_reminders : false,
+            }
+          : m,
       ),
     );
     try {
@@ -295,7 +353,13 @@ export function MembersTab() {
         // `member.role === nextRole` guard at the top).
         setMembers((prev) =>
           prev.map((m) =>
-            m.user_id === member.user_id ? { ...m, role: previousRole } : m,
+            m.user_id === member.user_id
+              ? {
+                  ...m,
+                  role: previousRole,
+                  can_manage_staff_reminders: previousStaff,
+                }
+              : m,
           ),
         );
         const payload = await res.json().catch(() => ({}));
@@ -307,7 +371,13 @@ export function MembersTab() {
       // Same revert on network failure.
       setMembers((prev) =>
         prev.map((m) =>
-          m.user_id === member.user_id ? { ...m, role: previousRole } : m,
+          m.user_id === member.user_id
+            ? {
+                ...m,
+                role: previousRole,
+                can_manage_staff_reminders: previousStaff,
+              }
+            : m,
         ),
       );
       console.error('[MembersTab] role change error:', err);
@@ -609,6 +679,23 @@ export function MembersTab() {
                         <RoleIcon className="size-3.5" />
                         {tRoles(member.role)}
                       </span>
+                    )}
+
+                    {canManageMembers && member.role === 'agent' && (
+                      <label
+                        className="flex max-w-[11rem] cursor-pointer items-start gap-2 text-[11px] leading-snug text-muted-foreground"
+                        title={t('staffRemindersHint')}
+                      >
+                        <Checkbox
+                          checked={Boolean(member.can_manage_staff_reminders)}
+                          disabled={isBusy}
+                          onCheckedChange={(v) =>
+                            void handleStaffRemindersToggle(member, v === true)
+                          }
+                          className="mt-0.5"
+                        />
+                        <span>{t('staffRemindersToggle')}</span>
+                      </label>
                     )}
 
                     {/* Remove. Admin+ only; never on the owner row;
