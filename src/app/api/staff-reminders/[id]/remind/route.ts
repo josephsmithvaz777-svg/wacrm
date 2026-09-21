@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { supabaseAdmin } from "@/lib/automations/admin-client";
 import { getCurrentAccount, toErrorResponse } from "@/lib/auth/account";
-import { hasMinRole } from "@/lib/auth/roles";
+import { canManageStaffReminders } from "@/lib/auth/roles";
 import { ensureTaskDueReminderLoop } from "@/lib/tasks/reminders";
 import {
   sendStaffReminder,
@@ -17,8 +17,18 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const { accountId, role } = await getCurrentAccount();
-    if (!hasMinRole(role, "agent")) {
+    const { accountId, role, userId, supabase } = await getCurrentAccount();
+    const { data: me } = await supabase
+      .from("profiles")
+      .select("can_manage_staff_reminders")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (
+      !canManageStaffReminders(
+        role,
+        Boolean(me?.can_manage_staff_reminders),
+      )
+    ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

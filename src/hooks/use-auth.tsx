@@ -16,6 +16,7 @@ import { DEFAULT_CURRENCY } from "@/lib/currency";
 import {
   canEditSettings as canEditSettingsFor,
   canManageMembers as canManageMembersFor,
+  canManageStaffReminders as canManageStaffRemindersFor,
   canSendMessages as canSendMessagesFor,
   isAccountRole,
   type AccountRole,
@@ -40,6 +41,7 @@ interface Profile {
   sound_notifications?: boolean | null;
   sound_messages?: boolean | null;
   phone?: string | null;
+  can_manage_staff_reminders?: boolean;
 }
 
 interface AccountSummary {
@@ -121,6 +123,8 @@ interface AuthContextValue {
   canEditSettings: boolean;
   /** True if the caller can send messages and edit operational data (agent+). */
   canSendMessages: boolean;
+  /** Owner/admin, or an agent designated for team reminders. */
+  canManageStaffReminders: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -157,7 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "id, full_name, email, avatar_url, role, beta_features, account_id, account_role, ui_theme, ui_mode, sound_notifications, sound_messages, phone",
+          "id, full_name, email, avatar_url, role, beta_features, account_id, account_role, ui_theme, ui_mode, sound_notifications, sound_messages, phone, can_manage_staff_reminders",
         )
         .eq("user_id", userId)
         .maybeSingle();
@@ -258,6 +262,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               ? data.sound_messages
               : null,
           phone: typeof data.phone === "string" ? data.phone : null,
+          can_manage_staff_reminders: Boolean(
+            (data as { can_manage_staff_reminders?: boolean })
+              .can_manage_staff_reminders,
+          ),
         });
         setAccount(accountRow);
       } else {
@@ -376,8 +384,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       canManageMembers: role ? canManageMembersFor(role) : false,
       canEditSettings: role ? canEditSettingsFor(role) : false,
       canSendMessages: role ? canSendMessagesFor(role) : false,
+      canManageStaffReminders: role
+        ? canManageStaffRemindersFor(
+            role,
+            Boolean(profile?.can_manage_staff_reminders),
+          )
+        : false,
     };
-  }, [profile?.account_role, profile?.account_id]);
+  }, [
+    profile?.account_role,
+    profile?.account_id,
+    profile?.can_manage_staff_reminders,
+  ]);
 
   return (
     <AuthContext.Provider
@@ -429,6 +447,7 @@ export function useAuth(): AuthContextValue {
       canManageMembers: false,
       canEditSettings: false,
       canSendMessages: false,
+      canManageStaffReminders: false,
     };
   }
   return ctx;
