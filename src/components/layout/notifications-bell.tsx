@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
 import type { Notification } from "@/types";
-import { Bell, CheckCheck, ListTodo, Loader2, UserPlus } from "lucide-react";
+import { Bell, Cake, CheckCheck, ListTodo, Loader2, UserPlus } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { enUS, es, ko } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import { toast } from "sonner";
 const TYPE_ICON: Record<Notification["type"], typeof Bell> = {
   conversation_assigned: UserPlus,
   task_reminder: ListTodo,
+  staff_reminder: Cake,
 };
 
 const DATE_LOCALE = { en: enUS, es, ko } as const;
@@ -48,6 +49,9 @@ export function NotificationsBell() {
       }
       if (n.type === "task_reminder") {
         return t("types.taskReminder.title");
+      }
+      if (n.type === "staff_reminder") {
+        return t("types.staffReminder.title");
       }
       return n.title;
     },
@@ -165,6 +169,10 @@ export function NotificationsBell() {
       setOpen(false);
       if (n.conversation_id) {
         router.push(`/inbox?c=${n.conversation_id}`);
+      } else if (n.type === "staff_reminder") {
+        router.push("/tasks?board=staff");
+      } else if (n.type === "task_reminder") {
+        router.push("/tasks");
       }
     },
     [markRead, router],

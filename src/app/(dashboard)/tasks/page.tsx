@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { TaskCalendar } from "@/components/tasks/task-calendar";
 import { TaskListItem } from "@/components/tasks/task-list-item";
+import { StaffRemindersPanel } from "@/components/tasks/staff-reminders-panel";
 import { Button } from "@/components/ui/button";
 import { useAssignableMembers } from "@/hooks/use-assignable-members";
 import { useAuth } from "@/hooks/use-auth";
@@ -18,6 +19,7 @@ import { shouldLockTasksToSelf } from "@/lib/tasks/scope";
 import { cn } from "@/lib/utils";
 import type { LeadTask } from "@/types";
 
+type Board = "leads" | "staff";
 type TasksView = "list" | "day" | "week" | "month";
 
 export default function TasksPage() {
@@ -35,7 +37,15 @@ export default function TasksPage() {
   const [showDone, setShowDone] = useState(false);
   const [mineOnly, setMineOnly] = useState<boolean | null>(null);
   const [view, setView] = useState<TasksView>("week");
+  const [board, setBoard] = useState<Board>("leads");
   const [anchor, setAnchor] = useState(() => new Date());
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (new URLSearchParams(window.location.search).get("board") === "staff") {
+      setBoard("staff");
+    }
+  }, []);
   const scopedToSelf = lockToSelf || (mineOnly ?? isAgent);
 
   const load = useCallback(async () => {
@@ -223,51 +233,87 @@ export default function TasksPage() {
         <div>
           <h1 className="text-lg font-semibold text-foreground">{t("title")}</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            {scopedToSelf ? t("subtitleMine") : t("subtitle")}
+            {board === "staff"
+              ? t("staffSubtitle")
+              : scopedToSelf
+                ? t("subtitleMine")
+                : t("subtitle")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-lg border border-border p-0.5">
-            {views.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setView(item.id)}
-                className={cn(
-                  "rounded-md px-2.5 py-1 text-xs font-medium",
-                  view === item.id
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {item.label}
-              </button>
-            ))}
+            <button
+              type="button"
+              onClick={() => setBoard("leads")}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-xs font-medium",
+                board === "leads"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {t("boardLeads")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setBoard("staff")}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-xs font-medium",
+                board === "staff"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {t("boardStaff")}
+            </button>
           </div>
-          <Button
-            variant={scopedToSelf ? "secondary" : "outline"}
-            size="sm"
-            disabled={lockToSelf}
-            title={lockToSelf ? t("onlyMineLocked") : undefined}
-            onClick={() => {
-              if (lockToSelf) return;
-              setMineOnly(!scopedToSelf);
-            }}
-          >
-            {t("onlyMine")}
-          </Button>
-          <Button
-            variant={showDone ? "secondary" : "outline"}
-            size="sm"
-            onClick={() => setShowDone((v) => !v)}
-          >
-            {showDone ? t("hideDone") : t("showDone")}
-          </Button>
+          {board === "leads" && (
+            <>
+              <div className="flex rounded-lg border border-border p-0.5">
+                {views.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setView(item.id)}
+                    className={cn(
+                      "rounded-md px-2.5 py-1 text-xs font-medium",
+                      view === item.id
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <Button
+                variant={scopedToSelf ? "secondary" : "outline"}
+                size="sm"
+                disabled={lockToSelf}
+                title={lockToSelf ? t("onlyMineLocked") : undefined}
+                onClick={() => {
+                  if (lockToSelf) return;
+                  setMineOnly(!scopedToSelf);
+                }}
+              >
+                {t("onlyMine")}
+              </Button>
+              <Button
+                variant={showDone ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setShowDone((v) => !v)}
+              >
+                {showDone ? t("hideDone") : t("showDone")}
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-4">
-        {loading ? (
+        {board === "staff" ? (
+          <StaffRemindersPanel canEdit={canEdit} />
+        ) : loading ? (
           <p className="text-sm text-muted-foreground">{t("loading")}</p>
         ) : view !== "list" ? (
           tasks.every((task) => !task.due_at) ? (

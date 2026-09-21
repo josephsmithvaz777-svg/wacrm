@@ -25,6 +25,10 @@ export const TASK_ICONS = [
   "📌",
   "💬",
   "📅",
+  "🧹",
+  "🎂",
+  "🧼",
+  "🎉",
   "🔥",
   "🎯",
 ] as const;

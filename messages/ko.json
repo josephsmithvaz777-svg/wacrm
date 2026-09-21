@@ -182,6 +182,9 @@
       },
       "taskReminder": {
         "title": "오늘 할 일"
+      },
+      "staffReminder": {
+        "title": "팀 알림"
       }
     }
   },
@@ -702,6 +705,9 @@
       "title": "작업",
       "subtitle": "리드별 할 일. 채팅이나 연락처에서 추가하세요.",
       "subtitleMine": "본인에게 배정된 할 일만 표시됩니다. 채팅이나 연락처에서 추가하세요.",
+      "staffSubtitle": "내부 알림: 청소일, 생일 등. CRM에 없는 번호도 추가할 수 있습니다.",
+      "boardLeads": "리드",
+      "boardStaff": "팀",
       "loading": "작업 불러오는 중…",
       "emptyTitle": "열린 작업 없음",
       "emptyBody": "채팅을 열고 연락처 패널에서 작업을 추가하세요.",
@@ -786,6 +792,52 @@
       "toastNewAppointmentSaved": "새 일정을 만들었습니다",
       "toastNotifyOk": "담당자에게 알림을 보냈습니다",
       "toastNotifyFailed": "작업은 만들었지만 담당자에게 알리지 못했습니다"
+    },
+    "staff": {
+      "createTitle": "새 팀 알림",
+      "createHint": "연락처는 만들지 않습니다. CRM 멤버 또는 외부 WhatsApp 번호로 알립니다.",
+      "presetCleaning": "청소일",
+      "presetBirthday": "생일",
+      "presetCleaningTitle": "청소일",
+      "presetBirthdayTitle": "팀 생일",
+      "icon": "아이콘",
+      "titlePlaceholder": "알림 제목…",
+      "when": "알림 시각",
+      "date": "날짜",
+      "time": "시간",
+      "repeat": "반복",
+      "recurrence": {
+        "once": "한 번",
+        "weekly": "매주",
+        "yearly": "매년"
+      },
+      "notesPlaceholder": "메모(선택)…",
+      "members": "CRM에 있는 직원",
+      "membersHint": "앱 알림, WhatsApp(번호가 있으면), 이메일을 받습니다.",
+      "noMembers": "멤버를 불러오지 못했습니다.",
+      "you": "나",
+      "externalTitle": "CRM에 없는 번호",
+      "externalHint": "동료의 이름과 WhatsApp. 리드로 저장되지 않습니다.",
+      "externalName": "이름",
+      "externalPhone": "WhatsApp (51…)",
+      "addPhone": "추가",
+      "create": "알림 만들기",
+      "saving": "저장 중…",
+      "loading": "불러오는 중…",
+      "emptyTitle": "팀 알림 없음",
+      "emptyBody": "청소일, 생일 또는 다른 내부 알림을 만드세요.",
+      "sendNow": "지금 보내기",
+      "done": "완료",
+      "toastBadPhone": "WhatsApp 번호가 올바르지 않습니다",
+      "toastDupPhone": "이미 목록에 있는 번호입니다",
+      "toastNeedTitle": "제목을 입력하세요",
+      "toastNeedDate": "날짜와 시간을 선택하세요",
+      "toastNeedRecipients": "멤버 또는 번호를 하나 이상 선택하세요",
+      "toastSaveFailed": "알림을 저장하지 못했습니다",
+      "toastDeleteFailed": "삭제하지 못했습니다",
+      "toastCreated": "알림을 만들었습니다",
+      "toastRemindOk": "알림을 보냈습니다",
+      "toastRemindFailed": "알림을 보내지 못했습니다"
     }
   },
   "Pipelines": {

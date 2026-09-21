@@ -182,6 +182,9 @@
       },
       "taskReminder": {
         "title": "Tarea para hoy"
+      },
+      "staffReminder": {
+        "title": "Recordatorio del equipo"
       }
     }
   },
@@ -724,6 +727,9 @@
       "title": "Tareas",
       "subtitle": "Pendientes de cada lead. Créalas desde el chat o la ficha del contacto.",
       "subtitleMine": "Solo ves las tareas asignadas a ti. Créalas desde el chat o la ficha del contacto.",
+      "staffSubtitle": "Avisos internos: limpieza, cumpleaños y más. Incluye números que no están en el CRM.",
+      "boardLeads": "Leads",
+      "boardStaff": "Equipo",
       "loading": "Cargando tareas…",
       "emptyTitle": "No hay tareas abiertas",
       "emptyBody": "Abre un chat y agrega una tarea en el panel del contacto.",
@@ -808,6 +814,52 @@
       "toastNewAppointmentSaved": "Nueva cita creada",
       "toastNotifyOk": "Aviso enviado al asesor",
       "toastNotifyFailed": "La tarea se creó, pero no se pudo avisar al asesor"
+    },
+    "staff": {
+      "createTitle": "Nuevo recordatorio del equipo",
+      "createHint": "No se crea un contacto. Avisa a miembros del CRM o a números externos por WhatsApp.",
+      "presetCleaning": "Día de limpieza",
+      "presetBirthday": "Cumpleaños",
+      "presetCleaningTitle": "Día de limpieza",
+      "presetBirthdayTitle": "Cumpleaños del equipo",
+      "icon": "Icono",
+      "titlePlaceholder": "Título del recordatorio…",
+      "when": "Cuándo avisar",
+      "date": "Fecha",
+      "time": "Hora",
+      "repeat": "Repetir",
+      "recurrence": {
+        "once": "Una vez",
+        "weekly": "Cada semana",
+        "yearly": "Cada año"
+      },
+      "notesPlaceholder": "Notas (opcional)…",
+      "members": "Personal en el CRM",
+      "membersHint": "Reciben aviso en la app, WhatsApp (si tienen número) y correo.",
+      "noMembers": "No hay miembros cargados.",
+      "you": "tú",
+      "externalTitle": "Números que no están en el CRM",
+      "externalHint": "Nombre y WhatsApp del compañero. No se guarda como lead.",
+      "externalName": "Nombre",
+      "externalPhone": "WhatsApp (51…)",
+      "addPhone": "Agregar",
+      "create": "Crear recordatorio",
+      "saving": "Guardando…",
+      "loading": "Cargando…",
+      "emptyTitle": "No hay recordatorios del equipo",
+      "emptyBody": "Crea uno para limpieza, cumpleaños u otro aviso interno.",
+      "sendNow": "Enviar ahora",
+      "done": "Hecho",
+      "toastBadPhone": "Ese número de WhatsApp no es válido",
+      "toastDupPhone": "Ese número ya está en la lista",
+      "toastNeedTitle": "Escribe un título",
+      "toastNeedDate": "Elige fecha y hora",
+      "toastNeedRecipients": "Elige al menos un miembro o un número",
+      "toastSaveFailed": "No se pudo guardar el recordatorio",
+      "toastCreated": "Recordatorio creado",
+      "toastDeleteFailed": "No se pudo eliminar",
+      "toastRemindOk": "Aviso enviado",
+      "toastRemindFailed": "No se pudo enviar el aviso"
     }
   },
   "Pipelines": {

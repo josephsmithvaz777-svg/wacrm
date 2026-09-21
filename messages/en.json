@@ -182,6 +182,9 @@
       },
       "taskReminder": {
         "title": "Task due today"
+      },
+      "staffReminder": {
+        "title": "Team reminder"
       }
     }
   },
@@ -703,6 +706,9 @@
       "title": "Tasks",
       "subtitle": "To-dos for each lead. Add them from a chat or the contact sheet.",
       "subtitleMine": "You only see tasks assigned to you. Add them from a chat or the contact sheet.",
+      "staffSubtitle": "Internal reminders: cleaning day, birthdays, and more. Includes numbers that are not in the CRM.",
+      "boardLeads": "Leads",
+      "boardStaff": "Team",
       "loading": "Loading tasks…",
       "emptyTitle": "No open tasks",
       "emptyBody": "Open a chat and add a task in the contact panel.",
@@ -787,6 +793,52 @@
       "toastNewAppointmentSaved": "New appointment created",
       "toastNotifyOk": "Advisor notified",
       "toastNotifyFailed": "Task saved, but the advisor couldn’t be notified"
+    },
+    "staff": {
+      "createTitle": "New team reminder",
+      "createHint": "This does not create a contact. It notifies CRM members or external WhatsApp numbers.",
+      "presetCleaning": "Cleaning day",
+      "presetBirthday": "Birthday",
+      "presetCleaningTitle": "Cleaning day",
+      "presetBirthdayTitle": "Team birthday",
+      "icon": "Icon",
+      "titlePlaceholder": "Reminder title…",
+      "when": "When to notify",
+      "date": "Date",
+      "time": "Time",
+      "repeat": "Repeat",
+      "recurrence": {
+        "once": "Once",
+        "weekly": "Every week",
+        "yearly": "Every year"
+      },
+      "notesPlaceholder": "Notes (optional)…",
+      "members": "People in the CRM",
+      "membersHint": "They get an in-app notice, WhatsApp (if they have a number), and email.",
+      "noMembers": "No members loaded.",
+      "you": "you",
+      "externalTitle": "Numbers not in the CRM",
+      "externalHint": "Name and WhatsApp of a teammate. They are not saved as a lead.",
+      "externalName": "Name",
+      "externalPhone": "WhatsApp (51…)",
+      "addPhone": "Add",
+      "create": "Create reminder",
+      "saving": "Saving…",
+      "loading": "Loading…",
+      "emptyTitle": "No team reminders",
+      "emptyBody": "Create one for cleaning day, a birthday, or another internal notice.",
+      "sendNow": "Send now",
+      "done": "Done",
+      "toastBadPhone": "That WhatsApp number is not valid",
+      "toastDupPhone": "That number is already on the list",
+      "toastNeedTitle": "Enter a title",
+      "toastNeedDate": "Choose a date and time",
+      "toastNeedRecipients": "Pick at least one member or number",
+      "toastSaveFailed": "Couldn’t save the reminder",
+      "toastCreated": "Reminder created",
+      "toastDeleteFailed": "Couldn’t delete",
+      "toastRemindOk": "Reminder sent",
+      "toastRemindFailed": "Couldn’t send the reminder"
     }
   },
   "Pipelines": {

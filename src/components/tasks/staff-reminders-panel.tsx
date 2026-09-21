@@ -1,0 +1,517 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { Bell, Plus, Trash2, Users } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+
+import { TaskIconPicker } from "@/components/inbox/task-icon-picker";
+import { TaskDueFields } from "@/components/tasks/task-due-fields";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { GatedButton } from "@/components/ui/gated-button";
+import { useAuth } from "@/hooks/use-auth";
+import { fetchAccountMembers, memberLabel } from "@/lib/account/members";
+import { isUsableStaffPhone, staffPhoneDigits } from "@/lib/automations/staff-notify";
+import { AUTOMATION_GREETING_TZ, formatAlertDateTime } from "@/lib/automations/template-vars";
+import { calendarDateInZone, combineLocalDateAndTime } from "@/lib/datetime/zoned";
+import { createClient } from "@/lib/supabase/client";
+import { type StaffRecurrence } from "@/lib/tasks/staff-reminder";
+import { cn } from "@/lib/utils";
+import type { StaffReminder, StaffReminderRecipient } from "@/types";
+
+interface TeamMember {
+  user_id: string;
+  label: string;
+  email: string | null;
+}
+
+interface ExternalRecipient {
+  phone: string;
+  label: string;
+}
+
+const PRESETS: {
+  id: "cleaning" | "birthday";
+  icon: string;
+  recurrence: StaffRecurrence;
+}[] = [
+  { id: "cleaning", icon: "🧹", recurrence: "weekly" },
+  { id: "birthday", icon: "🎂", recurrence: "yearly" },
+];
+
+export function StaffRemindersPanel({ canEdit }: { canEdit: boolean }) {
+  const t = useTranslations("Tasks.staff");
+  const { accountId, user } = useAuth();
+  const [items, setItems] = useState<StaffReminder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [members, setMembers] = useState<TeamMember[]>([]);
+
+  const [title, setTitle] = useState("");
+  const [icon, setIcon] = useState("🧹");
+  const [notes, setNotes] = useState("");
+  const [dueDate, setDueDate] = useState(() =>
+    calendarDateInZone(new Date(), AUTOMATION_GREETING_TZ),
+  );
+  const [dueTime, setDueTime] = useState("09:00");
+  const [recurrence, setRecurrence] = useState<StaffRecurrence>("once");
+  const [memberIds, setMemberIds] = useState<string[]>([]);
+  const [externals, setExternals] = useState<ExternalRecipient[]>([]);
+  const [extName, setExtName] = useState("");
+  const [extPhone, setExtPhone] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("staff_reminders")
+      .select("*, recipients:staff_reminder_recipients(*)")
+      .is("completed_at", null)
+      .order("due_at", { ascending: true });
+    if (error) {
+      toast.error(t("toastSaveFailed"));
+      setItems([]);
+    } else {
+      setItems((data as StaffReminder[]) ?? []);
+    }
+    setLoading(false);
+  }, [t]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    void fetchAccountMembers().then((all) => {
+      setMembers(
+        all.map((member) => ({
+          user_id: member.user_id,
+          label: memberLabel(member),
+          email: member.email,
+        })),
+      );
+    });
+  }, []);
+
+  function applyPreset(id: "cleaning" | "birthday") {
+    const preset = PRESETS.find((p) => p.id === id);
+    if (!preset) return;
+    setIcon(preset.icon);
+    setRecurrence(preset.recurrence);
+    setTitle(id === "cleaning" ? t("presetCleaningTitle") : t("presetBirthdayTitle"));
+  }
+
+  function toggleMember(id: string) {
+    setMemberIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  function addExternal() {
+    const phone = extPhone.trim();
+    if (!isUsableStaffPhone(phone)) {
+      toast.error(t("toastBadPhone"));
+      return;
+    }
+    const digits = staffPhoneDigits(phone);
+    if (externals.some((e) => staffPhoneDigits(e.phone) === digits)) {
+      toast.error(t("toastDupPhone"));
+      return;
+    }
+    setExternals((prev) => [
+      ...prev,
+      { phone, label: extName.trim() || phone },
+    ]);
+    setExtName("");
+    setExtPhone("");
+  }
+
+  async function handleCreate() {
+    if (!canEdit || !accountId || saving) return;
+    const trimmed = title.trim();
+    if (!trimmed) {
+      toast.error(t("toastNeedTitle"));
+      return;
+    }
+    const dueIso = combineLocalDateAndTime(dueDate, dueTime);
+    if (!dueIso) {
+      toast.error(t("toastNeedDate"));
+      return;
+    }
+    if (memberIds.length === 0 && externals.length === 0) {
+      toast.error(t("toastNeedRecipients"));
+      return;
+    }
+
+    setSaving(true);
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("staff_reminders")
+      .insert({
+        account_id: accountId,
+        created_by: user?.id ?? null,
+        title: trimmed,
+        icon: icon || null,
+        notes: notes.trim() || null,
+        due_at: dueIso,
+        recurrence,
+      })
+      .select("id")
+      .single();
+    if (error || !data?.id) {
+      toast.error(t("toastSaveFailed"));
+      setSaving(false);
+      return;
+    }
+
+    const rows = [
+      ...memberIds.map((user_id) => ({
+        reminder_id: data.id,
+        account_id: accountId,
+        user_id,
+        phone: null,
+        email: members.find((m) => m.user_id === user_id)?.email ?? null,
+        label: members.find((m) => m.user_id === user_id)?.label ?? null,
+      })),
+      ...externals.map((e) => ({
+        reminder_id: data.id,
+        account_id: accountId,
+        user_id: null,
+        phone: e.phone,
+        email: null,
+        label: e.label,
+      })),
+    ];
+    const { error: recErr } = await supabase
+      .from("staff_reminder_recipients")
+      .insert(rows);
+    if (recErr) {
+      await supabase.from("staff_reminders").delete().eq("id", data.id);
+      toast.error(t("toastSaveFailed"));
+      setSaving(false);
+      return;
+    }
+
+    toast.success(t("toastCreated"));
+    setTitle("");
+    setNotes("");
+    setMemberIds([]);
+    setExternals([]);
+    setSaving(false);
+    await load();
+  }
+
+  async function handleDelete(id: string) {
+    if (!canEdit) return;
+    const supabase = createClient();
+    const { error } = await supabase.from("staff_reminders").delete().eq("id", id);
+    if (error) {
+      toast.error(t("toastDeleteFailed"));
+      return;
+    }
+    await load();
+  }
+
+  async function handleComplete(id: string) {
+    if (!canEdit) return;
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("staff_reminders")
+      .update({ completed_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) {
+      toast.error(t("toastSaveFailed"));
+      return;
+    }
+    await load();
+  }
+
+  async function handleRemindNow(id: string) {
+    const res = await fetch(`/api/staff-reminders/${id}/remind`, {
+      method: "POST",
+    });
+    const body = (await res.json().catch(() => ({}))) as {
+      whatsapp?: number;
+      email?: number;
+      notified?: number;
+      errors?: string[];
+    };
+    if (!res.ok) {
+      toast.error(t("toastRemindFailed"));
+      return;
+    }
+    if ((body.whatsapp ?? 0) > 0 || (body.email ?? 0) > 0 || (body.notified ?? 0) > 0) {
+      toast.success(t("toastRemindOk"));
+    } else {
+      toast.error(body.errors?.[0] || t("toastRemindFailed"));
+    }
+    await load();
+  }
+
+  return (
+    <div className="space-y-6">
+      {canEdit && (
+        <section className="rounded-xl border border-border bg-card p-4">
+          <h2 className="text-sm font-semibold text-foreground">{t("createTitle")}</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">{t("createHint")}</p>
+
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => applyPreset(preset.id)}
+                className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                {preset.icon}{" "}
+                {preset.id === "cleaning" ? t("presetCleaning") : t("presetBirthday")}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-3 flex items-center gap-2">
+            <TaskIconPicker
+              value={icon}
+              onChange={setIcon}
+              label={t("icon")}
+            />
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={t("titlePlaceholder")}
+              className="bg-muted border-border text-foreground"
+            />
+          </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="mb-1 text-[11px] text-muted-foreground">{t("when")}</p>
+              <TaskDueFields
+                date={dueDate}
+                time={dueTime}
+                onDate={setDueDate}
+                onTime={setDueTime}
+                dateLabel={t("date")}
+                timeLabel={t("time")}
+              />
+            </div>
+            <div>
+              <p className="mb-1 text-[11px] text-muted-foreground">{t("repeat")}</p>
+              <div className="flex flex-wrap gap-1">
+                {(["once", "weekly", "yearly"] as StaffRecurrence[]).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setRecurrence(value)}
+                    className={cn(
+                      "rounded-md px-2.5 py-1 text-xs font-medium",
+                      recurrence === value
+                        ? "bg-primary text-primary-foreground"
+                        : "border border-border text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {t(`recurrence.${value}`)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <Input
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder={t("notesPlaceholder")}
+            className="mt-3 bg-muted border-border text-foreground"
+          />
+
+          <div className="mt-4">
+            <p className="text-xs font-medium text-foreground">{t("members")}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">{t("membersHint")}</p>
+            <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
+              {members.length === 0 ? (
+                <p className="px-1 py-2 text-xs text-muted-foreground">{t("noMembers")}</p>
+              ) : (
+                members.map((member) => (
+                  <label
+                    key={member.user_id}
+                    className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-1 hover:bg-muted/50"
+                  >
+                    <Checkbox
+                      checked={memberIds.includes(member.user_id)}
+                      onCheckedChange={() => toggleMember(member.user_id)}
+                    />
+                    <span className="text-sm text-foreground">{member.label}</span>
+                    {member.user_id === user?.id && (
+                      <span className="text-[10px] text-muted-foreground">{t("you")}</span>
+                    )}
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <p className="text-xs font-medium text-foreground">{t("externalTitle")}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">{t("externalHint")}</p>
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+              <Input
+                value={extName}
+                onChange={(e) => setExtName(e.target.value)}
+                placeholder={t("externalName")}
+                className="bg-muted border-border text-foreground"
+              />
+              <Input
+                value={extPhone}
+                onChange={(e) => setExtPhone(e.target.value)}
+                placeholder={t("externalPhone")}
+                className="bg-muted border-border text-foreground"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addExternal}
+                className="shrink-0 border-border"
+              >
+                <Plus className="size-4" />
+                {t("addPhone")}
+              </Button>
+            </div>
+            {externals.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {externals.map((e) => (
+                  <span
+                    key={e.phone}
+                    className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-foreground"
+                  >
+                    {e.label} · {e.phone}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExternals((prev) => prev.filter((x) => x.phone !== e.phone))
+                      }
+                      className="hover:opacity-70"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <GatedButton
+            canAct={canEdit}
+            gateReason="create team reminders"
+            onClick={() => void handleCreate()}
+            disabled={saving}
+            className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            {saving ? t("saving") : t("create")}
+          </GatedButton>
+        </section>
+      )}
+
+      <section>
+        {loading ? (
+          <p className="text-sm text-muted-foreground">{t("loading")}</p>
+        ) : items.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <Users className="h-8 w-8 text-muted-foreground" />
+            <p className="mt-3 text-sm font-medium text-foreground">{t("emptyTitle")}</p>
+            <p className="mt-1 max-w-sm text-xs text-muted-foreground">{t("emptyBody")}</p>
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {items.map((item) => (
+              <StaffReminderRow
+                key={item.id}
+                item={item}
+                canEdit={canEdit}
+                t={t}
+                onDelete={() => void handleDelete(item.id)}
+                onComplete={() => void handleComplete(item.id)}
+                onRemind={() => void handleRemindNow(item.id)}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function StaffReminderRow({
+  item,
+  canEdit,
+  t,
+  onDelete,
+  onComplete,
+  onRemind,
+}: {
+  item: StaffReminder;
+  canEdit: boolean;
+  t: ReturnType<typeof useTranslations>;
+  onDelete: () => void;
+  onComplete: () => void;
+  onRemind: () => void;
+}) {
+  const due = formatAlertDateTime(new Date(item.due_at));
+  const people = (item.recipients ?? []).map(recipientLabel).filter(Boolean);
+
+  return (
+    <li className="rounded-xl border border-border bg-card px-4 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-foreground">
+            {item.icon ? `${item.icon} ` : ""}
+            {item.title}
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {due} · {t(`recurrence.${item.recurrence}`)}
+          </p>
+          {people.length > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground">{people.join(" · ")}</p>
+          )}
+          {item.notes && (
+            <p className="mt-1 text-xs text-foreground/80">{item.notes}</p>
+          )}
+        </div>
+        {canEdit && (
+          <div className="flex flex-wrap items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRemind}
+              className="border-border text-muted-foreground"
+            >
+              <Bell className="size-3.5" />
+              {t("sendNow")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onComplete}
+              className="border-border text-muted-foreground"
+            >
+              {t("done")}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onDelete}
+              className="text-muted-foreground hover:text-destructive"
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          </div>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function recipientLabel(row: StaffReminderRecipient): string {
+  return (row.label || row.phone || "").trim();
+}

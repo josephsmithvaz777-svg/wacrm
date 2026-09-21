@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { sendDueTaskReminders, ensureTaskDueReminderLoop } from "@/lib/tasks/reminders";
+import { sendDueStaffReminders } from "@/lib/tasks/staff-reminder-send";
 
 /**
  * Daily task reminders for advisors (WhatsApp + email + in-app).
@@ -26,5 +27,6 @@ export async function GET(request: Request) {
 
   ensureTaskDueReminderLoop();
   const reminders = await sendDueTaskReminders();
-  return NextResponse.json({ reminders });
+  const staff = await sendDueStaffReminders();
+  return NextResponse.json({ reminders, staff });
 }

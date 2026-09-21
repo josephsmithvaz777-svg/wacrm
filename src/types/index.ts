@@ -196,6 +196,37 @@ export interface LeadTask {
   contact?: Pick<Contact, "id" | "name" | "phone">;
 }
 
+export type StaffRecurrence = "once" | "weekly" | "yearly";
+
+export interface StaffReminderRecipient {
+  id: string;
+  reminder_id: string;
+  account_id: string;
+  user_id?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  label?: string | null;
+  created_at?: string;
+}
+
+export interface StaffReminder {
+  id: string;
+  account_id: string;
+  created_by?: string | null;
+  title: string;
+  icon?: string | null;
+  notes?: string | null;
+  due_at: string;
+  recurrence: StaffRecurrence;
+  reminder_sent_at?: string | null;
+  reminder_whatsapp_at?: string | null;
+  reminder_email_at?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+  updated_at?: string;
+  recipients?: StaffReminderRecipient[];
+}
+
 export type ConversationStatus = 'open' | 'pending' | 'closed';
 
 export interface Conversation {
@@ -228,7 +259,7 @@ export interface Conversation {
 // Notifications (migration 027)
 // ============================================================
 
-export type NotificationType = 'conversation_assigned' | 'task_reminder';
+export type NotificationType = 'conversation_assigned' | 'task_reminder' | 'staff_reminder';
 
 export interface Notification {
   id: string;

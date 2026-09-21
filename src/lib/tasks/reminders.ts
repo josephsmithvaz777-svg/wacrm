@@ -281,6 +281,12 @@ async function runDueSweep(): Promise<void> {
   } catch (err) {
     console.error("[task-reminders] sweep failed:", err);
   }
+  try {
+    const { sendDueStaffReminders } = await import("@/lib/tasks/staff-reminder-send");
+    await sendDueStaffReminders();
+  } catch (err) {
+    console.error("[staff-reminders] sweep failed:", err);
+  }
 }
 
 /**
