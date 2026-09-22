@@ -121,7 +121,7 @@ export function StaffReminderCalendar({
         : format(anchor, "MMMM yyyy", { locale: dateLocale });
 
   return (
-    <div className="flex min-h-[32rem] flex-1 flex-col">
+    <div className="flex h-full min-h-0 flex-1 flex-col">
       <div className="mb-3 flex items-center gap-2">
         <Button
           type="button"

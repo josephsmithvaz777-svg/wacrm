@@ -795,6 +795,7 @@
     },
     "staff": {
       "createTitle": "새 팀 알림",
+      "newReminder": "새 알림",
       "createHint": "리드는 만들지 않습니다. WhatsApp은 고른 날짜와 시각에 발송됩니다.",
       "readOnlyHint": "관리자 또는 권한을 받은 상담원만 이 알림을 만들거나 수정할 수 있습니다.",
       "presetCleaning": "청소일",

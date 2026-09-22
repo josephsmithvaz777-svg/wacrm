@@ -10,6 +10,13 @@ import { StaffReminderCalendar } from "@/components/tasks/staff-reminder-calenda
 import { TaskDueFields } from "@/components/tasks/task-due-fields";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { GatedButton } from "@/components/ui/gated-button";
 import { useAuth } from "@/hooks/use-auth";
@@ -69,6 +76,7 @@ export function StaffRemindersPanel({
   const [extName, setExtName] = useState("");
   const [extPhone, setExtPhone] = useState("");
   const [savingExternal, setSavingExternal] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -275,6 +283,7 @@ export function StaffRemindersPanel({
     setMemberIds([]);
     setSelectedPhones([]);
     setSaving(false);
+    setCreateOpen(false);
     await load();
   }
 
@@ -326,23 +335,35 @@ export function StaffRemindersPanel({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       {!canEdit && (
-        <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+        <p className="shrink-0 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
           {t("readOnlyHint")}
         </p>
       )}
-      {canEdit && (
-        <section
-          className={cn(
-            "rounded-xl border border-border bg-card p-4",
-            view !== "list" && "order-2",
-          )}
-        >
-          <h2 className="text-sm font-semibold text-foreground">{t("createTitle")}</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">{t("createHint")}</p>
 
-          <div className="mt-3 flex flex-wrap gap-1.5">
+      {canEdit && (
+        <div className="flex shrink-0 items-center justify-end">
+          <GatedButton
+            canAct={canEdit}
+            gateReason="create team reminders"
+            onClick={() => setCreateOpen(true)}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            <Plus className="size-4" />
+            {t("newReminder")}
+          </GatedButton>
+        </div>
+      )}
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[min(90vh,44rem)] w-full overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("createTitle")}</DialogTitle>
+            <DialogDescription>{t("createHint")}</DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-wrap gap-1.5">
             {PRESETS.map((preset) => (
               <button
                 key={preset.id}
@@ -356,12 +377,8 @@ export function StaffRemindersPanel({
             ))}
           </div>
 
-          <div className="mt-3 flex items-center gap-2">
-            <TaskIconPicker
-              value={icon}
-              onChange={setIcon}
-              label={t("icon")}
-            />
+          <div className="flex items-center gap-2">
+            <TaskIconPicker value={icon} onChange={setIcon} label={t("icon")} />
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -370,7 +387,7 @@ export function StaffRemindersPanel({
             />
           </div>
 
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <p className="mb-1 text-[11px] text-muted-foreground">{t("when")}</p>
               <TaskDueFields
@@ -381,6 +398,7 @@ export function StaffRemindersPanel({
                 dateLabel={t("date")}
                 timeLabel={t("time")}
               />
+              <p className="mt-1.5 text-[11px] text-muted-foreground">{t("whatsappAtTime")}</p>
             </div>
             <div>
               <p className="mb-1 text-[11px] text-muted-foreground">{t("repeat")}</p>
@@ -436,19 +454,17 @@ export function StaffRemindersPanel({
             </div>
           </div>
 
-          <p className="mt-2 text-[11px] text-muted-foreground">{t("whatsappAtTime")}</p>
-
           <Input
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder={t("notesPlaceholder")}
-            className="mt-3 bg-muted border-border text-foreground"
+            className="bg-muted border-border text-foreground"
           />
 
-          <div className="mt-4">
+          <div>
             <p className="text-xs font-medium text-foreground">{t("members")}</p>
             <p className="mt-0.5 text-[11px] text-muted-foreground">{t("membersHint")}</p>
-            <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
+            <div className="mt-2 max-h-36 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
               {members.length === 0 ? (
                 <p className="px-1 py-2 text-xs text-muted-foreground">{t("noMembers")}</p>
               ) : (
@@ -471,10 +487,10 @@ export function StaffRemindersPanel({
             </div>
           </div>
 
-          <div className="mt-4">
+          <div>
             <p className="text-xs font-medium text-foreground">{t("externalTitle")}</p>
             <p className="mt-0.5 text-[11px] text-muted-foreground">{t("externalHint")}</p>
-            <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
+            <div className="mt-2 max-h-36 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
               {directory.length === 0 ? (
                 <p className="px-1 py-2 text-xs text-muted-foreground">{t("externalEmpty")}</p>
               ) : (
@@ -538,14 +554,14 @@ export function StaffRemindersPanel({
             gateReason="create team reminders"
             onClick={() => void handleCreate()}
             disabled={saving}
-            className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90"
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
             {saving ? t("saving") : t("create")}
           </GatedButton>
-        </section>
-      )}
+        </DialogContent>
+      </Dialog>
 
-      <section className={cn("min-h-0 flex-1", view !== "list" && "order-1")}>
+      <section className="min-h-0 flex-1">
         {loading ? (
           <p className="text-sm text-muted-foreground">{t("loading")}</p>
         ) : view !== "list" ? (

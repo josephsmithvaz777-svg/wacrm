@@ -311,7 +311,12 @@ export default function TasksPage() {
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-4">
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 flex-col px-6 py-4",
+          board === "staff" && view !== "list" ? "overflow-hidden" : "overflow-y-auto",
+        )}
+      >
         {board === "staff" ? (
           <StaffRemindersPanel
             canEdit={canEditStaff}

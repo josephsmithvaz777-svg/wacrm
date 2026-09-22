@@ -796,6 +796,7 @@
     },
     "staff": {
       "createTitle": "New team reminder",
+      "newReminder": "New reminder",
       "createHint": "This does not create a lead. WhatsApp goes out on the date and time you pick.",
       "readOnlyHint": "Only an admin or a designated agent can create or edit these reminders.",
       "presetCleaning": "Cleaning day",

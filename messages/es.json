@@ -817,6 +817,7 @@
     },
     "staff": {
       "createTitle": "Nuevo recordatorio del equipo",
+      "newReminder": "Nuevo recordatorio",
       "createHint": "No se crea un lead. El WhatsApp sale el día y la hora que elijas.",
       "readOnlyHint": "Solo un administrador o un agente autorizado puede crear o editar estos avisos.",
       "presetCleaning": "Día de limpieza",
