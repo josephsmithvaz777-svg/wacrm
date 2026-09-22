@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Bell, ChevronLeft, ChevronRight } from "lucide-react";
+import { Bell, ChevronLeft, ChevronRight, Pencil } from "lucide-react";
 import { enUS, es, ko } from "date-fns/locale";
 import { format } from "date-fns";
 
@@ -58,6 +58,7 @@ export function StaffReminderCalendar({
   anchor,
   onAnchorChange,
   canEdit,
+  onEdit,
   onDelete,
   onComplete,
   onRemind,
@@ -67,6 +68,7 @@ export function StaffReminderCalendar({
   anchor: Date;
   onAnchorChange: (next: Date) => void;
   canEdit: boolean;
+  onEdit: (item: StaffReminder) => void;
   onDelete: (id: string) => void;
   onComplete: (id: string) => void;
   onRemind: (id: string) => void;
@@ -192,6 +194,7 @@ export function StaffReminderCalendar({
                       event={event}
                       canEdit={canEdit}
                       t={t}
+                      onEdit={onEdit}
                       onDelete={onDelete}
                       onComplete={onComplete}
                       onRemind={onRemind}
@@ -282,6 +285,7 @@ export function StaffReminderCalendar({
                         event={event}
                         canEdit={canEdit}
                         t={t}
+                        onEdit={onEdit}
                         onDelete={onDelete}
                         onComplete={onComplete}
                         onRemind={onRemind}
@@ -303,6 +307,7 @@ function StaffEventChip({
   event,
   canEdit,
   t,
+  onEdit,
   onDelete,
   onComplete,
   onRemind,
@@ -311,6 +316,7 @@ function StaffEventChip({
   event: Occurrence;
   canEdit: boolean;
   t: ReturnType<typeof useTranslations>;
+  onEdit: (item: StaffReminder) => void;
   onDelete: (id: string) => void;
   onComplete: (id: string) => void;
   onRemind: (id: string) => void;
@@ -361,6 +367,15 @@ function StaffEventChip({
         ) : null}
         {canEdit ? (
           <div className="flex flex-wrap gap-1 pt-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onEdit(reminder)}
+              className="border-border text-muted-foreground"
+            >
+              <Pencil className="size-3.5" />
+              {t("edit")}
+            </Button>
             <Button
               variant="outline"
               size="sm"

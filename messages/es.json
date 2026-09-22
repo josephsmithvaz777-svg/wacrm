@@ -817,7 +817,11 @@
     },
     "staff": {
       "createTitle": "Nuevo recordatorio del equipo",
+      "editTitle": "Editar recordatorio del equipo",
+      "editHint": "Cambia fecha, hora, destinatarios o el texto del aviso.",
       "newReminder": "Nuevo recordatorio",
+      "edit": "Editar",
+      "save": "Guardar cambios",
       "createHint": "No se crea un lead. El WhatsApp sale el día y la hora que elijas.",
       "readOnlyHint": "Solo un administrador o un agente autorizado puede crear o editar estos avisos.",
       "presetCleaning": "Día de limpieza",
@@ -877,6 +881,7 @@
       "toastNeedRecipients": "Elige al menos un miembro o un número",
       "toastSaveFailed": "No se pudo guardar el recordatorio",
       "toastCreated": "Recordatorio creado",
+      "toastUpdated": "Recordatorio actualizado",
       "toastDeleteFailed": "No se pudo eliminar",
       "toastRemindOk": "Aviso enviado",
       "toastRemindFailed": "No se pudo enviar el aviso"

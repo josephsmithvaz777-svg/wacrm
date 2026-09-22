@@ -796,7 +796,11 @@
     },
     "staff": {
       "createTitle": "New team reminder",
+      "editTitle": "Edit team reminder",
+      "editHint": "Change the date, time, recipients, or message.",
       "newReminder": "New reminder",
+      "edit": "Edit",
+      "save": "Save changes",
       "createHint": "This does not create a lead. WhatsApp goes out on the date and time you pick.",
       "readOnlyHint": "Only an admin or a designated agent can create or edit these reminders.",
       "presetCleaning": "Cleaning day",
@@ -856,6 +860,7 @@
       "toastNeedRecipients": "Pick at least one member or number",
       "toastSaveFailed": "Couldn’t save the reminder",
       "toastCreated": "Reminder created",
+      "toastUpdated": "Reminder updated",
       "toastDeleteFailed": "Couldn’t delete",
       "toastRemindOk": "Reminder sent",
       "toastRemindFailed": "Couldn’t send the reminder"

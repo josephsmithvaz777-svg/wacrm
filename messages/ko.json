@@ -795,7 +795,11 @@
     },
     "staff": {
       "createTitle": "새 팀 알림",
+      "editTitle": "팀 알림 수정",
+      "editHint": "날짜, 시간, 받는 사람 또는 내용을 바꿉니다.",
       "newReminder": "새 알림",
+      "edit": "수정",
+      "save": "변경 저장",
       "createHint": "리드는 만들지 않습니다. WhatsApp은 고른 날짜와 시각에 발송됩니다.",
       "readOnlyHint": "관리자 또는 권한을 받은 상담원만 이 알림을 만들거나 수정할 수 있습니다.",
       "presetCleaning": "청소일",
@@ -856,6 +860,7 @@
       "toastSaveFailed": "알림을 저장하지 못했습니다",
       "toastDeleteFailed": "삭제하지 못했습니다",
       "toastCreated": "알림을 만들었습니다",
+      "toastUpdated": "알림을 수정했습니다",
       "toastRemindOk": "알림을 보냈습니다",
       "toastRemindFailed": "알림을 보내지 못했습니다"
     }

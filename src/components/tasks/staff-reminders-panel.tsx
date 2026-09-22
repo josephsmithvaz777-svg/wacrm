@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Bell, Plus, Trash2, Users } from "lucide-react";
+import { Bell, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
@@ -23,8 +23,9 @@ import { useAuth } from "@/hooks/use-auth";
 import { fetchAccountMembers, memberLabel } from "@/lib/account/members";
 import { isUsableStaffPhone, staffPhoneDigits } from "@/lib/automations/staff-notify";
 import { AUTOMATION_GREETING_TZ, formatAlertDateTime } from "@/lib/automations/template-vars";
-import { calendarDateInZone, combineLocalDateAndTime } from "@/lib/datetime/zoned";
+import { calendarDateInZone, combineLocalDateAndTime, dueAtChanged, splitZonedDateTime } from "@/lib/datetime/zoned";
 import { createClient } from "@/lib/supabase/client";
+import { TASK_REMINDER_RESET } from "@/lib/tasks/constants";
 import { type StaffRecurrence, WEEKDAYS, nextYmdForWeekday, weekdayFromYmd, type Weekday } from "@/lib/tasks/staff-reminder";
 import { cn } from "@/lib/utils";
 import type { StaffExternalContact, StaffReminder, StaffReminderRecipient } from "@/types";
@@ -76,7 +77,8 @@ export function StaffRemindersPanel({
   const [extName, setExtName] = useState("");
   const [extPhone, setExtPhone] = useState("");
   const [savingExternal, setSavingExternal] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -197,6 +199,11 @@ export function StaffRemindersPanel({
 
   async function removeSaved(contact: StaffExternalContact) {
     if (!canEdit) return;
+    if (contact.id.startsWith("temp-")) {
+      setDirectory((prev) => prev.filter((row) => row.id !== contact.id));
+      setSelectedPhones((prev) => prev.filter((phone) => phone !== contact.phone));
+      return;
+    }
     const supabase = createClient();
     const { error } = await supabase
       .from("staff_external_contacts")
@@ -210,7 +217,70 @@ export function StaffRemindersPanel({
     setSelectedPhones((prev) => prev.filter((phone) => phone !== contact.phone));
   }
 
-  async function handleCreate() {
+  function resetForm() {
+    setEditingId(null);
+    setTitle("");
+    setIcon("🧹");
+    setNotes("");
+    setDueDate(calendarDateInZone(new Date(), AUTOMATION_GREETING_TZ));
+    setDueTime("09:00");
+    setRecurrence("once");
+    setMemberIds([]);
+    setSelectedPhones([]);
+    setExtName("");
+    setExtPhone("");
+  }
+
+  function openCreate() {
+    resetForm();
+    setFormOpen(true);
+  }
+
+  function openEdit(item: StaffReminder) {
+    const split = splitZonedDateTime(item.due_at, AUTOMATION_GREETING_TZ);
+    setEditingId(item.id);
+    setTitle(item.title);
+    setIcon(item.icon || "🧹");
+    setNotes(item.notes ?? "");
+    setDueDate(split.date || calendarDateInZone(new Date(), AUTOMATION_GREETING_TZ));
+    setDueTime(split.time || "09:00");
+    setRecurrence(item.recurrence);
+    const recipients = item.recipients ?? [];
+    setMemberIds(
+      recipients
+        .map((row) => row.user_id)
+        .filter((id): id is string => Boolean(id)),
+    );
+    const phones = recipients
+      .filter((row) => !row.user_id && row.phone)
+      .map((row) => ({
+        phone: staffPhoneDigits(row.phone),
+        label: (row.label || row.phone || "").trim(),
+      }))
+      .filter((row) => row.phone);
+    setSelectedPhones(phones.map((row) => row.phone));
+    setDirectory((prev) => {
+      const next = [...prev];
+      for (const phone of phones) {
+        if (next.some((row) => row.phone === phone.phone)) continue;
+        next.push({
+          id: `temp-${phone.phone}`,
+          account_id: accountId ?? "",
+          label: phone.label || phone.phone,
+          phone: phone.phone,
+        });
+      }
+      return next.sort((a, b) => a.label.localeCompare(b.label));
+    });
+    setFormOpen(true);
+  }
+
+  function handleFormOpenChange(open: boolean) {
+    setFormOpen(open);
+    if (!open) resetForm();
+  }
+
+  async function handleSave() {
     if (!canEdit || !accountId || saving) return;
     const trimmed = title.trim();
     if (!trimmed) {
@@ -230,28 +300,9 @@ export function StaffRemindersPanel({
 
     setSaving(true);
     const supabase = createClient();
-    const { data, error } = await supabase
-      .from("staff_reminders")
-      .insert({
-        account_id: accountId,
-        created_by: user?.id ?? null,
-        title: trimmed,
-        icon: icon || null,
-        notes: notes.trim() || null,
-        due_at: dueIso,
-        recurrence,
-      })
-      .select("id")
-      .single();
-    if (error || !data?.id) {
-      toast.error(t("toastSaveFailed"));
-      setSaving(false);
-      return;
-    }
-
-    const rows = [
+    const recipientRows = (reminderId: string) => [
       ...memberIds.map((user_id) => ({
-        reminder_id: data.id,
+        reminder_id: reminderId,
         account_id: accountId,
         user_id,
         phone: null,
@@ -259,7 +310,7 @@ export function StaffRemindersPanel({
         label: members.find((m) => m.user_id === user_id)?.label ?? null,
       })),
       ...chosen.map((e) => ({
-        reminder_id: data.id,
+        reminder_id: reminderId,
         account_id: accountId,
         user_id: null,
         phone: e.phone,
@@ -267,23 +318,79 @@ export function StaffRemindersPanel({
         label: e.label,
       })),
     ];
-    const { error: recErr } = await supabase
-      .from("staff_reminder_recipients")
-      .insert(rows);
-    if (recErr) {
-      await supabase.from("staff_reminders").delete().eq("id", data.id);
-      toast.error(t("toastSaveFailed"));
-      setSaving(false);
-      return;
+
+    if (editingId) {
+      const previous = items.find((item) => item.id === editingId);
+      const moved = dueAtChanged(previous?.due_at, dueIso);
+      const { error } = await supabase
+        .from("staff_reminders")
+        .update({
+          title: trimmed,
+          icon: icon || null,
+          notes: notes.trim() || null,
+          due_at: dueIso,
+          recurrence,
+          ...(moved || previous?.recurrence !== recurrence
+            ? TASK_REMINDER_RESET
+            : {}),
+        })
+        .eq("id", editingId);
+      if (error) {
+        toast.error(t("toastSaveFailed"));
+        setSaving(false);
+        return;
+      }
+      const { error: delErr } = await supabase
+        .from("staff_reminder_recipients")
+        .delete()
+        .eq("reminder_id", editingId);
+      if (delErr) {
+        toast.error(t("toastSaveFailed"));
+        setSaving(false);
+        return;
+      }
+      const { error: recErr } = await supabase
+        .from("staff_reminder_recipients")
+        .insert(recipientRows(editingId));
+      if (recErr) {
+        toast.error(t("toastSaveFailed"));
+        setSaving(false);
+        return;
+      }
+      toast.success(t("toastUpdated"));
+    } else {
+      const { data, error } = await supabase
+        .from("staff_reminders")
+        .insert({
+          account_id: accountId,
+          created_by: user?.id ?? null,
+          title: trimmed,
+          icon: icon || null,
+          notes: notes.trim() || null,
+          due_at: dueIso,
+          recurrence,
+        })
+        .select("id")
+        .single();
+      if (error || !data?.id) {
+        toast.error(t("toastSaveFailed"));
+        setSaving(false);
+        return;
+      }
+      const { error: recErr } = await supabase
+        .from("staff_reminder_recipients")
+        .insert(recipientRows(data.id));
+      if (recErr) {
+        await supabase.from("staff_reminders").delete().eq("id", data.id);
+        toast.error(t("toastSaveFailed"));
+        setSaving(false);
+        return;
+      }
+      toast.success(t("toastCreated"));
     }
 
-    toast.success(t("toastCreated"));
-    setTitle("");
-    setNotes("");
-    setMemberIds([]);
-    setSelectedPhones([]);
     setSaving(false);
-    setCreateOpen(false);
+    handleFormOpenChange(false);
     await load();
   }
 
@@ -347,7 +454,7 @@ export function StaffRemindersPanel({
           <GatedButton
             canAct={canEdit}
             gateReason="create team reminders"
-            onClick={() => setCreateOpen(true)}
+            onClick={openCreate}
             className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
             <Plus className="size-4" />
@@ -356,11 +463,13 @@ export function StaffRemindersPanel({
         </div>
       )}
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog open={formOpen} onOpenChange={handleFormOpenChange}>
         <DialogContent className="max-h-[min(90vh,44rem)] w-full overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{t("createTitle")}</DialogTitle>
-            <DialogDescription>{t("createHint")}</DialogDescription>
+            <DialogTitle>{editingId ? t("editTitle") : t("createTitle")}</DialogTitle>
+            <DialogDescription>
+              {editingId ? t("editHint") : t("createHint")}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-wrap gap-1.5">
@@ -552,11 +661,11 @@ export function StaffRemindersPanel({
           <GatedButton
             canAct={canEdit}
             gateReason="create team reminders"
-            onClick={() => void handleCreate()}
+            onClick={() => void handleSave()}
             disabled={saving}
             className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
-            {saving ? t("saving") : t("create")}
+            {saving ? t("saving") : editingId ? t("save") : t("create")}
           </GatedButton>
         </DialogContent>
       </Dialog>
@@ -571,6 +680,7 @@ export function StaffRemindersPanel({
             anchor={anchor}
             onAnchorChange={onAnchorChange}
             canEdit={canEdit}
+            onEdit={openEdit}
             onDelete={(id) => void handleDelete(id)}
             onComplete={(id) => void handleComplete(id)}
             onRemind={(id) => void handleRemindNow(id)}
@@ -589,6 +699,7 @@ export function StaffRemindersPanel({
                 item={item}
                 canEdit={canEdit}
                 t={t}
+                onEdit={() => openEdit(item)}
                 onDelete={() => void handleDelete(item.id)}
                 onComplete={() => void handleComplete(item.id)}
                 onRemind={() => void handleRemindNow(item.id)}
@@ -605,6 +716,7 @@ function StaffReminderRow({
   item,
   canEdit,
   t,
+  onEdit,
   onDelete,
   onComplete,
   onRemind,
@@ -612,6 +724,7 @@ function StaffReminderRow({
   item: StaffReminder;
   canEdit: boolean;
   t: ReturnType<typeof useTranslations>;
+  onEdit: () => void;
   onDelete: () => void;
   onComplete: () => void;
   onRemind: () => void;
@@ -646,6 +759,15 @@ function StaffReminderRow({
         </div>
         {canEdit && (
           <div className="flex flex-wrap items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onEdit}
+              className="border-border text-muted-foreground"
+            >
+              <Pencil className="size-3.5" />
+              {t("edit")}
+            </Button>
             <Button
               variant="outline"
               size="sm"
