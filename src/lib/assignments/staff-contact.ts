@@ -5,7 +5,8 @@
 // Advisors receive “Nuevo lead asignado” on their personal WhatsApp.
 // If that number is then round-robin assigned to another advisor, the
 // team starts handing *each other* around as leads. Match the contact
-// against `profiles.phone` for the account and skip assignment.
+// against CRM member phones AND team-reminder numbers (saved external
+// contacts + reminder recipients) and skip assignment / AI auto-reply.
 
 import { normalizePhone, phonesMatch } from '@/lib/whatsapp/phone-utils';
 
@@ -33,21 +34,80 @@ export function contactPhoneMatchesStaff(
   });
 }
 
+function pushUniquePhones(
+  into: string[],
+  seen: Set<string>,
+  phones: Array<string | null | undefined>,
+): void {
+  for (const raw of phones) {
+    const phone = (raw ?? '').trim();
+    if (!phone) continue;
+    const key = normalizePhone(phone) || phone.replace(/\D/g, '');
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    into.push(phone);
+  }
+}
+
+/**
+ * Phones that belong to the team for this account: CRM member profiles,
+ * saved external reminder contacts, and numbers already on a team
+ * reminder. Used so AI / round-robin / automations do not treat them
+ * as leads.
+ */
 export async function loadAccountStaffPhones(
   db: Db,
   accountId: string,
 ): Promise<string[]> {
-  const { data, error } = await db
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  const { data: profiles, error: profileErr } = await db
     .from('profiles')
     .select('phone')
     .eq('account_id', accountId);
-  if (error) {
-    console.warn('[round-robin] load staff phones failed:', error);
-    return [];
+  if (profileErr) {
+    console.warn('[staff-contact] load profile phones failed:', profileErr);
+  } else {
+    pushUniquePhones(
+      out,
+      seen,
+      ((profiles ?? []) as { phone?: string | null }[]).map((row) => row.phone),
+    );
   }
-  return ((data ?? []) as { phone?: string | null }[])
-    .map((row) => row.phone)
-    .filter((phone): phone is string => Boolean(phone && phone.trim()));
+
+  const { data: externals, error: externalErr } = await db
+    .from('staff_external_contacts')
+    .select('phone')
+    .eq('account_id', accountId);
+  if (externalErr) {
+    console.warn('[staff-contact] load external phones failed:', externalErr);
+  } else {
+    pushUniquePhones(
+      out,
+      seen,
+      ((externals ?? []) as { phone?: string | null }[]).map((row) => row.phone),
+    );
+  }
+
+  const { data: reminderPhones, error: reminderErr } = await db
+    .from('staff_reminder_recipients')
+    .select('phone')
+    .eq('account_id', accountId)
+    .not('phone', 'is', null);
+  if (reminderErr) {
+    console.warn('[staff-contact] load reminder phones failed:', reminderErr);
+  } else {
+    pushUniquePhones(
+      out,
+      seen,
+      ((reminderPhones ?? []) as { phone?: string | null }[]).map(
+        (row) => row.phone,
+      ),
+    );
+  }
+
+  return out;
 }
 
 export async function contactBelongsToAccountStaff(
@@ -62,7 +122,7 @@ export async function contactBelongsToAccountStaff(
     .eq('account_id', accountId)
     .maybeSingle();
   if (error) {
-    console.warn('[round-robin] load contact phone failed:', error);
+    console.warn('[staff-contact] load contact phone failed:', error);
     return false;
   }
   const phone = (contact?.phone as string | null | undefined) ?? null;

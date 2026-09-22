@@ -24,4 +24,11 @@ describe('contactPhoneMatchesStaff', () => {
     expect(contactPhoneMatchesStaff(null, staff)).toBe(false);
     expect(contactPhoneMatchesStaff('51940912791', [null, '  '])).toBe(false);
   });
+
+  it('matches a team-reminder external number', () => {
+    expect(contactPhoneMatchesStaff('51957174412', ['51957174412'])).toBe(true);
+    expect(contactPhoneMatchesStaff('+51 957 174 412', ['51957174412'])).toBe(
+      true,
+    );
+  });
 });
