@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildStaffReminderCopy,
+  expandStaffReminderOccurrences,
   nextStaffReminderDue,
   nextYmdForWeekday,
+  shouldAdvanceStaffReminder,
   weekdayFromYmd,
 } from "./staff-reminder";
 
@@ -73,5 +75,41 @@ describe("weekday helpers", () => {
   it("advances to the next Saturday", () => {
     // 2026-09-21 is Monday → next Saturday is 2026-09-26
     expect(nextYmdForWeekday(6, "2026-09-21")).toBe("2026-09-26");
+  });
+});
+
+describe("expandStaffReminderOccurrences", () => {
+  it("keeps a one-off only when it falls inside the range", () => {
+    const hits = expandStaffReminderOccurrences(
+      "2026-09-22T14:00:00.000Z",
+      "once",
+      new Date("2026-09-01T00:00:00.000Z"),
+      new Date("2026-09-30T23:59:59.000Z"),
+    );
+    expect(hits.map((d) => d.toISOString())).toEqual(["2026-09-22T14:00:00.000Z"]);
+  });
+
+  it("projects a weekly reminder across the visible range", () => {
+    const hits = expandStaffReminderOccurrences(
+      "2026-09-01T14:00:00.000Z",
+      "weekly",
+      new Date("2026-09-10T00:00:00.000Z"),
+      new Date("2026-09-20T23:59:59.000Z"),
+    );
+    expect(hits.map((d) => d.toISOString())).toEqual(["2026-09-15T14:00:00.000Z"]);
+  });
+});
+
+describe("shouldAdvanceStaffReminder", () => {
+  const due = "2026-09-22T14:00:00.000Z";
+  const now = new Date("2026-09-22T14:00:00.000Z");
+
+  it("holds a weekly reminder when WhatsApp did not go out", () => {
+    expect(shouldAdvanceStaffReminder(2, 0, due, "weekly", now)).toBeNull();
+  });
+
+  it("moves to the next week after WhatsApp is sent", () => {
+    const next = shouldAdvanceStaffReminder(2, 2, due, "weekly", now);
+    expect(next?.toISOString()).toBe("2026-09-29T14:00:00.000Z");
   });
 });

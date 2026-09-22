@@ -234,6 +234,16 @@ export interface StaffReminder {
   recipients?: StaffReminderRecipient[];
 }
 
+/** WhatsApp number saved for team reminders, not as a CRM lead. */
+export interface StaffExternalContact {
+  id: string;
+  account_id: string;
+  label: string;
+  phone: string;
+  created_by?: string | null;
+  created_at?: string;
+}
+
 export type ConversationStatus = 'open' | 'pending' | 'closed';
 
 export interface Conversation {

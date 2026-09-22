@@ -268,25 +268,25 @@ export default function TasksPage() {
               {t("boardStaff")}
             </button>
           </div>
+          <div className="flex rounded-lg border border-border p-0.5">
+            {views.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setView(item.id)}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-xs font-medium",
+                  view === item.id
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
           {board === "leads" && (
             <>
-              <div className="flex rounded-lg border border-border p-0.5">
-                {views.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setView(item.id)}
-                    className={cn(
-                      "rounded-md px-2.5 py-1 text-xs font-medium",
-                      view === item.id
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
               <Button
                 variant={scopedToSelf ? "secondary" : "outline"}
                 size="sm"
@@ -313,7 +313,12 @@ export default function TasksPage() {
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-4">
         {board === "staff" ? (
-          <StaffRemindersPanel canEdit={canEditStaff} />
+          <StaffRemindersPanel
+            canEdit={canEditStaff}
+            view={view}
+            anchor={anchor}
+            onAnchorChange={setAnchor}
+          />
         ) : loading ? (
           <p className="text-sm text-muted-foreground">{t("loading")}</p>
         ) : view !== "list" ? (

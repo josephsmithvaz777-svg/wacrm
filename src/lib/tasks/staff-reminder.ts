@@ -65,6 +65,78 @@ export function nextYmdForWeekday(
 }
 
 /**
+ * Occurrences of a team reminder inside `[rangeStart, rangeEnd]`.
+ * Weekly and yearly series are projected forward from `dueAt` so the
+ * calendar can show the coming repeats, not only the next fire time.
+ */
+export function expandStaffReminderOccurrences(
+  dueAt: string,
+  recurrence: StaffRecurrence,
+  rangeStart: Date,
+  rangeEnd: Date,
+): Date[] {
+  const startMs = new Date(dueAt).getTime();
+  if (!Number.isFinite(startMs)) return [];
+  const from = rangeStart.getTime();
+  const to = rangeEnd.getTime();
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to < from) return [];
+
+  if (recurrence === "once") {
+    return startMs >= from && startMs <= to ? [new Date(startMs)] : [];
+  }
+
+  if (recurrence === "weekly") {
+    const cursor = new Date(startMs);
+    let guard = 0;
+    while (cursor.getTime() < from && guard++ < 520) {
+      cursor.setDate(cursor.getDate() + 7);
+    }
+    const out: Date[] = [];
+    while (cursor.getTime() <= to && guard++ < 1040) {
+      if (cursor.getTime() >= from) out.push(new Date(cursor.getTime()));
+      cursor.setDate(cursor.getDate() + 7);
+    }
+    return out;
+  }
+
+  const cursor = new Date(startMs);
+  let guard = 0;
+  while (cursor.getTime() < from && guard++ < 200) {
+    stepYear(cursor);
+  }
+  const out: Date[] = [];
+  while (cursor.getTime() <= to && guard++ < 250) {
+    if (cursor.getTime() >= from) out.push(new Date(cursor.getTime()));
+    stepYear(cursor);
+  }
+  return out;
+}
+
+function stepYear(date: Date): void {
+  const month = date.getMonth();
+  const day = date.getDate();
+  date.setFullYear(date.getFullYear() + 1);
+  if (month === 1 && day === 29 && date.getMonth() !== 1) {
+    date.setDate(0);
+  }
+}
+
+/**
+ * Move a repeating reminder only after WhatsApp actually went out.
+ * With no usable numbers, in-app and email are enough to advance.
+ */
+export function shouldAdvanceStaffReminder(
+  phoneAttempts: number,
+  whatsappSent: number,
+  dueAt: string,
+  recurrence: StaffRecurrence,
+  now: Date = new Date(),
+): Date | null {
+  if (phoneAttempts > 0 && whatsappSent < 1) return null;
+  return nextStaffReminderDue(dueAt, recurrence, now);
+}
+
+/**
  * Next fire time after `dueAt`. `once` returns null. If the original
  * due date is already in the past, keep stepping until the next
  * occurrence is after `now` so a missed weekly cleaning day still

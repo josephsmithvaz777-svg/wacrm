@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import { TaskIconPicker } from "@/components/inbox/task-icon-picker";
+import { StaffReminderCalendar } from "@/components/tasks/staff-reminder-calendar";
 import { TaskDueFields } from "@/components/tasks/task-due-fields";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,17 +20,12 @@ import { calendarDateInZone, combineLocalDateAndTime } from "@/lib/datetime/zone
 import { createClient } from "@/lib/supabase/client";
 import { type StaffRecurrence, WEEKDAYS, nextYmdForWeekday, weekdayFromYmd, type Weekday } from "@/lib/tasks/staff-reminder";
 import { cn } from "@/lib/utils";
-import type { StaffReminder, StaffReminderRecipient } from "@/types";
+import type { StaffExternalContact, StaffReminder, StaffReminderRecipient } from "@/types";
 
 interface TeamMember {
   user_id: string;
   label: string;
   email: string | null;
-}
-
-interface ExternalRecipient {
-  phone: string;
-  label: string;
 }
 
 const PRESETS: {
@@ -41,7 +37,17 @@ const PRESETS: {
   { id: "birthday", icon: "🎂", recurrence: "yearly" },
 ];
 
-export function StaffRemindersPanel({ canEdit }: { canEdit: boolean }) {
+export function StaffRemindersPanel({
+  canEdit,
+  view,
+  anchor,
+  onAnchorChange,
+}: {
+  canEdit: boolean;
+  view: "list" | "day" | "week" | "month";
+  anchor: Date;
+  onAnchorChange: (next: Date) => void;
+}) {
   const t = useTranslations("Tasks.staff");
   const { accountId, user } = useAuth();
   const [items, setItems] = useState<StaffReminder[]>([]);
@@ -58,9 +64,11 @@ export function StaffRemindersPanel({ canEdit }: { canEdit: boolean }) {
   const [dueTime, setDueTime] = useState("09:00");
   const [recurrence, setRecurrence] = useState<StaffRecurrence>("once");
   const [memberIds, setMemberIds] = useState<string[]>([]);
-  const [externals, setExternals] = useState<ExternalRecipient[]>([]);
+  const [directory, setDirectory] = useState<StaffExternalContact[]>([]);
+  const [selectedPhones, setSelectedPhones] = useState<string[]>([]);
   const [extName, setExtName] = useState("");
   const [extPhone, setExtPhone] = useState("");
+  const [savingExternal, setSavingExternal] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -82,6 +90,21 @@ export function StaffRemindersPanel({ canEdit }: { canEdit: boolean }) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const loadDirectory = useCallback(async () => {
+    if (!accountId) return;
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("staff_external_contacts")
+      .select("id, account_id, label, phone, created_by, created_at")
+      .eq("account_id", accountId)
+      .order("label", { ascending: true });
+    setDirectory((data as StaffExternalContact[]) ?? []);
+  }, [accountId]);
+
+  useEffect(() => {
+    void loadDirectory();
+  }, [loadDirectory]);
 
   useEffect(() => {
     void fetchAccountMembers().then((all) => {
@@ -116,23 +139,67 @@ export function StaffRemindersPanel({ canEdit }: { canEdit: boolean }) {
     );
   }
 
-  function addExternal() {
+  function toggleSaved(phone: string) {
+    setSelectedPhones((prev) =>
+      prev.includes(phone) ? prev.filter((x) => x !== phone) : [...prev, phone],
+    );
+  }
+
+  async function addExternal() {
+    if (!accountId || savingExternal) return;
     const phone = extPhone.trim();
     if (!isUsableStaffPhone(phone)) {
       toast.error(t("toastBadPhone"));
       return;
     }
     const digits = staffPhoneDigits(phone);
-    if (externals.some((e) => staffPhoneDigits(e.phone) === digits)) {
-      toast.error(t("toastDupPhone"));
+    const label = extName.trim() || digits;
+    setSavingExternal(true);
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("staff_external_contacts")
+      .upsert(
+        {
+          account_id: accountId,
+          label,
+          phone: digits,
+          created_by: user?.id ?? null,
+        },
+        { onConflict: "account_id,phone" },
+      )
+      .select("id, account_id, label, phone, created_by, created_at")
+      .single();
+    setSavingExternal(false);
+    if (error || !data) {
+      toast.error(t("toastExternalSaveFailed"));
       return;
     }
-    setExternals((prev) => [
-      ...prev,
-      { phone, label: extName.trim() || phone },
-    ]);
+    const saved = data as StaffExternalContact;
+    setDirectory((prev) => {
+      const rest = prev.filter((row) => row.phone !== saved.phone);
+      return [...rest, saved].sort((a, b) => a.label.localeCompare(b.label));
+    });
+    setSelectedPhones((prev) =>
+      prev.includes(saved.phone) ? prev : [...prev, saved.phone],
+    );
     setExtName("");
     setExtPhone("");
+    toast.success(t("toastExternalSaved"));
+  }
+
+  async function removeSaved(contact: StaffExternalContact) {
+    if (!canEdit) return;
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("staff_external_contacts")
+      .delete()
+      .eq("id", contact.id);
+    if (error) {
+      toast.error(t("toastDeleteFailed"));
+      return;
+    }
+    setDirectory((prev) => prev.filter((row) => row.id !== contact.id));
+    setSelectedPhones((prev) => prev.filter((phone) => phone !== contact.phone));
   }
 
   async function handleCreate() {
@@ -147,7 +214,8 @@ export function StaffRemindersPanel({ canEdit }: { canEdit: boolean }) {
       toast.error(t("toastNeedDate"));
       return;
     }
-    if (memberIds.length === 0 && externals.length === 0) {
+    const chosen = directory.filter((row) => selectedPhones.includes(row.phone));
+    if (memberIds.length === 0 && chosen.length === 0) {
       toast.error(t("toastNeedRecipients"));
       return;
     }
@@ -182,7 +250,7 @@ export function StaffRemindersPanel({ canEdit }: { canEdit: boolean }) {
         email: members.find((m) => m.user_id === user_id)?.email ?? null,
         label: members.find((m) => m.user_id === user_id)?.label ?? null,
       })),
-      ...externals.map((e) => ({
+      ...chosen.map((e) => ({
         reminder_id: data.id,
         account_id: accountId,
         user_id: null,
@@ -205,7 +273,7 @@ export function StaffRemindersPanel({ canEdit }: { canEdit: boolean }) {
     setTitle("");
     setNotes("");
     setMemberIds([]);
-    setExternals([]);
+    setSelectedPhones([]);
     setSaving(false);
     await load();
   }
@@ -258,14 +326,19 @@ export function StaffRemindersPanel({ canEdit }: { canEdit: boolean }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex min-h-0 flex-1 flex-col gap-6">
       {!canEdit && (
         <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
           {t("readOnlyHint")}
         </p>
       )}
       {canEdit && (
-        <section className="rounded-xl border border-border bg-card p-4">
+        <section
+          className={cn(
+            "rounded-xl border border-border bg-card p-4",
+            view !== "list" && "order-2",
+          )}
+        >
           <h2 className="text-sm font-semibold text-foreground">{t("createTitle")}</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">{t("createHint")}</p>
 
@@ -363,6 +436,8 @@ export function StaffRemindersPanel({ canEdit }: { canEdit: boolean }) {
             </div>
           </div>
 
+          <p className="mt-2 text-[11px] text-muted-foreground">{t("whatsappAtTime")}</p>
+
           <Input
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -399,6 +474,39 @@ export function StaffRemindersPanel({ canEdit }: { canEdit: boolean }) {
           <div className="mt-4">
             <p className="text-xs font-medium text-foreground">{t("externalTitle")}</p>
             <p className="mt-0.5 text-[11px] text-muted-foreground">{t("externalHint")}</p>
+            <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
+              {directory.length === 0 ? (
+                <p className="px-1 py-2 text-xs text-muted-foreground">{t("externalEmpty")}</p>
+              ) : (
+                directory.map((contact) => (
+                  <div
+                    key={contact.id}
+                    className="flex items-center gap-2 rounded-md px-1 py-1 hover:bg-muted/50"
+                  >
+                    <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
+                      <Checkbox
+                        checked={selectedPhones.includes(contact.phone)}
+                        onCheckedChange={() => toggleSaved(contact.phone)}
+                      />
+                      <span className="truncate text-sm text-foreground">
+                        {contact.label}
+                        <span className="ml-1 text-[11px] text-muted-foreground">
+                          {contact.phone}
+                        </span>
+                      </span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => void removeSaved(contact)}
+                      className="text-muted-foreground hover:text-destructive"
+                      aria-label={t("removeSaved")}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
             <div className="mt-2 flex flex-col gap-2 sm:flex-row">
               <Input
                 value={extName}
@@ -415,34 +523,14 @@ export function StaffRemindersPanel({ canEdit }: { canEdit: boolean }) {
               <Button
                 type="button"
                 variant="outline"
-                onClick={addExternal}
+                onClick={() => void addExternal()}
+                disabled={savingExternal}
                 className="shrink-0 border-border"
               >
                 <Plus className="size-4" />
                 {t("addPhone")}
               </Button>
             </div>
-            {externals.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {externals.map((e) => (
-                  <span
-                    key={e.phone}
-                    className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-foreground"
-                  >
-                    {e.label} · {e.phone}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setExternals((prev) => prev.filter((x) => x.phone !== e.phone))
-                      }
-                      className="hover:opacity-70"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
 
           <GatedButton
@@ -457,9 +545,20 @@ export function StaffRemindersPanel({ canEdit }: { canEdit: boolean }) {
         </section>
       )}
 
-      <section>
+      <section className={cn("min-h-0 flex-1", view !== "list" && "order-1")}>
         {loading ? (
           <p className="text-sm text-muted-foreground">{t("loading")}</p>
+        ) : view !== "list" ? (
+          <StaffReminderCalendar
+            items={items}
+            view={view}
+            anchor={anchor}
+            onAnchorChange={onAnchorChange}
+            canEdit={canEdit}
+            onDelete={(id) => void handleDelete(id)}
+            onComplete={(id) => void handleComplete(id)}
+            onRemind={(id) => void handleRemindNow(id)}
+          />
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <Users className="h-8 w-8 text-muted-foreground" />

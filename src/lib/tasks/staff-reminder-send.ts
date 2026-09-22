@@ -12,7 +12,7 @@ import { TASK_REMINDER_RESET } from "@/lib/tasks/constants";
 import {
   buildStaffReminderCopy,
   isStaffRecurrence,
-  nextStaffReminderDue,
+  shouldAdvanceStaffReminder,
   type StaffRecurrence,
 } from "@/lib/tasks/staff-reminder";
 
@@ -86,6 +86,7 @@ export async function sendStaffReminder(
   reminder: StaffReminderRow,
   recipients: StaffReminderRecipientRow[],
   now: Date = new Date(),
+  options?: { whatsappOnly?: boolean },
 ): Promise<{ whatsapp: number; email: number; notified: number; errors: string[] }> {
   const errors: string[] = [];
   const when = reminder.due_at
@@ -108,7 +109,7 @@ export async function sendStaffReminder(
   for (const row of recipients) {
     const target = await resolveRecipient(db, row);
 
-    if (target.userId && !seenUser.has(target.userId)) {
+    if (!options?.whatsappOnly && target.userId && !seenUser.has(target.userId)) {
       seenUser.add(target.userId);
       try {
         await db.from("notifications").insert({
@@ -148,7 +149,7 @@ export async function sendStaffReminder(
     }
 
     const mailTo = target.email.toLowerCase();
-    if (mailTo && !seenEmail.has(mailTo)) {
+    if (!options?.whatsappOnly && mailTo && !seenEmail.has(mailTo)) {
       seenEmail.add(mailTo);
       const mail = await sendPlainEmail({
         to: target.email,
@@ -162,7 +163,15 @@ export async function sendStaffReminder(
   }
 
   const recurrence = asRecurrence(reminder.recurrence);
-  const nextDue = nextStaffReminderDue(reminder.due_at, recurrence, now);
+  const phoneAttempts = seenPhone.size;
+  const nextDue = shouldAdvanceStaffReminder(
+    phoneAttempts,
+    whatsapp,
+    reminder.due_at,
+    recurrence,
+    now,
+  );
+  const whatsappDone = phoneAttempts === 0 || whatsapp > 0;
   if (nextDue) {
     await db
       .from("staff_reminders")
@@ -171,14 +180,19 @@ export async function sendStaffReminder(
         ...TASK_REMINDER_RESET,
       })
       .eq("id", reminder.id);
-  } else {
+  } else if (!options?.whatsappOnly) {
     await db
       .from("staff_reminders")
       .update({
         reminder_sent_at: now.toISOString(),
-        reminder_whatsapp_at: whatsapp > 0 ? now.toISOString() : reminder.reminder_whatsapp_at,
+        reminder_whatsapp_at: whatsappDone ? now.toISOString() : null,
         reminder_email_at: emailSent > 0 ? now.toISOString() : reminder.reminder_email_at,
       })
+      .eq("id", reminder.id);
+  } else if (whatsappDone) {
+    await db
+      .from("staff_reminders")
+      .update({ reminder_whatsapp_at: now.toISOString() })
       .eq("id", reminder.id);
   }
 
@@ -195,8 +209,8 @@ export async function sendDueStaffReminders(
       "id, account_id, title, icon, notes, due_at, recurrence, reminder_sent_at, reminder_whatsapp_at, reminder_email_at, completed_at",
     )
     .is("completed_at", null)
-    .is("reminder_sent_at", null)
     .lte("due_at", now.toISOString())
+    .or("reminder_sent_at.is.null,reminder_whatsapp_at.is.null")
     .limit(50);
 
   if (error) {
@@ -212,16 +226,19 @@ export async function sendDueStaffReminders(
   };
 
   for (const reminder of rows) {
-    const { data: claimed } = await db
-      .from("staff_reminders")
-      .update({ reminder_sent_at: now.toISOString() })
-      .eq("id", reminder.id)
-      .is("reminder_sent_at", null)
-      .select("id")
-      .maybeSingle();
-    if (!claimed) {
-      summary.skipped += 1;
-      continue;
+    const retryWhatsApp = Boolean(reminder.reminder_sent_at);
+    if (!retryWhatsApp) {
+      const { data: claimed } = await db
+        .from("staff_reminders")
+        .update({ reminder_sent_at: now.toISOString() })
+        .eq("id", reminder.id)
+        .is("reminder_sent_at", null)
+        .select("id")
+        .maybeSingle();
+      if (!claimed) {
+        summary.skipped += 1;
+        continue;
+      }
     }
 
     const { data: recipients, error: recErr } = await db
@@ -239,6 +256,7 @@ export async function sendDueStaffReminders(
       reminder,
       (recipients as StaffReminderRecipientRow[] | null) ?? [],
       now,
+      { whatsappOnly: retryWhatsApp },
     );
     if (result.whatsapp > 0 || result.email > 0 || result.notified > 0) summary.sent += 1;
     else summary.skipped += 1;
