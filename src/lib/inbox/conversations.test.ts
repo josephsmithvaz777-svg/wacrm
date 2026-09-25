@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  matchesAssignedAgent,
   matchesContactFilters,
   normalizeConversation,
 } from "./conversations";
@@ -96,6 +97,37 @@ describe("matchesContactFilters", () => {
     ).toBe(false);
     expect(
       matchesContactFilters(conv, { tagIds: ["tX"], company: "Acme" }),
+    ).toBe(false);
+  });
+});
+
+describe("matchesAssignedAgent", () => {
+  it("matches everything when no agent filter is set", () => {
+    expect(matchesAssignedAgent(makeConversation(null), null)).toBe(true);
+    expect(
+      matchesAssignedAgent(
+        { ...makeConversation(null), assigned_agent_id: "a1" },
+        null,
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps only the chosen agent", () => {
+    const assigned = { ...makeConversation(null), assigned_agent_id: "a1" };
+    expect(matchesAssignedAgent(assigned, "a1")).toBe(true);
+    expect(matchesAssignedAgent(assigned, "a2")).toBe(false);
+    expect(matchesAssignedAgent(makeConversation(null), "a1")).toBe(false);
+  });
+
+  it("keeps unassigned threads", () => {
+    expect(matchesAssignedAgent(makeConversation(null), "unassigned")).toBe(
+      true,
+    );
+    expect(
+      matchesAssignedAgent(
+        { ...makeConversation(null), assigned_agent_id: "a1" },
+        "unassigned",
+      ),
     ).toBe(false);
   });
 });

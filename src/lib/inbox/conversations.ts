@@ -69,3 +69,16 @@ export function matchesContactFilters(
 
   return true;
 }
+
+/** `null` = no agent filter. `"unassigned"` = no advisor on the thread. */
+export type AssignedAgentFilter = string | "unassigned" | null;
+
+export function matchesAssignedAgent(
+  conversation: Conversation,
+  agentId: AssignedAgentFilter,
+): boolean {
+  if (agentId === null) return true;
+  const assigned = conversation.assigned_agent_id ?? null;
+  if (agentId === "unassigned") return !assigned;
+  return assigned === agentId;
+}

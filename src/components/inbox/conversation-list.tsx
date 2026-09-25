@@ -4,15 +4,23 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   CONVERSATION_SELECT,
+  matchesAssignedAgent,
   matchesContactFilters,
   normalizeConversations,
+  type AssignedAgentFilter,
 } from "@/lib/inbox/conversations";
 import { cn } from "@/lib/utils";
-import type { Conversation, ConversationStatus, Tag } from "@/types";
+import type { AccountMember, Conversation, ConversationStatus, Tag } from "@/types";
 import { contactDisplayName } from "@/lib/whatsapp/contact-identity";
 import { Search, ChevronDown, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useTranslations } from "next-intl";
+import { useCan } from "@/hooks/use-can";
+import {
+  assignableMembers,
+  fetchAccountMembers,
+  memberLabel,
+} from "@/lib/account/members";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
@@ -73,6 +81,9 @@ export function ConversationList({
   const [tags, setTags] = useState<Tag[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
+  const [selectedAgentId, setSelectedAgentId] = useState<AssignedAgentFilter>(null);
+  const [agents, setAgents] = useState<AccountMember[]>([]);
+  const canFilterByAgent = useCan("manage-members");
 
   // Keep the latest callback in a ref so the fetch effect below can
   // have a stable, empty-dep identity. Previously the fetch useCallback
@@ -141,6 +152,21 @@ export function ConversationList({
     };
   }, []);
 
+  useEffect(() => {
+    if (!canFilterByAgent) {
+      setAgents([]);
+      setSelectedAgentId(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchAccountMembers().then((all) => {
+      if (!cancelled) setAgents(assignableMembers(all));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [canFilterByAgent]);
+
   // Company options are derived from the loaded conversations — there's no
   // separate companies table, and only companies with a live conversation
   // are worth offering as an inbox filter.
@@ -178,6 +204,10 @@ export function ConversationList({
       );
     }
 
+    if (canFilterByAgent && selectedAgentId !== null) {
+      result = result.filter((c) => matchesAssignedAgent(c, selectedAgentId));
+    }
+
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter((c) => {
@@ -189,7 +219,15 @@ export function ConversationList({
     }
 
     return result;
-  }, [conversations, filter, search, selectedTagIds, selectedCompany]);
+  }, [
+    conversations,
+    filter,
+    search,
+    selectedTagIds,
+    selectedCompany,
+    selectedAgentId,
+    canFilterByAgent,
+  ]);
 
   const toggleTag = useCallback((id: string) => {
     setSelectedTagIds((prev) =>
@@ -200,9 +238,29 @@ export function ConversationList({
   const clearContactFilters = useCallback(() => {
     setSelectedTagIds([]);
     setSelectedCompany(null);
+    setSelectedAgentId(null);
   }, []);
 
-  const hasContactFilters = selectedTagIds.length > 0 || selectedCompany !== null;
+  const selectedAgentLabel =
+    selectedAgentId === "unassigned"
+      ? t("unassigned")
+      : selectedAgentId
+        ? memberLabel(
+            agents.find((m) => m.user_id === selectedAgentId) ?? {
+              user_id: selectedAgentId,
+              full_name: "",
+              email: null,
+              avatar_url: null,
+              role: "agent",
+              joined_at: "",
+            },
+          )
+        : null;
+
+  const hasContactFilters =
+    selectedTagIds.length > 0 ||
+    selectedCompany !== null ||
+    selectedAgentId !== null;
 
   const handleSearchChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -351,6 +409,63 @@ export function ConversationList({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
+
+          {canFilterByAgent && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className={cn(
+                  "inline-flex max-w-40 items-center justify-center h-7 gap-1 px-2 text-xs rounded-md hover:bg-muted",
+                  selectedAgentId
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <span className="truncate">{selectedAgentLabel ?? t("agent")}</span>
+                <ChevronDown className="h-3 w-3 shrink-0" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                className="max-h-64 w-56 border-border bg-popover"
+              >
+                <DropdownMenuItem
+                  onClick={() => setSelectedAgentId(null)}
+                  className={cn(
+                    "text-sm",
+                    selectedAgentId === null
+                      ? "text-primary"
+                      : "text-popover-foreground"
+                  )}
+                >
+                  {t("allAgents")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setSelectedAgentId("unassigned")}
+                  className={cn(
+                    "text-sm",
+                    selectedAgentId === "unassigned"
+                      ? "text-primary"
+                      : "text-popover-foreground"
+                  )}
+                >
+                  {t("unassigned")}
+                </DropdownMenuItem>
+                {agents.map((agent) => (
+                  <DropdownMenuItem
+                    key={agent.user_id}
+                    onClick={() => setSelectedAgentId(agent.user_id)}
+                    className={cn(
+                      "text-sm",
+                      selectedAgentId === agent.user_id
+                        ? "text-primary"
+                        : "text-popover-foreground"
+                    )}
+                  >
+                    <span className="truncate">{memberLabel(agent)}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
         {hasContactFilters && (
@@ -378,6 +493,15 @@ export function ConversationList({
                 className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-foreground hover:bg-muted/70"
               >
                 <span className="max-w-24 truncate">{selectedCompany}</span>
+                <X className="h-3 w-3" />
+              </button>
+            )}
+            {selectedAgentLabel && (
+              <button
+                onClick={() => setSelectedAgentId(null)}
+                className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-foreground hover:bg-muted/70"
+              >
+                <span className="max-w-24 truncate">{selectedAgentLabel}</span>
                 <X className="h-3 w-3" />
               </button>
             )}
