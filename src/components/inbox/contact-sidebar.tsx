@@ -3,7 +3,12 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { addContactTag, deleteContactTag } from "@/lib/contacts/tag-api";
+import { findExistingContact, isUniqueViolation } from "@/lib/contacts/dedupe";
 import { useAuth } from "@/hooks/use-auth";
+import {
+  isRealMobilePhone,
+  sanitizePhoneForMeta,
+} from "@/lib/whatsapp/phone-utils";
 import { DealForm } from "@/components/pipelines/deal-form";
 import { LeadTasksPanel } from "@/components/inbox/lead-tasks-panel";
 import { useCan } from "@/hooks/use-can";
@@ -92,6 +97,9 @@ export function ContactSidebar({
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [savingName, setSavingName] = useState(false);
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [phoneDraft, setPhoneDraft] = useState("");
+  const [savingPhone, setSavingPhone] = useState(false);
 
   const [dealFormOpen, setDealFormOpen] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
@@ -157,10 +165,12 @@ export function ContactSidebar({
   useEffect(() => {
     setEditingName(false);
     setNameDraft(contact?.name ?? "");
+    setEditingPhone(false);
+    setPhoneDraft(isRealMobilePhone(contact?.phone) ? (contact?.phone ?? "") : "");
     setTagPickerOpen(false);
     setNewTagName("");
     setNewTagColor(TAG_PRESET_COLORS[3]);
-  }, [contact?.id, contact?.name]);
+  }, [contact?.id, contact?.name, contact?.phone]);
 
   const assignedTagIds = useMemo(
     () => new Set(tags.map((t) => t.id)),
@@ -223,6 +233,64 @@ export function ContactSidebar({
     setEditingName(false);
     onContactUpdated?.(data as Contact);
   }, [contact, nameDraft, onContactUpdated, tSidebar]);
+
+  const handleSavePhone = useCallback(async () => {
+    if (!canEdit || !contact || !accountId || savingPhone) return;
+    const digits = sanitizePhoneForMeta(phoneDraft);
+    if (!isRealMobilePhone(digits)) {
+      toast.error(tSidebar("toastPhoneInvalid"));
+      return;
+    }
+    if (sanitizePhoneForMeta(contact.phone ?? "") === digits) {
+      setEditingPhone(false);
+      return;
+    }
+    setSavingPhone(true);
+    const existing = await findExistingContact(
+      createClient(),
+      accountId,
+      digits,
+    );
+    if (existing && existing.id !== contact.id) {
+      toast.error(
+        tSidebar("toastPhoneConflict", {
+          name: existing.name?.trim() || existing.phone,
+        }),
+      );
+      setSavingPhone(false);
+      return;
+    }
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("contacts")
+      .update({
+        phone: digits,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", contact.id)
+      .select()
+      .single();
+    setSavingPhone(false);
+    if (error || !data) {
+      toast.error(
+        isUniqueViolation(error)
+          ? tSidebar("toastPhoneConflict", { name: digits })
+          : tSidebar("toastPhoneUpdateFailed"),
+      );
+      return;
+    }
+    toast.success(tSidebar("toastPhoneUpdated"));
+    setEditingPhone(false);
+    onContactUpdated?.({ ...contact, ...(data as Contact) });
+  }, [
+    canEdit,
+    contact,
+    accountId,
+    savingPhone,
+    phoneDraft,
+    onContactUpdated,
+    tSidebar,
+  ]);
 
   const handleAddNote = useCallback(async () => {
     if (!contact || !newNote.trim()) return;
@@ -522,20 +590,95 @@ export function ContactSidebar({
 
           {/* Phone */}
           <div className="mt-4 space-y-2">
-            <button
-              onClick={handleCopyPhone}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted"
-            >
-              <Phone className="h-4 w-4 text-muted-foreground" />
-              <span className="flex-1 text-left">
-                {contactIdentityLabel(contact, tThread("noPhone"))}
-              </span>
-              {copied ? (
-                <Check className="h-3 w-3 text-primary" />
-              ) : (
-                <Copy className="h-3 w-3 text-muted-foreground" />
-              )}
-            </button>
+            {editingPhone ? (
+              <div className="flex w-full items-center gap-1">
+                <Phone className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" />
+                <Input
+                  value={phoneDraft}
+                  onChange={(e) => setPhoneDraft(e.target.value)}
+                  placeholder={tSidebar("phonePlaceholder")}
+                  className="h-8 text-sm"
+                  inputMode="tel"
+                  autoFocus
+                  disabled={savingPhone}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void handleSavePhone();
+                    }
+                    if (e.key === "Escape") {
+                      setEditingPhone(false);
+                      setPhoneDraft(
+                        isRealMobilePhone(contact.phone) ? contact.phone : "",
+                      );
+                    }
+                  }}
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0 p-0"
+                  onClick={() => void handleSavePhone()}
+                  disabled={savingPhone}
+                  aria-label={tSidebar("savePhone")}
+                >
+                  {savingPhone ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Check className="h-3.5 w-3.5 text-primary" />
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0 p-0"
+                  onClick={() => {
+                    setEditingPhone(false);
+                    setPhoneDraft(
+                      isRealMobilePhone(contact.phone) ? contact.phone : "",
+                    );
+                  }}
+                  disabled={savingPhone}
+                  aria-label={tSidebar("cancelEditPhone")}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={handleCopyPhone}
+                  className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted"
+                >
+                  <Phone className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="flex-1 truncate text-left">
+                    {contactIdentityLabel(contact, tThread("noPhone"))}
+                  </span>
+                  {copied ? (
+                    <Check className="h-3 w-3 text-primary" />
+                  ) : (
+                    <Copy className="h-3 w-3 text-muted-foreground" />
+                  )}
+                </button>
+                {canEdit && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-8 shrink-0 p-0 text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setPhoneDraft(
+                        isRealMobilePhone(contact.phone) ? contact.phone : "",
+                      );
+                      setEditingPhone(true);
+                    }}
+                    aria-label={tSidebar("editPhone")}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+            )}
 
             {contact.email && (
               <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground">
