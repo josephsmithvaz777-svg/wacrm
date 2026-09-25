@@ -41,6 +41,18 @@ import {
 import { format } from "date-fns";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+
+const TAG_PRESET_COLORS = [
+  "#ef4444",
+  "#f97316",
+  "#f59e0b",
+  "#10b981",
+  "#06b6d4",
+  "#3b82f6",
+  "#8b5cf6",
+  "#ec4899",
+];
 
 interface ContactSidebarProps {
   contact: Contact | null;
@@ -57,7 +69,7 @@ export function ContactSidebar({
   const tSidebar = useTranslations("Inbox.sidebar");
   const tThread = useTranslations("Inbox.messageThread");
 
-  const { accountId } = useAuth();
+  const { accountId, user } = useAuth();
   const canEdit = useCan("send-messages");
   const [copied, setCopied] = useState(false);
   const [deals, setDeals] = useState<Deal[]>([]);
@@ -71,6 +83,9 @@ export function ContactSidebar({
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
   const [savingTags, setSavingTags] = useState(false);
+  const [creatingTag, setCreatingTag] = useState(false);
+  const [newTagName, setNewTagName] = useState("");
+  const [newTagColor, setNewTagColor] = useState(TAG_PRESET_COLORS[3]);
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
   const [updatingStageId, setUpdatingStageId] = useState<string | null>(null);
 
@@ -143,6 +158,8 @@ export function ContactSidebar({
     setEditingName(false);
     setNameDraft(contact?.name ?? "");
     setTagPickerOpen(false);
+    setNewTagName("");
+    setNewTagColor(TAG_PRESET_COLORS[3]);
   }, [contact?.id, contact?.name]);
 
   const assignedTagIds = useMemo(
@@ -287,6 +304,65 @@ export function ContactSidebar({
     },
     [contact, tags, notifyTagsUpdated, tSidebar],
   );
+
+  const handleCreateTag = useCallback(async () => {
+    if (!canEdit || !contact || !accountId || !user?.id || creatingTag) return;
+    const name = newTagName.trim();
+    if (!name) {
+      toast.error(tSidebar("toastTagNameRequired"));
+      return;
+    }
+    const existing = allTags.find(
+      (tag) => tag.name.localeCompare(name, undefined, { sensitivity: "accent" }) === 0,
+    );
+    if (existing) {
+      if (assignedTagIds.has(existing.id)) {
+        toast.error(tSidebar("toastTagExists"));
+        return;
+      }
+      await handleAddTag(existing);
+      setNewTagName("");
+      return;
+    }
+
+    setCreatingTag(true);
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("tags")
+      .insert({
+        user_id: user.id,
+        account_id: accountId,
+        name,
+        color: newTagColor,
+      })
+      .select("*")
+      .single();
+    if (error || !data) {
+      toast.error(tSidebar("toastTagCreateFailed"));
+      setCreatingTag(false);
+      return;
+    }
+    const created = data as Tag;
+    setAllTags((prev) =>
+      [...prev, created].sort((a, b) => a.name.localeCompare(b.name)),
+    );
+    setNewTagName("");
+    setCreatingTag(false);
+    toast.success(tSidebar("toastTagCreated"));
+    await handleAddTag(created);
+  }, [
+    canEdit,
+    contact,
+    accountId,
+    user?.id,
+    creatingTag,
+    newTagName,
+    newTagColor,
+    allTags,
+    assignedTagIds,
+    handleAddTag,
+    tSidebar,
+  ]);
 
   const handleStageChange = useCallback(
     async (deal: Deal, newStageId: string) => {
@@ -486,10 +562,12 @@ export function ContactSidebar({
                 >
                   <Plus className="h-3.5 w-3.5" />
                 </PopoverTrigger>
-                <PopoverContent align="end" className="w-56 p-2">
+                <PopoverContent align="end" className="w-60 p-2">
                   {availableTags.length === 0 ? (
                     <p className="px-1 py-2 text-xs text-muted-foreground">
-                      {tSidebar("noTagsAvailable")}
+                      {canEdit
+                        ? tSidebar("noTagsCreateHere")
+                        : tSidebar("noTagsAvailable")}
                     </p>
                   ) : (
                     <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
@@ -497,7 +575,7 @@ export function ContactSidebar({
                         <button
                           key={tag.id}
                           type="button"
-                          disabled={savingTags}
+                          disabled={savingTags || creatingTag}
                           onClick={() => void handleAddTag(tag)}
                           className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted disabled:opacity-50"
                         >
@@ -510,6 +588,53 @@ export function ContactSidebar({
                           </span>
                         </button>
                       ))}
+                    </div>
+                  )}
+                  {canEdit && (
+                    <div className="mt-2 space-y-2 border-t border-border pt-2">
+                      <Input
+                        value={newTagName}
+                        onChange={(e) => setNewTagName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            void handleCreateTag();
+                          }
+                        }}
+                        placeholder={tSidebar("createTagPlaceholder")}
+                        className="h-8 bg-muted border-border text-xs"
+                      />
+                      <div className="flex flex-wrap gap-1.5 px-0.5">
+                        {TAG_PRESET_COLORS.map((color) => (
+                          <button
+                            key={color}
+                            type="button"
+                            onClick={() => setNewTagColor(color)}
+                            className={cn(
+                              "h-4 w-4 rounded-full border",
+                              newTagColor === color
+                                ? "border-foreground"
+                                : "border-transparent",
+                            )}
+                            style={{ backgroundColor: color }}
+                            aria-label={color}
+                          />
+                        ))}
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={creatingTag || savingTags || !newTagName.trim()}
+                        onClick={() => void handleCreateTag()}
+                        className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                      >
+                        {creatingTag ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <Plus className="size-3.5" />
+                        )}
+                        {tSidebar("createTag")}
+                      </Button>
                     </div>
                   )}
                 </PopoverContent>
