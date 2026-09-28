@@ -66,6 +66,14 @@ function db() {
       if (table === 'messages') {
         return chainFor('messages')
       }
+      if (table === 'contacts') {
+        const chain = chainFor(table)
+        chain.maybeSingle = async () => ({
+          data: { is_whatsapp_group: false },
+          error: null,
+        })
+        return chain
+      }
       throw new Error(`unexpected table ${table}`)
     },
   }

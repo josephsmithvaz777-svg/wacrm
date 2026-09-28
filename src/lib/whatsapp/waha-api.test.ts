@@ -5,11 +5,15 @@ import {
   extractInboundText,
   extractWahaMeId,
   extractWahaMessageId,
+  extractWhatsAppGroupJid,
+  extractWhatsAppGroupSubject,
   fetchWahaChatMessages,
   isWahaFromMe,
   parseWahaSerializedId,
   phoneToChatId,
   pickOutboundChatJid,
+  resolveInboundChatId,
+  resolveOutboundChatId,
   WAHA_WEBHOOK_EVENTS,
 } from './waha-api';
 
@@ -135,6 +139,21 @@ describe('pickOutboundChatJid', () => {
         me,
       ),
     ).toBe(contact);
+  });
+
+  it('keeps a group JID so fromMe echoes land on the group thread', () => {
+    const group = '120363041234567890@g.us';
+    expect(
+      pickOutboundChatJid(
+        {
+          fromMe: true,
+          from: me,
+          to: group,
+          chatId: group,
+        },
+        me,
+      ),
+    ).toBe(group);
   });
 });
 
@@ -296,5 +315,63 @@ describe('fetchWahaChatMessages', () => {
     );
 
     expect(await fetchWahaChatMessages(opts, '51999111222@c.us')).toEqual([]);
+  });
+});
+
+describe('whatsapp groups', () => {
+  const group = '120363041234567890@g.us';
+
+  it('extracts the group JID from WEBJS inbound', () => {
+    expect(
+      extractWhatsAppGroupJid({
+        from: group,
+        participant: '51999111222@c.us',
+        notifyName: 'Ana',
+        body: 'hola',
+      }),
+    ).toBe(group);
+  });
+
+  it('extracts the group JID from GOWS Info.Chat', () => {
+    expect(
+      extractWhatsAppGroupJid({
+        from: '51999111222@c.us',
+        _data: { Info: { Chat: group, Sender: '51999111222@c.us', IsGroup: true } },
+      }),
+    ).toBe(group);
+  });
+
+  it('reads the group subject without using the participant push name', () => {
+    expect(
+      extractWhatsAppGroupSubject({
+        notifyName: 'Ana',
+        chatName: 'Equipo ventas',
+      }),
+    ).toBe('Equipo ventas');
+  });
+
+  it('resolveInboundChatId returns the group, not the participant', async () => {
+    const resolved = await resolveInboundChatId(
+      opts,
+      {
+        from: group,
+        participant: '51999111222@c.us',
+        notifyName: 'Ana',
+        body: 'hola',
+      },
+      { fromMe: false },
+    );
+    expect(resolved).toEqual({
+      chatId: group,
+      phone: '120363041234567890',
+      isGroup: true,
+    });
+  });
+
+  it('resolveOutboundChatId sends to @g.us without treating it as a LID', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ error: 'unused' }, 500));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(resolveOutboundChatId(opts, group)).resolves.toBe(group);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

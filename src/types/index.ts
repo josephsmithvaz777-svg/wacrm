@@ -128,6 +128,8 @@ export interface Contact {
   whatsapp_jid?: string | null;
   /** Public WhatsApp username without @. */
   whatsapp_username?: string | null;
+  /** WhatsApp group chat (`@g.us`). Migration 074. */
+  is_whatsapp_group?: boolean;
   name?: string;
   email?: string;
   company?: string;
@@ -359,6 +361,11 @@ export interface Message {
    * Only set on the first inbound message of that thread. Migration 050.
    */
   ad_context?: MessageAdContext | null;
+  /**
+   * Push name of the WhatsApp group participant who sent this inbound
+   * message. Null on 1:1 chats. Migration 074.
+   */
+  sender_display_name?: string | null;
   /**
    * Cached AI transcription (audio) or description (image).
    * Migration 060. Not a customer caption — that stays in `content_text`.

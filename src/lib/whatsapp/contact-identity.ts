@@ -79,18 +79,50 @@ export function extractWhatsAppUsername(
   return null
 }
 
+export function isWhatsAppGroupJid(raw: string | null | undefined): boolean {
+  return typeof raw === 'string' && raw.trim().endsWith('@g.us')
+}
+
+/** Status / channels / newsletters — not inbox chats. */
+export function isIgnoredWhatsAppBroadcastJid(
+  raw: string | null | undefined,
+): boolean {
+  if (!raw) return false
+  const jid = raw.trim()
+  return jid.endsWith('@newsletter') || jid === 'status@broadcast'
+}
+
+export function isWhatsAppGroupContact(
+  contact: { is_whatsapp_group?: boolean | null; whatsapp_jid?: string | null } | null | undefined,
+): boolean {
+  if (!contact) return false
+  return contact.is_whatsapp_group === true || isWhatsAppGroupJid(contact.whatsapp_jid)
+}
+
 export function contactDisplayName(
   contact: {
     name?: string | null
     phone?: string | null
     whatsapp_username?: string | null
     whatsapp_jid?: string | null
+    is_whatsapp_group?: boolean | null
   } | null | undefined,
   fallback: string,
 ): string {
   if (!contact) return fallback
   const username = normalizeWhatsAppUsername(contact.whatsapp_username)
   const name = contact.name?.trim()
+  if (isWhatsAppGroupContact(contact)) {
+    if (
+      name &&
+      name !== contact.phone &&
+      !isLikelyWhatsAppLid(name) &&
+      !/^\d+$/.test(name)
+    ) {
+      return name
+    }
+    return fallback
+  }
   if (
     name &&
     name !== contact.phone &&
@@ -110,13 +142,7 @@ export function normalizeWhatsAppJid(
   if (!raw) return null
   const trimmed = raw.trim()
   if (!trimmed.includes('@')) return null
-  if (
-    trimmed.endsWith('@g.us') ||
-    trimmed.endsWith('@newsletter') ||
-    trimmed === 'status@broadcast'
-  ) {
-    return null
-  }
+  if (isIgnoredWhatsAppBroadcastJid(trimmed)) return null
   return trimmed
 }
 
@@ -132,10 +158,13 @@ export function contactIdentityLabel(
     phone?: string | null
     whatsapp_username?: string | null
     whatsapp_jid?: string | null
+    is_whatsapp_group?: boolean | null
   } | null | undefined,
   noPhoneLabel: string,
+  groupLabel?: string,
 ): string {
   if (!contact) return noPhoneLabel
+  if (isWhatsAppGroupContact(contact)) return groupLabel || noPhoneLabel
   const username = normalizeWhatsAppUsername(contact.whatsapp_username)
   if (username) return `@${username}`
   if (contactHasRealPhone(contact)) return contact.phone as string

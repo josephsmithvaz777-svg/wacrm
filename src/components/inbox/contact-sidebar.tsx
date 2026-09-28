@@ -12,7 +12,7 @@ import {
 import { DealForm } from "@/components/pipelines/deal-form";
 import { LeadTasksPanel } from "@/components/inbox/lead-tasks-panel";
 import { useCan } from "@/hooks/use-can";
-import { contactIdentityLabel, contactDisplayName } from "@/lib/whatsapp/contact-identity";
+import { contactIdentityLabel, contactDisplayName, isWhatsAppGroupContact } from "@/lib/whatsapp/contact-identity";
 import type {
   Contact,
   Deal,
@@ -34,6 +34,7 @@ import {
   X,
   Loader2,
   GitBranch,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -195,8 +196,9 @@ export function ContactSidebar({
 
   const handleCopyPhone = useCallback(async () => {
     if (!contact) return;
-    const value =
-      contact.whatsapp_username
+    const value = contact.is_whatsapp_group
+      ? contact.whatsapp_jid || contact.name || contact.phone
+      : contact.whatsapp_username
         ? `@${contact.whatsapp_username}`
         : contact.whatsapp_jid || contact.phone;
     if (!value) return;
@@ -493,7 +495,11 @@ export function ContactSidebar({
     );
   }
 
-  const displayName = contactDisplayName(contact, tThread("noPhone"));
+  const isGroup = isWhatsAppGroupContact(contact);
+  const displayName = contactDisplayName(
+    contact,
+    isGroup ? tThread("group") : tThread("noPhone"),
+  );
   const initials = displayName.charAt(0).toUpperCase();
   const dealFormStages = stagesByPipeline[dealFormPipelineId] ?? [];
 
@@ -503,13 +509,23 @@ export function ContactSidebar({
         <div className="p-4">
           {/* Contact Info */}
           <div className="flex flex-col items-center text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted text-lg font-semibold text-foreground">
+            <div
+              className={cn(
+                "flex h-16 w-16 items-center justify-center bg-muted text-lg font-semibold text-foreground",
+                isGroup ? "rounded-xl" : "rounded-full",
+              )}
+            >
               {contact.avatar_url ? (
                 <img
                   src={contact.avatar_url}
                   alt={displayName}
-                  className="h-16 w-16 rounded-full object-cover"
+                  className={cn(
+                    "h-16 w-16 object-cover",
+                    isGroup ? "rounded-xl" : "rounded-full",
+                  )}
                 />
+              ) : isGroup ? (
+                <Users className="h-7 w-7 text-muted-foreground" />
               ) : (
                 initials
               )}
@@ -653,7 +669,11 @@ export function ContactSidebar({
                 >
                   <Phone className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <span className="flex-1 truncate text-left">
-                    {contactIdentityLabel(contact, tThread("noPhone"))}
+                    {contactIdentityLabel(
+                      contact,
+                      tThread("noPhone"),
+                      tThread("group"),
+                    )}
                   </span>
                   {copied ? (
                     <Check className="h-3 w-3 text-primary" />
@@ -661,7 +681,7 @@ export function ContactSidebar({
                     <Copy className="h-3 w-3 text-muted-foreground" />
                   )}
                 </button>
-                {canEdit && (
+                {canEdit && !isGroup && (
                   <Button
                     size="sm"
                     variant="ghost"

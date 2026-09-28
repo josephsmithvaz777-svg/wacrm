@@ -3,7 +3,11 @@
 // Docs: https://waha.devlike.pro/
 // ============================================================
 
-import { extractWhatsAppUsername } from '@/lib/whatsapp/contact-identity';
+import {
+  extractWhatsAppUsername,
+  isIgnoredWhatsAppBroadcastJid,
+  isWhatsAppGroupJid,
+} from '@/lib/whatsapp/contact-identity';
 
 export type WahaSessionStatus =
   | 'STOPPED'
@@ -88,9 +92,10 @@ export async function resolveOutboundChatId(
   opts: WahaClientOptions,
   toPhone: string,
 ): Promise<string> {
+  const trimmed = toPhone.trim();
+  if (isWhatsAppGroupJid(trimmed)) return trimmed;
   const digits = toPhone.replace(/\D/g, '');
-  if (toPhone.trim().toLowerCase().endsWith('@lid') && digits.length >= 8) {
-    const trimmed = toPhone.trim();
+  if (trimmed.toLowerCase().endsWith('@lid') && digits.length >= 8) {
     return trimmed.includes('@') ? trimmed : `${digits}@lid`;
   }
   // Linked IDs stored as "phones" are 14+ digits. Treating them as
@@ -985,11 +990,74 @@ function pushCandidate(list: string[], value: unknown) {
 }
 
 function isGroupOrStatusJid(jid: string): boolean {
-  return (
-    jid.endsWith('@g.us') ||
-    jid.endsWith('@newsletter') ||
-    jid === 'status@broadcast'
-  );
+  return isWhatsAppGroupJid(jid) || isIgnoredWhatsAppBroadcastJid(jid);
+}
+
+/**
+ * Group JID (`…@g.us`) from a WAHA/WEBJS/GOWS payload. `from` is the
+ * group on inbound; `participant` is the person who spoke.
+ */
+export function extractWhatsAppGroupJid(
+  payload: Record<string, unknown>,
+): string | null {
+  const candidates: string[] = [];
+  const push = (value: unknown) => {
+    if (typeof value === 'string' && value.trim()) candidates.push(value.trim());
+  };
+  push(payload.chatId);
+  push(payload.from);
+  push(payload.to);
+  push(remoteJidFromSerializedPayload(payload));
+  push(remoteJidFromPayload(payload));
+  push(infoChatFromPayload(payload));
+  const data =
+    payload._data && typeof payload._data === 'object'
+      ? (payload._data as Record<string, unknown>)
+      : null;
+  if (data) {
+    push(data.from);
+    const id =
+      data.id && typeof data.id === 'object'
+        ? (data.id as Record<string, unknown>)
+        : null;
+    push(id?.remote);
+    push(id?.remoteJid);
+  }
+  for (const jid of candidates) {
+    if (isWhatsAppGroupJid(jid)) return jid;
+  }
+  return null;
+}
+
+/** Group subject / title when the engine includes it on the payload. */
+export function extractWhatsAppGroupSubject(
+  payload: Record<string, unknown>,
+): string | null {
+  const candidates: unknown[] = [
+    payload.chatName,
+    payload.groupName,
+    payload.subject,
+  ];
+  const data =
+    payload._data && typeof payload._data === 'object'
+      ? (payload._data as Record<string, unknown>)
+      : null;
+  if (data) {
+    candidates.push(data.chatName, data.groupName, data.subject);
+    for (const key of ['Chat', 'chat']) {
+      const chat = data[key];
+      if (chat && typeof chat === 'object') {
+        const rec = chat as Record<string, unknown>;
+        candidates.push(rec.name, rec.formattedTitle, rec.subject);
+      }
+    }
+  }
+  for (const value of candidates) {
+    if (typeof value !== 'string') continue;
+    const trimmed = value.trim();
+    if (trimmed && isUsableDisplayName(trimmed)) return trimmed;
+  }
+  return null;
 }
 
 function remoteJidFromPayload(payload: Record<string, unknown>): string | null {
@@ -1040,7 +1108,8 @@ export function pickOutboundChatJid(
     to,
   ];
   const usable = ranked.filter(
-    (jid): jid is string => Boolean(jid) && !isGroupOrStatusJid(jid as string),
+    (jid): jid is string =>
+      Boolean(jid) && !isIgnoredWhatsAppBroadcastJid(jid as string),
   );
   const notMe = usable.find((jid) => !isSessionMeJid(jid, meId));
   return notMe ?? usable[0] ?? null;
@@ -1056,7 +1125,7 @@ export async function resolveInboundChatId(
   opts: WahaClientOptions,
   payload: Record<string, unknown>,
   options?: { fromMe?: boolean; meId?: string | null },
-): Promise<{ chatId: string; phone: string } | null> {
+): Promise<{ chatId: string; phone: string; isGroup?: boolean } | null> {
   const rawFrom =
     typeof payload.from === 'string'
       ? payload.from
@@ -1073,8 +1142,17 @@ export async function resolveInboundChatId(
     ? pickOutboundChatJid(payload, meId)
     : rawFrom || serializedRemote;
 
+  const groupJid =
+    extractWhatsAppGroupJid(payload) ||
+    (from && isWhatsAppGroupJid(from) ? from : null);
+  if (groupJid) {
+    const phone = normalizeDigits(chatIdToPhone(groupJid));
+    if (!phone || phone.length < 8) return null;
+    return { chatId: groupJid, phone, isGroup: true };
+  }
+
   if (!from) return null;
-  if (isGroupOrStatusJid(from)) {
+  if (isIgnoredWhatsAppBroadcastJid(from) || isGroupOrStatusJid(from)) {
     return null;
   }
 

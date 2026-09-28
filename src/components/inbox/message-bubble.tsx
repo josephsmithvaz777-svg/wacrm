@@ -314,6 +314,16 @@ export function MessageBubble({
         {ad && (
           <AdContextCard ad={ad} t={t} onPrimary={isAgent} flushTop={!reply} />
         )}
+        {!isAgent && message.sender_display_name && (
+          <p
+            className={cn(
+              "mb-0.5 text-[11px] font-medium",
+              "text-muted-foreground",
+            )}
+          >
+            {message.sender_display_name}
+          </p>
+        )}
         <MessageContent message={message} t={t} onOpenMedia={onOpenMedia} />
         <div
           className={cn(

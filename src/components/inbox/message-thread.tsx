@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { canReceiveLeads } from "@/lib/auth/roles";
-import { contactIdentityLabel, contactDisplayName } from "@/lib/whatsapp/contact-identity";
+import { contactIdentityLabel, contactDisplayName, isWhatsAppGroupContact } from "@/lib/whatsapp/contact-identity";
 import { usePresence } from "@/hooks/use-presence";
 import { PresenceDot } from "@/components/presence/presence-dot";
 import { presenceLabel } from "@/lib/presence";
@@ -31,6 +31,7 @@ import {
   PanelRightClose,
   Trash2,
   Loader2,
+  Users,
 } from "lucide-react";
 import { format, isToday, isYesterday, differenceInHours } from "date-fns";
 import { useTranslations } from "next-intl";
@@ -1040,7 +1041,11 @@ export function MessageThread({
     );
   }
 
-  const displayName = contactDisplayName(contact, t("noPhone"));
+  const isGroup = isWhatsAppGroupContact(contact);
+  const displayName = contactDisplayName(
+    contact,
+    isGroup ? t("group") : t("noPhone"),
+  );
   const messageGroups = groupMessagesByDate(messages);
   const currentStatus = STATUS_OPTIONS.find(
     (s) => s.value === conversation.status
@@ -1080,17 +1085,38 @@ export function MessageThread({
               <ArrowLeft className="h-5 w-5" />
             </button>
           )}
-          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground">
-            {displayName.charAt(0).toUpperCase()}
+          <div
+            className={cn(
+              "flex h-9 w-9 flex-shrink-0 items-center justify-center bg-muted text-sm font-medium text-foreground",
+              isGroup ? "rounded-lg" : "rounded-full",
+            )}
+          >
+            {isGroup ? (
+              <Users className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              displayName.charAt(0).toUpperCase()
+            )}
           </div>
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold text-foreground">{displayName}</h2>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <h2 className="truncate text-sm font-semibold text-foreground">{displayName}</h2>
+              {isGroup && (
+                <span className="shrink-0 rounded bg-muted px-1.5 py-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {t("group")}
+                </span>
+              )}
+            </div>
             <p className="truncate text-xs text-muted-foreground">
-              {contactIdentityLabel(contact, t("noPhone"))}
+              {contactIdentityLabel(
+                contact,
+                t("noPhone"),
+                t("group"),
+              )}
             </p>
           </div>
           {/* Session timer badge — hidden on the narrowest phones so
-              the name + back arrow keep their room. */}
+              the name + back arrow keep their room. Not shown on groups. */}
+          {!isGroup && (
           <Badge
             variant="outline"
             className={cn(
@@ -1101,6 +1127,7 @@ export function MessageThread({
             <Clock className="h-3 w-3" />
             {sessionInfo.remaining}
           </Badge>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -1337,6 +1364,7 @@ export function MessageThread({
       {/* AI auto-reply banner — take over an active bot, or resume it
           after a handoff. Renders nothing unless the account has
           auto-reply configured. */}
+      {!isGroup && (
       <AiThreadBanner
         conversationId={conversation.id}
         disabled={conversation.ai_autoreply_disabled ?? false}
@@ -1349,6 +1377,7 @@ export function MessageThread({
           }
         }}
       />
+      )}
 
       {/* Composer */}
       <MessageComposer

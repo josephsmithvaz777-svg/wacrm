@@ -11,6 +11,8 @@ import {
   extractInboundText,
   extractWahaMeId,
   extractWahaMessageId,
+  extractWhatsAppGroupJid,
+  extractWhatsAppGroupSubject,
   fetchWahaContactIdentity,
   isUsableDisplayName,
   isWahaFromMe,
@@ -27,9 +29,10 @@ import { dispatchWebhookEvent } from '@/lib/webhooks/deliver';
 import { extractAdContext } from '@/lib/whatsapp/ad-context';
 import {
   extractWhatsAppUsername,
+  isIgnoredWhatsAppBroadcastJid,
+  isWhatsAppGroupJid,
   normalizeWhatsAppJid,
 } from '@/lib/whatsapp/contact-identity';
-import { isRealMobilePhone } from '@/lib/whatsapp/phone-utils';
 import { mimeToContentType, persistAdCreativeSafe, uploadWahaMedia } from '@/lib/whatsapp/waha-media';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -86,13 +89,15 @@ async function findOrCreateContact(
   ownerUserId: string,
   phone: string,
   name: string,
-  identity?: { jid?: string | null; username?: string | null },
+  identity?: { jid?: string | null; username?: string | null; isGroup?: boolean },
 ) {
   const jid = identity?.jid ?? null;
-  const username = identity?.username ?? null;
-  const existing =
-    (await findExistingContact(admin(), accountId, phone)) ||
-    (await findContactByJidOrUsername(accountId, jid, username));
+  const username = identity?.isGroup ? null : identity?.username ?? null;
+  const isGroup = identity?.isGroup === true;
+  const existing = isGroup
+    ? await findContactByJidOrUsername(accountId, jid, null)
+    : (await findExistingContact(admin(), accountId, phone)) ||
+      (await findContactByJidOrUsername(accountId, jid, username));
   if (existing) {
     const patch: Record<string, unknown> = {};
     if (
@@ -104,6 +109,7 @@ async function findOrCreateContact(
     }
     if (jid && !existing.whatsapp_jid) patch.whatsapp_jid = jid;
     if (username && !existing.whatsapp_username) patch.whatsapp_username = username;
+    if (isGroup && !existing.is_whatsapp_group) patch.is_whatsapp_group = true;
     if (Object.keys(patch).length > 0) {
       patch.updated_at = new Date().toISOString();
       await admin().from('contacts').update(patch).eq('id', existing.id);
@@ -120,6 +126,7 @@ async function findOrCreateContact(
       phone,
       whatsapp_jid: jid,
       whatsapp_username: username,
+      is_whatsapp_group: isGroup,
       name: name || phone,
     })
     .select()
@@ -378,14 +385,12 @@ export async function processWahaEvent(
         : typeof payload.to === 'string'
           ? payload.to
           : null;
-  // Groups / status / newsletters are not 1:1 inbox chats — skip quietly.
-  // For fromMe, `from` may be our own JID; don't treat that as a group skip.
+  // Status / channels / newsletters are not inbox chats. Groups ARE —
+  // they land as their own thread and never get an AI auto-reply.
   if (
     !fromMe &&
     fromRaw &&
-    (fromRaw.endsWith('@g.us') ||
-      fromRaw.endsWith('@newsletter') ||
-      fromRaw === 'status@broadcast')
+    isIgnoredWhatsAppBroadcastJid(fromRaw)
   ) {
     return;
   }
@@ -420,7 +425,12 @@ export async function processWahaEvent(
     created: boolean;
   } | null = null;
 
+  let isGroup = false;
+  let groupParticipantName: string | null = null;
+
   if (resolved) {
+    isGroup =
+      resolved.isGroup === true || isWhatsAppGroupJid(resolved.chatId);
     const phone = normalizePhone(resolved.phone);
     if (phone) {
       await admin()
@@ -434,49 +444,85 @@ export async function processWahaEvent(
         .eq('account_id', config.account_id)
         .eq('provider', 'waha');
 
-      const fromPayload = fromMe
-        ? null
-        : extractInboundDisplayName(payload, phone);
-      let fromApi = isUsableDisplayName(fromPayload, phone)
-        ? fromPayload
-        : null;
-      let username = extractWhatsAppUsername(payload);
-      if (!username || !fromApi) {
-        const identity = await fetchWahaContactIdentity(
-          opts,
-          resolved.chatId,
-          phone,
-        );
-        username = username || identity.username;
-        fromApi = fromApi || identity.name;
-      }
-      if (!username && fromApi) {
-        username = extractWhatsAppUsername({
-          notifyName: fromApi,
-          name: fromApi,
-        });
-      }
-      const jid = normalizeWhatsAppJid(resolved.chatId);
-      const pushName =
-        fromApi || (username ? `@${username}` : phone);
-
-      const createdContact = await findOrCreateContact(
-        config.account_id,
-        config.user_id,
-        phone,
-        pushName,
-        { jid, username },
-      );
-      if (createdContact) {
-        contactOutcome = {
-          contact: { id: createdContact.contact.id },
-          wasCreated: createdContact.wasCreated,
-        };
-        convResult = await findOrCreateConversation(
+      if (isGroup) {
+        groupParticipantName = extractInboundDisplayName(payload, phone);
+        const subject = extractWhatsAppGroupSubject(payload);
+        let groupName = isUsableDisplayName(subject, phone) ? subject : null;
+        if (!groupName) {
+          const identity = await fetchWahaContactIdentity(
+            opts,
+            resolved.chatId,
+            phone,
+          );
+          groupName = identity.name;
+        }
+        const jid =
+          normalizeWhatsAppJid(resolved.chatId) ||
+          extractWhatsAppGroupJid(payload) ||
+          resolved.chatId;
+        const createdContact = await findOrCreateContact(
           config.account_id,
           config.user_id,
-          createdContact.contact.id,
+          phone,
+          groupName || phone,
+          { jid, isGroup: true },
         );
+        if (createdContact) {
+          contactOutcome = {
+            contact: { id: createdContact.contact.id },
+            wasCreated: createdContact.wasCreated,
+          };
+          convResult = await findOrCreateConversation(
+            config.account_id,
+            config.user_id,
+            createdContact.contact.id,
+          );
+        }
+      } else {
+        const fromPayload = fromMe
+          ? null
+          : extractInboundDisplayName(payload, phone);
+        let fromApi = isUsableDisplayName(fromPayload, phone)
+          ? fromPayload
+          : null;
+        let username = extractWhatsAppUsername(payload);
+        if (!username || !fromApi) {
+          const identity = await fetchWahaContactIdentity(
+            opts,
+            resolved.chatId,
+            phone,
+          );
+          username = username || identity.username;
+          fromApi = fromApi || identity.name;
+        }
+        if (!username && fromApi) {
+          username = extractWhatsAppUsername({
+            notifyName: fromApi,
+            name: fromApi,
+          });
+        }
+        const jid = normalizeWhatsAppJid(resolved.chatId);
+        const pushName =
+          fromApi || (username ? `@${username}` : phone);
+
+        const createdContact = await findOrCreateContact(
+          config.account_id,
+          config.user_id,
+          phone,
+          pushName,
+          { jid, username },
+        );
+        if (createdContact) {
+          contactOutcome = {
+            contact: { id: createdContact.contact.id },
+            wasCreated: createdContact.wasCreated,
+          };
+          convResult = await findOrCreateConversation(
+            config.account_id,
+            config.user_id,
+            createdContact.contact.id,
+          );
+        }
       }
     }
   }
@@ -495,6 +541,7 @@ export async function processWahaEvent(
         wasCreated: false,
       };
       convResult = { conversation: existing, created: false };
+      if (isWhatsAppGroupJid(remoteHint)) isGroup = true;
     }
   }
 
@@ -518,22 +565,24 @@ export async function processWahaEvent(
       contact_id: contactOutcome.contact.id,
     });
   }
-  try {
-    const { claimRoundRobinAssignment } = await import(
-      '@/lib/assignments/round-robin'
-    );
-    const claimed = await claimRoundRobinAssignment(admin(), {
-      accountId: config.account_id,
-      contactId: contactOutcome.contact.id,
-      conversationId: convResult.conversation.id,
-      alreadyAssigned: convResult.conversation.assigned_agent_id ?? null,
-    });
-    if (claimed.agentId) {
-      convResult.conversation.assigned_agent_id = claimed.agentId;
+  if (!isGroup) {
+    try {
+      const { claimRoundRobinAssignment } = await import(
+        '@/lib/assignments/round-robin'
+      );
+      const claimed = await claimRoundRobinAssignment(admin(), {
+        accountId: config.account_id,
+        contactId: contactOutcome.contact.id,
+        conversationId: convResult.conversation.id,
+        alreadyAssigned: convResult.conversation.assigned_agent_id ?? null,
+      });
+      if (claimed.agentId) {
+        convResult.conversation.assigned_agent_id = claimed.agentId;
+      }
+      assignedNow = claimed.claimed ? claimed.agentId : null;
+    } catch (err) {
+      console.warn('[waha-inbound] round-robin assign failed:', err);
     }
-    assignedNow = claimed.claimed ? claimed.agentId : null;
-  } catch (err) {
-    console.warn('[waha-inbound] round-robin assign failed:', err);
   }
 
   const messageId = extractWahaMessageId(payload) || `waha-${Date.now()}`;
@@ -589,6 +638,8 @@ export async function processWahaEvent(
         status: fromMe ? 'sent' : 'delivered',
         created_at: ts,
         ad_context: adContext,
+        sender_display_name:
+          !fromMe && isGroup ? groupParticipantName : null,
       },
       {
         onConflict: 'conversation_id,message_id',
@@ -610,7 +661,7 @@ export async function processWahaEvent(
   // a duplicate must still try auto-reply (`claim_ai_reply_slot` is the
   // send gate). Skip automations/unread on the replay.
   if (!insertedRows || insertedRows.length === 0) {
-    if (!fromMe && inboundTextEarly.trim()) {
+    if (!fromMe && !isGroup && inboundTextEarly.trim()) {
       try {
         await dispatchInboundToAiReply({
           accountId: config.account_id,
@@ -625,7 +676,7 @@ export async function processWahaEvent(
     return;
   }
 
-  if (!fromMe) {
+  if (!fromMe && !isGroup) {
     try {
       const { ensureInboundLeadInFunnel } = await import(
         '@/lib/pipelines/inbound-deal'
@@ -643,8 +694,12 @@ export async function processWahaEvent(
     }
   }
 
+  const previewText = contentText || `[${contentType}]`;
   const convUpdate: Record<string, unknown> = {
-    last_message_text: contentText || `[${contentType}]`,
+    last_message_text:
+      !fromMe && isGroup && groupParticipantName
+        ? `${groupParticipantName}: ${previewText}`
+        : previewText,
     last_message_at: ts,
     updated_at: ts,
   };
@@ -663,6 +718,21 @@ export async function processWahaEvent(
   // Outbound echoes are already in the thread (CRM send and/or this
   // row). Don't fire inbound automations, AI, or message.received.
   if (fromMe) return;
+
+  // Groups stay in the inbox for humans. Never auto-reply, qualify, or
+  // run keyword flows — a group ping is not a lead.
+  if (isGroup) {
+    try {
+      await dispatchWebhookEvent(admin(), config.account_id, 'message.received', {
+        conversation_id: convResult.conversation.id,
+        contact_id: contactOutcome.contact.id,
+        message_id: messageDbId,
+      });
+    } catch (err) {
+      console.error('[waha-inbound] group webhook error:', err);
+    }
+    return;
+  }
 
   try {
     const flowResult = await dispatchInboundToFlows({

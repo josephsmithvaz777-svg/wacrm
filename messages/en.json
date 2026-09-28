@@ -286,6 +286,7 @@
       "filterOpen": "Open",
       "filterPending": "Pending",
       "filterClosed": "Closed",
+      "filterGroups": "Groups",
       "tags": "Tags",
       "company": "Company",
       "allCompanies": "All companies",
@@ -295,7 +296,8 @@
       "clearAll": "Clear all",
       "noConversations": "No conversations found",
       "noMessagesYet": "No messages yet",
-      "unknown": "Unknown"
+      "unknown": "Unknown",
+      "group": "Group"
     },
     "messageThread": {
       "backToConversations": "Back to conversations",
@@ -306,6 +308,7 @@
       "refresh": "Refresh",
       "refreshConversation": "Refresh conversation",
       "noPhone": "No phone number (WhatsApp)",
+      "group": "Group",
       "status": "Status",
       "statusOpen": "Open",
       "statusPending": "Pending",
@@ -538,6 +541,7 @@
       "noContactsYet": "No contacts yet.",
       "addFirstContact": "Add your first contact",
       "unnamed": "Unnamed",
+      "group": "Group",
       "editAction": "Edit",
       "deleteAction": "Delete",
       "showingPagination": "Showing {start}-{end} of {total}",

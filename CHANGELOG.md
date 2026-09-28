@@ -9,6 +9,22 @@ Versions follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Pre-1.0, `MINOR` bumps cover new modules; `PATCH` bumps cover bug fixes
 and polish.
 
+## [Unreleased]
+
+WhatsApp groups now land in the inbox as their own threads. The AI
+auto-reply bot does not answer in groups.
+
+> **Migration required:** apply `supabase/migrations/074_whatsapp_groups.sql`
+> (`contacts.is_whatsapp_group`, `messages.sender_display_name`).
+
+### Added
+
+- **WhatsApp groups in the inbox.** Group chats (`@g.us`) are identified
+  on inbound, stored as a distinct contact, and shown with a **Grupo**
+  badge. Humans can still reply from the CRM; the AI auto-reply, flows,
+  keyword automations, round-robin assignment, and the lead funnel do
+  not run on group threads. Participant names appear on group bubbles.
+
 ## [0.8.1] — 2026-07-10
 
 Fixes inbound chats fragmenting into multiple threads for the same

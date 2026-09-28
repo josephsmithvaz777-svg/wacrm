@@ -14,7 +14,7 @@ const h = vi.hoisted(() => ({
   contactBelongsToAccountStaff: vi.fn(async () => false),
   ensureSilenceHandoffLoop: vi.fn(),
   scheduleSilenceHandoffCheck: vi.fn(),
-  state: {
+    state: {
     conv: null as Record<string, unknown> | null,
     autoResponders: [] as { id: string }[],
     claim: true as boolean,
@@ -22,6 +22,7 @@ const h = vi.hoisted(() => ({
     rpcCalls: [] as { name: string; args: unknown }[],
     begin: 'claimed' as string,
     handoffAgentRole: 'agent' as string,
+    isGroup: false as boolean,
   },
 }))
 
@@ -58,6 +59,18 @@ vi.mock('./admin-client', () => ({
           in: () => chain,
           limit: () =>
             Promise.resolve({ data: h.state.autoResponders, error: null }),
+        }
+        return chain
+      }
+      if (table === 'contacts') {
+        const chain = {
+          select: () => chain,
+          eq: () => chain,
+          maybeSingle: () =>
+            Promise.resolve({
+              data: { is_whatsapp_group: h.state.isGroup },
+              error: null,
+            }),
         }
         return chain
       }
@@ -152,6 +165,7 @@ beforeEach(() => {
   h.state.rpcCalls = []
   h.state.begin = 'claimed'
   h.state.handoffAgentRole = 'agent'
+  h.state.isGroup = false
   h.contactBelongsToAccountStaff.mockResolvedValue(false)
   h.performAiHandoff.mockResolvedValue({ claimed: true, agentId: null })
   h.loadAiConfig.mockResolvedValue(aiConfig())
@@ -217,6 +231,14 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     expect(h.retrieveKnowledge).toHaveBeenCalled()
     const systemPrompt = h.generateReply.mock.calls[0][0].systemPrompt as string
     expect(systemPrompt).toContain('Returns accepted within 30 days.')
+  })
+
+  it('skips when the contact is a WhatsApp group', async () => {
+    h.state.isGroup = true
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.generateReply).not.toHaveBeenCalled()
+    expect(h.sendMessageToConversation).not.toHaveBeenCalled()
+    expect(h.scheduleSilenceHandoffCheck).not.toHaveBeenCalled()
   })
 
   it('skips when the contact phone belongs to an advisor', async () => {

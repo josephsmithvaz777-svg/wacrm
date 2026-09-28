@@ -203,6 +203,14 @@ async function maybeHandOffSilentThread(
     .maybeSingle()
 
   if (error || !last) return false
+
+  const { data: contact } = await db
+    .from('contacts')
+    .select('is_whatsapp_group')
+    .eq('id', conv.contact_id)
+    .maybeSingle()
+  if (contact?.is_whatsapp_group) return false
+
   if (!last.created_at || last.created_at > cutoffIso) return false
   const floorIso = new Date(
     now.getTime() - MAX_SILENCE_LOOKBACK_MINUTES * 60_000,

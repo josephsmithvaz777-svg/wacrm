@@ -56,6 +56,8 @@ function mergeKnowledge(groups: string[][]): string[] {
  *
  * Eligibility gates (any → silent no-op):
  *   - AI off / auto-reply disabled for the account
+ *   - the contact is a WhatsApp group (`@g.us`) — groups are inbox-
+ *     only; the bot never answers there
  *   - the contact phone belongs to a teammate (not a lead)
  *   - auto-reply was disabled for this conversation (prior handoff /
  *     Take over). Assignment alone does not pause the bot: the lead
@@ -74,6 +76,13 @@ export async function dispatchInboundToAiReply(
 
   try {
     const db = supabaseAdmin()
+
+    const { data: contactRow } = await db
+      .from('contacts')
+      .select('is_whatsapp_group')
+      .eq('id', contactId)
+      .maybeSingle()
+    if (contactRow?.is_whatsapp_group) return
 
     const config = await loadAiConfig(db, accountId)
     if (!config || !config.autoReplyEnabled) return

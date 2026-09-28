@@ -11,8 +11,8 @@ import {
 } from "@/lib/inbox/conversations";
 import { cn } from "@/lib/utils";
 import type { AccountMember, Conversation, ConversationStatus, Tag } from "@/types";
-import { contactDisplayName } from "@/lib/whatsapp/contact-identity";
-import { Search, ChevronDown, X } from "lucide-react";
+import { contactDisplayName, isWhatsAppGroupContact } from "@/lib/whatsapp/contact-identity";
+import { Search, ChevronDown, X, Users } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useTranslations } from "next-intl";
 import { useCan } from "@/hooks/use-can";
@@ -53,7 +53,7 @@ const STATUS_COLORS: Record<ConversationStatus, string> = {
 
 
 
-type InboxFilter = ConversationStatus | "all" | "unread";
+type InboxFilter = ConversationStatus | "all" | "unread" | "groups";
 
 export function ConversationList({
   activeConversationId,
@@ -70,6 +70,7 @@ export function ConversationList({
     { label: t("filterOpen"), value: "open" },
     { label: t("filterPending"), value: "pending" },
     { label: t("filterClosed"), value: "closed" },
+    { label: t("filterGroups"), value: "groups" },
   ], [t]);
 
   const [search, setSearch] = useState("");
@@ -190,6 +191,8 @@ export function ConversationList({
 
     if (filter === "unread") {
       result = result.filter((c) => c.unread_count > 0);
+    } else if (filter === "groups") {
+      result = result.filter((c) => isWhatsAppGroupContact(c.contact));
     } else if (filter !== "all") {
       result = result.filter((c) => c.status === filter);
     }
@@ -562,7 +565,11 @@ function ConversationItem({
   t,
 }: ConversationItemProps) {
   const contact = conversation.contact;
-  const displayName = contactDisplayName(contact, t("unknown"));
+  const isGroup = isWhatsAppGroupContact(contact);
+  const displayName = contactDisplayName(
+    contact,
+    isGroup ? t("group") : t("unknown"),
+  );
   const initials = displayName.charAt(0).toUpperCase();
 
   const handleClick = useCallback(() => {
@@ -584,13 +591,23 @@ function ConversationItem({
       )}
     >
       {/* Avatar */}
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground">
+      <div
+        className={cn(
+          "flex h-10 w-10 shrink-0 items-center justify-center bg-muted text-sm font-medium text-foreground",
+          isGroup ? "rounded-lg" : "rounded-full",
+        )}
+      >
         {contact?.avatar_url ? (
           <img
             src={contact.avatar_url}
             alt={displayName}
-            className="h-10 w-10 rounded-full object-cover"
+            className={cn(
+              "h-10 w-10 object-cover",
+              isGroup ? "rounded-lg" : "rounded-full",
+            )}
           />
+        ) : isGroup ? (
+          <Users className="h-5 w-5 text-muted-foreground" />
         ) : (
           initials
         )}
@@ -599,8 +616,15 @@ function ConversationItem({
       {/* Content */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-sm font-medium text-foreground">
-            {displayName}
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate text-sm font-medium text-foreground">
+              {displayName}
+            </span>
+            {isGroup && (
+              <span className="shrink-0 rounded bg-muted px-1.5 py-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                {t("group")}
+              </span>
+            )}
           </span>
           <span className="shrink-0 text-[10px] text-muted-foreground">{timeAgo}</span>
         </div>

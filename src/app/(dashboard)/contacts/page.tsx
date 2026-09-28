@@ -1061,10 +1061,19 @@ export default function ContactsPage() {
                     />
                   </TableCell>
                   <TableCell className="text-foreground font-medium">
-                    {contact.name || <span className="text-muted-foreground italic">{t('unnamed')}</span>}
+                    <span className="inline-flex items-center gap-1.5">
+                      {contact.name || <span className="text-muted-foreground italic">{t('unnamed')}</span>}
+                      {contact.is_whatsapp_group && (
+                        <span className="rounded bg-muted px-1.5 py-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          {t('group')}
+                        </span>
+                      )}
+                    </span>
                   </TableCell>
                   <TableCell className="text-muted-foreground font-mono text-xs">
-                    {contact.phone}
+                    {contact.is_whatsapp_group
+                      ? t('group')
+                      : contact.phone}
                   </TableCell>
                   <TableCell className="text-muted-foreground hidden md:table-cell text-sm">
                     {contact.email || <span className="text-muted-foreground">-</span>}

@@ -286,6 +286,7 @@
       "filterOpen": "Abiertas",
       "filterPending": "Pendientes",
       "filterClosed": "Cerradas",
+      "filterGroups": "Grupos",
       "tags": "Tags",
       "company": "Company",
       "allCompanies": "All companies",
@@ -295,7 +296,8 @@
       "clearAll": "Clear all",
       "noConversations": "No se encontraron conversaciones",
       "noMessagesYet": "Sin mensajes aún",
-      "unknown": "Desconocido"
+      "unknown": "Desconocido",
+      "group": "Grupo"
     },
     "messageThread": {
       "backToConversations": "Volver a conversaciones",
@@ -306,6 +308,7 @@
       "refresh": "Actualizar",
       "refreshConversation": "Refresh conversation",
       "noPhone": "Sin número (WhatsApp)",
+      "group": "Grupo",
       "status": "Estado",
       "statusOpen": "Abierta",
       "statusPending": "Pendiente",
@@ -538,6 +541,7 @@
       "noContactsYet": "Aún no hay contactos.",
       "addFirstContact": "Agregar tu primer contacto",
       "unnamed": "Sin nombre",
+      "group": "Grupo",
       "editAction": "Editar",
       "deleteAction": "Eliminar",
       "showingPagination": "Mostrando {start}-{end} de {total}",
