@@ -25,6 +25,13 @@ auto-reply bot does not answer in groups.
   keyword automations, round-robin assignment, and the lead funnel do
   not run on group threads. Participant names appear on group bubbles.
 
+### Fixed
+
+- **Group messages landed on the sender's 1:1 chat.** WAHA often puts
+  the participant in `from` and the group only inside `message_id`
+  (`false_{group}@g.us_{id}`). Detection now reads that id, and existing
+  mis-filed rows were moved onto one thread per group.
+
 ## [0.8.1] — 2026-07-10
 
 Fixes inbound chats fragmenting into multiple threads for the same

@@ -197,10 +197,31 @@ function isTruthyFlag(value: unknown): boolean {
  * WEBJS serializes ids as `{true|false}_{remoteJid}_{messageId}`.
  * Event Monitor shows e.g. `true_184086660382908@lid_A54F679B…` — the
  * remote JID is often a Linked ID, not a phone `@c.us`.
+ * Group ids embed `@g.us` even when `from` is the participant.
  */
+const GROUP_JID_IN_STRING = /(?:\d+-)?\d{5,}@g\.us/i;
+
+export function groupJidFromString(
+  raw: string | null | undefined,
+): string | null {
+  if (!raw) return null;
+  const match = GROUP_JID_IN_STRING.exec(raw);
+  return match ? match[0] : null;
+}
+
 export function parseWahaSerializedId(
   id: string,
 ): { fromMe: boolean; remoteJid: string; messageId: string } | null {
+  const groupJid = groupJidFromString(id);
+  if (groupJid) {
+    const after = id.slice(id.indexOf(groupJid) + groupJid.length);
+    const messageId = after.replace(/^_/, '').split('_').filter(Boolean)[0];
+    return {
+      fromMe: id.startsWith('true_'),
+      remoteJid: groupJid,
+      messageId: messageId || groupJid,
+    };
+  }
   const match = /^(true|false)_(.+)_([^_]+)$/.exec(id);
   if (!match) return null;
   const remoteJid = match[2];
@@ -994,8 +1015,11 @@ function isGroupOrStatusJid(jid: string): boolean {
 }
 
 /**
- * Group JID (`…@g.us`) from a WAHA/WEBJS/GOWS payload. `from` is the
- * group on inbound; `participant` is the person who spoke.
+ * Group JID (`…@g.us`) from a WAHA/WEBJS/GOWS payload.
+ *
+ * Engines disagree on `from`: WEBJS often puts the group there, GOWS
+ * often puts the *participant* there and the group in `id` / `chatId`
+ * / `key.remoteJid`. Scan every identifier — never trust `from` alone.
  */
 export function extractWhatsAppGroupJid(
   payload: Record<string, unknown>,
@@ -1004,27 +1028,55 @@ export function extractWhatsAppGroupJid(
   const push = (value: unknown) => {
     if (typeof value === 'string' && value.trim()) candidates.push(value.trim());
   };
+  const pushId = (id: unknown) => {
+    if (typeof id === 'string') {
+      push(id);
+      return;
+    }
+    if (!id || typeof id !== 'object') return;
+    const rec = id as Record<string, unknown>;
+    push(rec._serialized);
+    push(rec.remote);
+    push(rec.remoteJid);
+    push(rec.id);
+  };
+
   push(payload.chatId);
   push(payload.from);
   push(payload.to);
+  pushId(payload.id);
   push(remoteJidFromSerializedPayload(payload));
   push(remoteJidFromPayload(payload));
   push(infoChatFromPayload(payload));
+  const key =
+    payload.key && typeof payload.key === 'object'
+      ? (payload.key as Record<string, unknown>)
+      : null;
+  if (key) {
+    push(key.remoteJid);
+    push(key.remote);
+  }
   const data =
     payload._data && typeof payload._data === 'object'
       ? (payload._data as Record<string, unknown>)
       : null;
   if (data) {
     push(data.from);
-    const id =
-      data.id && typeof data.id === 'object'
-        ? (data.id as Record<string, unknown>)
+    push(data.chatId);
+    pushId(data.id);
+    const dkey =
+      data.key && typeof data.key === 'object'
+        ? (data.key as Record<string, unknown>)
         : null;
-    push(id?.remote);
-    push(id?.remoteJid);
+    if (dkey) {
+      push(dkey.remoteJid);
+      push(dkey.remote);
+    }
   }
   for (const jid of candidates) {
     if (isWhatsAppGroupJid(jid)) return jid;
+    const embedded = groupJidFromString(jid);
+    if (embedded) return embedded;
   }
   return null;
 }

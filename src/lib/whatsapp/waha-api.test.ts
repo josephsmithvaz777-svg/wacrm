@@ -191,6 +191,18 @@ describe('parseWahaSerializedId', () => {
       )?.fromMe,
     ).toBe(false);
   });
+
+  it('pulls the group JID out of a serialized group message id', () => {
+    expect(
+      parseWahaSerializedId(
+        'false_120363427492240172@g.us_2A161AC91A6640507F2F',
+      ),
+    ).toEqual({
+      fromMe: false,
+      remoteJid: '120363427492240172@g.us',
+      messageId: '2A161AC91A6640507F2F',
+    });
+  });
 });
 
 const opts = {
@@ -339,6 +351,50 @@ describe('whatsapp groups', () => {
         _data: { Info: { Chat: group, Sender: '51999111222@c.us', IsGroup: true } },
       }),
     ).toBe(group);
+  });
+
+  it('does not treat the participant as the chat when from is a person', () => {
+    expect(
+      extractWhatsAppGroupJid({
+        from: '51955676717@c.us',
+        participant: '51955676717@c.us',
+        notifyName: 'Jenifer .C',
+        id: 'false_120363427492240172@g.us_2A161AC91A6640507F2F',
+        body: 'Prospectando',
+      }),
+    ).toBe('120363427492240172@g.us');
+  });
+
+  it('reads the group from a GOWS object id.remote', () => {
+    expect(
+      extractWhatsAppGroupJid({
+        from: '51955676717@c.us',
+        id: {
+          fromMe: false,
+          remote: '120363427492240172@g.us',
+          participant: '51955676717@c.us',
+          id: '2A161AC91A6640507F2F',
+        },
+      }),
+    ).toBe('120363427492240172@g.us');
+  });
+
+  it('resolveInboundChatId uses the group in the message id, not from', async () => {
+    const resolved = await resolveInboundChatId(
+      opts,
+      {
+        from: '51955676717@c.us',
+        participant: '51955676717@c.us',
+        id: 'false_120363427492240172@g.us_2A161AC91A6640507F2F',
+        body: 'Prospectando',
+      },
+      { fromMe: false },
+    );
+    expect(resolved).toEqual({
+      chatId: '120363427492240172@g.us',
+      phone: '120363427492240172',
+      isGroup: true,
+    });
   });
 
   it('reads the group subject without using the participant push name', () => {

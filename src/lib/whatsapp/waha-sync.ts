@@ -17,14 +17,16 @@ import { createClient } from '@supabase/supabase-js';
 import {
   extractInboundText,
   extractWahaMessageId,
+  extractWhatsAppGroupJid,
   fetchWahaChatMessages,
+  groupJidFromString,
   isWahaFromMe,
   parseWahaSerializedId,
   resolveOutboundChatId,
   type WahaClientOptions,
 } from '@/lib/whatsapp/waha-api';
 import { extractAdContext } from '@/lib/whatsapp/ad-context';
-import { extractWhatsAppUsername } from '@/lib/whatsapp/contact-identity';
+import { extractWhatsAppUsername, isWhatsAppGroupJid } from '@/lib/whatsapp/contact-identity';
 import {
   mimeToContentType,
   persistAdCreativeSafe,
@@ -228,6 +230,17 @@ export async function syncWahaConversation(params: {
     const hasMedia = Boolean(media?.url);
     const adExtracted = extractAdContext(payload);
     if (!text && !hasMedia && !adExtracted) continue;
+
+    // History of a 1:1 chat must not swallow group messages that WAHA
+    // listed because `from` is the participant. Those belong on the
+    // group thread.
+    if (
+      extractWhatsAppGroupJid(payload) &&
+      !isWhatsAppGroupJid(chatId) &&
+      !groupJidFromString(chatId)
+    ) {
+      continue;
+    }
 
     let contentType = 'text';
     let contentText = text;
