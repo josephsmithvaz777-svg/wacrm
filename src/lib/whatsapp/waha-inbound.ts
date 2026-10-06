@@ -2,6 +2,7 @@
 // WAHA inbound event processing → contacts / conversations / messages
 // ============================================================
 
+import { shouldFireAssignmentNotify } from '@/lib/assignments/round-robin';
 import { createClient } from '@supabase/supabase-js';
 import { findExistingContact, isUniqueViolation } from '@/lib/contacts/dedupe';
 import { reopenClosedConversation } from '@/lib/conversations/reopen';
@@ -757,7 +758,21 @@ export async function processWahaEvent(
     > = ['new_message_received', 'keyword_match'];
     if (contactOutcome.wasCreated) automationTriggers.unshift('new_contact_created');
     if (isFirstInboundMessage) automationTriggers.push('first_inbound_message');
-    if (assignedNow) automationTriggers.push('conversation_assigned');
+    // The request that assigns is often not the one that inserts the
+    // message (WAHA fires `message` and `message.any` together, and a
+    // fromMe echo can claim the thread first). Alert on the first
+    // customer message whenever an advisor already owns it.
+    const assigneeId =
+      convResult.conversation.assigned_agent_id ?? assignedNow ?? null;
+    if (
+      shouldFireAssignmentNotify({
+        claimedAgentId: assignedNow,
+        assigneeId,
+        isFirstInboundMessage,
+      })
+    ) {
+      automationTriggers.push('conversation_assigned');
+    }
 
     for (const triggerType of automationTriggers) {
       await runAutomationsForTrigger({
@@ -767,7 +782,7 @@ export async function processWahaEvent(
         context: {
           message_text: inboundText,
           conversation_id: convResult.conversation.id,
-          agent_id: assignedNow ?? undefined,
+          agent_id: assigneeId ?? undefined,
         },
       });
     }

@@ -239,6 +239,26 @@ export type RoundRobinClaim = {
   claimed: boolean;
 };
 
+/**
+ * Whether this inbound should send the advisor WhatsApp alert.
+ *
+ * `claimedAgentId` is set only on the request that won the assign.
+ * WAHA delivers the same inbound as `message` and `message.any` at
+ * once: one request assigns, the other inserts the row and would
+ * otherwise skip `conversation_assigned`. A fromMe echo can also
+ * assign the new thread and return before automations. In both
+ * cases the first customer message still has to notify whoever
+ * already owns the thread. Later messages must not re-alert.
+ */
+export function shouldFireAssignmentNotify(opts: {
+  claimedAgentId: string | null;
+  assigneeId: string | null;
+  isFirstInboundMessage: boolean;
+}): boolean {
+  if (opts.claimedAgentId) return true;
+  return opts.isFirstInboundMessage && Boolean(opts.assigneeId);
+}
+
 function parseClaimPayload(data: unknown): RoundRobinClaim | null {
   if (!data || typeof data !== 'object') return null;
   const row = data as { agent_id?: unknown; claimed?: unknown };

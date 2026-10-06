@@ -6,6 +6,7 @@ import {
   claimRoundRobinAssignment,
   maybeRoundRobinAssignNewConversation,
   resolveHandoffAssignee,
+  shouldFireAssignmentNotify,
 } from './round-robin'
 
 function dbReturning(
@@ -21,6 +22,7 @@ function dbReturning(
       chain.select = self
       chain.eq = self
       chain.in = self
+      chain.not = self
       chain.order = self
       chain.maybeSingle = async () => ({
         data: Array.isArray(row) ? row[0] ?? null : row,
@@ -328,5 +330,47 @@ describe('claimRoundRobinAssignment', () => {
         conversationId: 'conv-emilio',
       }),
     ).toBeNull()
+  })
+})
+
+describe('shouldFireAssignmentNotify', () => {
+  it('alerts when this request just claimed the lead', () => {
+    expect(
+      shouldFireAssignmentNotify({
+        claimedAgentId: 'agent-jimena',
+        assigneeId: 'agent-jimena',
+        isFirstInboundMessage: true,
+      }),
+    ).toBe(true)
+  })
+
+  it('alerts on the first customer message when another request already assigned', () => {
+    expect(
+      shouldFireAssignmentNotify({
+        claimedAgentId: null,
+        assigneeId: 'agent-isaac',
+        isFirstInboundMessage: true,
+      }),
+    ).toBe(true)
+  })
+
+  it('does not re-alert a later message on an already assigned thread', () => {
+    expect(
+      shouldFireAssignmentNotify({
+        claimedAgentId: null,
+        assigneeId: 'agent-isaac',
+        isFirstInboundMessage: false,
+      }),
+    ).toBe(false)
+  })
+
+  it('stays quiet when nobody owns the thread', () => {
+    expect(
+      shouldFireAssignmentNotify({
+        claimedAgentId: null,
+        assigneeId: null,
+        isFirstInboundMessage: true,
+      }),
+    ).toBe(false)
   })
 })

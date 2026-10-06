@@ -27,6 +27,12 @@ auto-reply bot does not answer in groups.
 
 ### Fixed
 
+- **Advisor WhatsApp alerts skipped about half of new leads.** WAHA
+  delivers the same inbound as `message` and `message.any`. The request
+  that assigned the advisor often was not the one that saved the
+  message, so “Nuevo lead asignado” never went out. The first customer
+  message now alerts whoever already owns the thread.
+
 - **Group messages landed on the sender's 1:1 chat.** WAHA often puts
   the participant in `from` and the group only inside `message_id`
   (`false_{group}@g.us_{id}`). Detection now reads that id, and existing

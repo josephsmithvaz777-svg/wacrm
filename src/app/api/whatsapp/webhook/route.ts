@@ -1,4 +1,5 @@
 import { NextResponse, after } from 'next/server'
+import { shouldFireAssignmentNotify } from '@/lib/assignments/round-robin'
 import { createClient } from '@supabase/supabase-js'
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption'
 import { getMediaUrl, downloadMedia } from '@/lib/whatsapp/meta-api'
@@ -882,7 +883,19 @@ async function processMessage(
   // listens to only one trigger runs only when that trigger matches.
   if (contactOutcome.wasCreated) automationTriggers.unshift('new_contact_created')
   if (isFirstInboundMessage) automationTriggers.unshift('first_inbound_message')
-  if (assignedNow) automationTriggers.push('conversation_assigned')
+  // Same race as WAHA: the request that assigns may not be the one
+  // that reaches this fan-out. The first customer message still alerts
+  // the advisor already on the thread.
+  const assigneeId = conversation.assigned_agent_id ?? assignedNow ?? null
+  if (
+    shouldFireAssignmentNotify({
+      claimedAgentId: assignedNow,
+      assigneeId,
+      isFirstInboundMessage,
+    })
+  ) {
+    automationTriggers.push('conversation_assigned')
+  }
   // Awaited — not fire-and-forget. We're inside the route's `after()`
   // block, which only keeps the function alive for promises it can see, so
   // a detached dispatch can be frozen part-way through: the log row is
@@ -899,7 +912,7 @@ async function processMessage(
       context: {
         message_text: inboundText,
         conversation_id: conversation.id,
-        agent_id: assignedNow ?? undefined,
+        agent_id: assigneeId ?? undefined,
         // Only set on interactive taps; drives the interactive_reply
         // trigger's exact-id match.
         interactive_reply_id: interactiveReplyId ?? undefined,
