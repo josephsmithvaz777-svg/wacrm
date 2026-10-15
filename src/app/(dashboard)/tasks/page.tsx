@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarDays, ListTodo } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -12,10 +12,11 @@ import { Button } from "@/components/ui/button";
 import { useAssignableMembers } from "@/hooks/use-assignable-members";
 import { useAuth } from "@/hooks/use-auth";
 import { useCan } from "@/hooks/use-can";
+import { memberLabel } from "@/lib/account/members";
 import { dueAtChanged } from "@/lib/datetime/zoned";
 import { createClient } from "@/lib/supabase/client";
 import { notifyTaskAdvisor, TASK_REMINDER_RESET } from "@/lib/tasks/notify";
-import { shouldLockTasksToSelf } from "@/lib/tasks/scope";
+import { resolveTaskAgentFilter, shouldLockTasksToSelf } from "@/lib/tasks/scope";
 import { cn } from "@/lib/utils";
 import type { LeadTask } from "@/types";
 
@@ -36,7 +37,7 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<LeadTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDone, setShowDone] = useState(false);
-  const [mineOnly, setMineOnly] = useState<boolean | null>(null);
+  const [agentFilter, setAgentFilter] = useState<string | "all" | null>(null);
   const [view, setView] = useState<TasksView>("week");
   const [board, setBoard] = useState<Board>("leads");
   const [anchor, setAnchor] = useState(() => new Date());
@@ -47,7 +48,26 @@ export default function TasksPage() {
       setBoard("staff");
     }
   }, []);
-  const scopedToSelf = lockToSelf || (mineOnly ?? isAgent);
+  const selfId = user?.id ?? null;
+  const selectedAgentId = resolveTaskAgentFilter({
+    lockToSelf,
+    selfId,
+    isAgent,
+    agentFilter,
+  });
+  const scopedToSelf = Boolean(selfId && selectedAgentId === selfId);
+  const selectedAgentLabel = useMemo(() => {
+    if (!selectedAgentId || scopedToSelf) return null;
+    const member = members.find((row) => row.user_id === selectedAgentId);
+    return member ? memberLabel(member) : null;
+  }, [members, scopedToSelf, selectedAgentId]);
+  const agentOptions = useMemo(
+    () =>
+      [...members].sort((a, b) =>
+        memberLabel(a).localeCompare(memberLabel(b)),
+      ),
+    [members],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,11 +83,13 @@ export default function TasksPage() {
       query = query.or(
         `assigned_to.eq.${userId},and(assigned_to.is.null,created_by.eq.${userId})`,
       );
+    } else if (selectedAgentId) {
+      query = query.eq("assigned_to", selectedAgentId);
     }
     const { data } = await query;
     setTasks((data as LeadTask[]) ?? []);
     setLoading(false);
-  }, [scopedToSelf, showDone, user?.id]);
+  }, [scopedToSelf, selectedAgentId, setLoading, setTasks, showDone, user?.id]);
 
   useEffect(() => {
     if (profileLoading) return;
@@ -238,7 +260,9 @@ export default function TasksPage() {
               ? t("staffSubtitle")
               : scopedToSelf
                 ? t("subtitleMine")
-                : t("subtitle")}
+                : selectedAgentLabel
+                  ? t("subtitleAgent", { name: selectedAgentLabel })
+                  : t("subtitle")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -287,14 +311,34 @@ export default function TasksPage() {
           </div>
           {board === "leads" && (
             <>
+              {!lockToSelf && (
+                <select
+                  aria-label={t("filterAgent")}
+                  value={selectedAgentId ?? ""}
+                  onChange={(e) => setAgentFilter(e.target.value || "all")}
+                  className={cn(
+                    "h-7 max-w-48 rounded-lg border bg-background px-2 text-xs font-medium text-foreground outline-none dark:bg-input/30",
+                    selectedAgentId
+                      ? "border-primary"
+                      : "border-border dark:border-input",
+                  )}
+                >
+                  <option value="">{t("allAgents")}</option>
+                  {agentOptions.map((member) => (
+                    <option key={member.user_id} value={member.user_id}>
+                      {memberLabel(member)}
+                    </option>
+                  ))}
+                </select>
+              )}
               <Button
                 variant={scopedToSelf ? "secondary" : "outline"}
                 size="sm"
                 disabled={lockToSelf}
                 title={lockToSelf ? t("onlyMineLocked") : undefined}
                 onClick={() => {
-                  if (lockToSelf) return;
-                  setMineOnly(!scopedToSelf);
+                  if (lockToSelf || !selfId) return;
+                  setAgentFilter(scopedToSelf ? "all" : selfId);
                 }}
               >
                 {t("onlyMine")}
@@ -331,10 +375,18 @@ export default function TasksPage() {
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <CalendarDays className="h-8 w-8 text-muted-foreground" />
               <p className="mt-3 text-sm font-medium text-foreground">
-                {scopedToSelf ? t("emptyCalendarMineTitle") : t("emptyCalendarTitle")}
+                {scopedToSelf
+                  ? t("emptyCalendarMineTitle")
+                  : selectedAgentLabel
+                    ? t("emptyCalendarAgentTitle", { name: selectedAgentLabel })
+                    : t("emptyCalendarTitle")}
               </p>
               <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-                {scopedToSelf ? t("emptyCalendarMineBody") : t("emptyCalendarBody")}
+                {scopedToSelf
+                  ? t("emptyCalendarMineBody")
+                  : selectedAgentLabel
+                    ? t("emptyCalendarAgentBody")
+                    : t("emptyCalendarBody")}
               </p>
             </div>
           ) : (
@@ -358,10 +410,18 @@ export default function TasksPage() {
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <ListTodo className="h-8 w-8 text-muted-foreground" />
             <p className="mt-3 text-sm font-medium text-foreground">
-              {scopedToSelf ? t("emptyMineTitle") : t("emptyTitle")}
+              {scopedToSelf
+                ? t("emptyMineTitle")
+                : selectedAgentLabel
+                  ? t("emptyAgentTitle", { name: selectedAgentLabel })
+                  : t("emptyTitle")}
             </p>
             <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-              {scopedToSelf ? t("emptyMineBody") : t("emptyBody")}
+              {scopedToSelf
+                ? t("emptyMineBody")
+                : selectedAgentLabel
+                  ? t("emptyAgentBody")
+                  : t("emptyBody")}
             </p>
           </div>
         ) : (
