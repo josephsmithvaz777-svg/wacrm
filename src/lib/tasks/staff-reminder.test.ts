@@ -98,6 +98,35 @@ describe("expandStaffReminderOccurrences", () => {
     );
     expect(hits.map((d) => d.toISOString())).toEqual(["2026-09-15T14:00:00.000Z"]);
   });
+
+  it("keeps weeks already sent when the next due is in the future", () => {
+    const hits = expandStaffReminderOccurrences(
+      "2026-10-22T13:00:00.000Z",
+      "weekly",
+      new Date("2026-10-12T05:00:00.000Z"),
+      new Date("2026-10-31T23:59:59.000Z"),
+      "2026-09-22T19:42:27.000Z",
+    );
+    expect(hits.map((d) => d.toISOString()).sort()).toEqual([
+      "2026-10-15T13:00:00.000Z",
+      "2026-10-22T13:00:00.000Z",
+      "2026-10-29T13:00:00.000Z",
+    ]);
+  });
+
+  it("does not invent occurrences from before the reminder existed", () => {
+    const hits = expandStaffReminderOccurrences(
+      "2026-10-22T13:00:00.000Z",
+      "weekly",
+      new Date("2026-10-01T05:00:00.000Z"),
+      new Date("2026-10-31T23:59:59.000Z"),
+      "2026-10-20T15:00:00.000Z",
+    );
+    expect(hits.map((d) => d.toISOString()).sort()).toEqual([
+      "2026-10-22T13:00:00.000Z",
+      "2026-10-29T13:00:00.000Z",
+    ]);
+  });
 });
 
 describe("shouldAdvanceStaffReminder", () => {

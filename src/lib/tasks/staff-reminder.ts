@@ -66,14 +66,16 @@ export function nextYmdForWeekday(
 
 /**
  * Occurrences of a team reminder inside `[rangeStart, rangeEnd]`.
- * Weekly and yearly series are projected forward from `dueAt` so the
- * calendar can show the coming repeats, not only the next fire time.
+ * `dueAt` is only the next send. Weekly and yearly series also walk
+ * backward to `createdAt` so a week that already fired (today's
+ * cleaning, once WhatsApp went out) stays on the calendar.
  */
 export function expandStaffReminderOccurrences(
   dueAt: string,
   recurrence: StaffRecurrence,
   rangeStart: Date,
   rangeEnd: Date,
+  createdAt?: string | null,
 ): Date[] {
   const startMs = new Date(dueAt).getTime();
   if (!Number.isFinite(startMs)) return [];
@@ -85,31 +87,71 @@ export function expandStaffReminderOccurrences(
     return startMs >= from && startMs <= to ? [new Date(startMs)] : [];
   }
 
+  const out: Date[] = [];
+  const cursor = new Date(startMs);
+  let guard = 0;
   if (recurrence === "weekly") {
-    const cursor = new Date(startMs);
-    let guard = 0;
     while (cursor.getTime() < from && guard++ < 520) {
       cursor.setDate(cursor.getDate() + 7);
     }
-    const out: Date[] = [];
     while (cursor.getTime() <= to && guard++ < 1040) {
       if (cursor.getTime() >= from) out.push(new Date(cursor.getTime()));
       cursor.setDate(cursor.getDate() + 7);
     }
-    return out;
+  } else {
+    while (cursor.getTime() < from && guard++ < 200) {
+      stepYear(cursor);
+    }
+    while (cursor.getTime() <= to && guard++ < 250) {
+      if (cursor.getTime() >= from) out.push(new Date(cursor.getTime()));
+      stepYear(cursor);
+    }
   }
 
-  const cursor = new Date(startMs);
-  let guard = 0;
-  while (cursor.getTime() < from && guard++ < 200) {
-    stepYear(cursor);
-  }
-  const out: Date[] = [];
-  while (cursor.getTime() <= to && guard++ < 250) {
-    if (cursor.getTime() >= from) out.push(new Date(cursor.getTime()));
-    stepYear(cursor);
+  const earliest = seriesEarliestMs(createdAt);
+  if (earliest == null) return out;
+
+  const back = new Date(startMs);
+  guard = 0;
+  stepBack(back, recurrence);
+  while (
+    back.getTime() >= from &&
+    back.getTime() >= earliest &&
+    guard++ < 520
+  ) {
+    if (back.getTime() <= to) out.push(new Date(back.getTime()));
+    stepBack(back, recurrence);
   }
   return out;
+}
+
+/** Local midnight of the day the series was created. */
+function seriesEarliestMs(createdAt?: string | null): number | null {
+  if (!createdAt) return null;
+  const created = new Date(createdAt);
+  if (!Number.isFinite(created.getTime())) return null;
+  return new Date(
+    created.getFullYear(),
+    created.getMonth(),
+    created.getDate(),
+    0,
+    0,
+    0,
+    0,
+  ).getTime();
+}
+
+function stepBack(date: Date, recurrence: StaffRecurrence): void {
+  if (recurrence === "weekly") {
+    date.setDate(date.getDate() - 7);
+    return;
+  }
+  const month = date.getMonth();
+  const day = date.getDate();
+  date.setFullYear(date.getFullYear() - 1);
+  if (month === 1 && day === 29 && date.getMonth() !== 1) {
+    date.setDate(0);
+  }
 }
 
 function stepYear(date: Date): void {

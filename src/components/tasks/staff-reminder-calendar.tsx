@@ -93,6 +93,7 @@ export function StaffReminderCalendar({
         reminder.recurrence,
         start,
         end,
+        reminder.created_at,
       );
       for (const at of hits) {
         const key = `${at.getFullYear()}-${at.getMonth()}-${at.getDate()}`;
@@ -323,7 +324,11 @@ function StaffEventChip({
   className?: string;
 }) {
   const { reminder, at } = event;
-  const overdue = at.getTime() < Date.now();
+  // Only the next unsent fire is overdue. Earlier weeks already went
+  // out and must stay on the calendar in the normal color.
+  const overdue =
+    at.getTime() === new Date(reminder.due_at).getTime() &&
+    at.getTime() < Date.now();
   const people = (reminder.recipients ?? []).map(recipientLabel).filter(Boolean);
   const time = format(at, "HH:mm");
   const weekday = weekdayFromYmd(calendarDateInZone(at, AUTOMATION_GREETING_TZ));
