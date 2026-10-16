@@ -121,6 +121,7 @@
     "flows": "플로우",
     "aiAgents": "AI 에이전트",
     "logs": "로그",
+    "agentMessages": "상담원별 메시지",
     "settings": "설정",
     "beta": "베타",
     "unreadConversations": "읽지 않은 대화 {count}건",
@@ -2336,5 +2337,24 @@
       "unsupportedImage": "지원하지 않는 이미지 형식",
       "imageTooLarge": "이미지가 너무 큽니다"
     }
+  },
+  "AgentMessages": {
+    "title": "상담원별 메시지",
+    "description": "각 상담원에게 배정된 대화로 들어온 고객 메시지를 날짜별로 보여 줍니다.",
+    "from": "시작",
+    "to": "종료",
+    "today": "오늘",
+    "last7": "7일",
+    "last30": "30일",
+    "tableTitle": "배정된 메시지",
+    "note": "대화의 현재 배정을 기준으로 고객 메시지를 셉니다.",
+    "date": "날짜",
+    "total": "합계",
+    "periodTotal": "메시지 {count}건",
+    "emptyAgents": "팀에 상담원이 없습니다.",
+    "unknownAgent": "이름 없는 상담원",
+    "error": "메시지를 불러오지 못했습니다.",
+    "rangeTooLong": "최대 {max}일까지 선택할 수 있습니다.",
+    "truncated": "셀 수 있는 것보다 메시지가 많습니다. 정확한 합계를 보려면 기간을 줄이세요."
   }
 }

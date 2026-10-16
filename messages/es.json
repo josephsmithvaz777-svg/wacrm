@@ -121,6 +121,7 @@
     "flows": "Flujos",
     "aiAgents": "Agentes IA",
     "logs": "Logs",
+    "agentMessages": "Mensajes por agente",
     "settings": "Configuración",
     "beta": "Beta",
     "unreadConversations": "{count} unread {count, plural, =1 {conversation} other {conversations}}",
@@ -2365,5 +2366,24 @@
       "unsupportedImage": "Tipo de imagen no admitido",
       "imageTooLarge": "La imagen es demasiado grande"
     }
+  },
+  "AgentMessages": {
+    "title": "Mensajes por agente",
+    "description": "Cuántos mensajes de clientes llegaron, por fecha, a las conversaciones asignadas a cada agente.",
+    "from": "Desde",
+    "to": "Hasta",
+    "today": "Hoy",
+    "last7": "7 días",
+    "last30": "30 días",
+    "tableTitle": "Mensajes asignados",
+    "note": "Cuenta los mensajes del cliente según la asignación actual de la conversación.",
+    "date": "Fecha",
+    "total": "Total",
+    "periodTotal": "{count, plural, =1 {# mensaje} other {# mensajes}}",
+    "emptyAgents": "No hay agentes en el equipo.",
+    "unknownAgent": "Agente sin nombre",
+    "error": "No se pudieron cargar los mensajes.",
+    "rangeTooLong": "Elige un rango de hasta {max} días.",
+    "truncated": "Hay más mensajes de los que se pudieron contar. Acorta el rango para un total exacto."
   }
 }

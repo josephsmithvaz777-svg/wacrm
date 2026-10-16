@@ -80,6 +80,7 @@ export async function middleware(request: NextRequest) {
     '/automations',
     '/settings',
     '/logs',
+    '/agent-messages',
     '/flows',
     '/agents',
     '/notifications',

@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useTotalUnread } from "@/hooks/use-total-unread";
 import {
+  BarChart3,
   Bot,
   Calculator,
   Crown,
@@ -102,6 +103,12 @@ const navItems: NavItem[] = [
   { href: "/broadcasts", labelKey: "broadcasts", icon: Radio },
   { href: "/automations", labelKey: "automations", icon: Zap },
   { href: "/logs", labelKey: "logs", icon: ScrollText, adminOnly: true },
+  {
+    href: "/agent-messages",
+    labelKey: "agentMessages",
+    icon: BarChart3,
+    adminOnly: true,
+  },
   { href: "/flows", labelKey: "flows", icon: Workflow, beta: true },
   { href: "/agents", labelKey: "aiAgents", icon: Bot },
 ];
