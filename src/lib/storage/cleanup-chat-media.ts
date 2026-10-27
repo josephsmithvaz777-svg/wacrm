@@ -146,11 +146,39 @@ export function summarizeCleanup(
   }
 }
 
+/**
+ * Delete old chat-media for one account. Prefer the SQL RPC (uses
+ * storage.allow_delete_query) because Storage API remove was a no-op
+ * on this project. Falls back to batched Storage remove if RPC fails.
+ */
 export async function deleteOldChatMedia(
   db: SupabaseClient,
   accountId: string,
+  beforeIso: string,
+  kind: CleanupMediaKind,
   rows: OldChatMediaObject[],
-): Promise<{ deleted: number; failed: number }> {
+): Promise<{ deleted: number; failed: number; bytesFreed: number }> {
+  const { data, error } = await db.rpc('delete_old_chat_media', {
+    p_account_id: accountId,
+    p_before: beforeIso,
+    p_kind: kind,
+  })
+  if (!error) {
+    const row = Array.isArray(data) ? data[0] : data
+    const deleted =
+      row && typeof row === 'object' && typeof (row as { deleted?: unknown }).deleted === 'number'
+        ? (row as { deleted: number }).deleted
+        : 0
+    const bytesFreed =
+      row &&
+      typeof row === 'object' &&
+      typeof (row as { bytes_freed?: unknown }).bytes_freed === 'number'
+        ? (row as { bytes_freed: number }).bytes_freed
+        : 0
+    return { deleted, failed: 0, bytesFreed }
+  }
+  console.warn('[media-cleanup] RPC delete failed, falling back:', error.message)
+
   const paths = rows
     .map((row) => row.object_name)
     .filter((path) => isAccountMediaPath(accountId, path))
@@ -159,13 +187,15 @@ export async function deleteOldChatMedia(
   let failed = 0
   for (let i = 0; i < paths.length; i += REMOVE_BATCH) {
     const batch = paths.slice(i, i + REMOVE_BATCH)
-    const { error } = await db.storage.from('chat-media').remove(batch)
-    if (error) {
-      console.error('[media-cleanup] remove failed:', error.message)
+    const { data: removed, error: removeErr } = await db.storage
+      .from('chat-media')
+      .remove(batch)
+    if (removeErr) {
+      console.error('[media-cleanup] remove failed:', removeErr.message)
       failed += batch.length
       continue
     }
-    deleted += batch.length
+    deleted += Array.isArray(removed) ? removed.length : 0
   }
-  return { deleted, failed }
+  return { deleted, failed, bytesFreed: 0 }
 }

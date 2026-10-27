@@ -84,7 +84,13 @@ export async function POST(request: Request) {
     const admin = supabaseAdmin()
     const rows = await listOldChatMedia(admin, ctx.accountId, before, kind)
     const preview = summarizeCleanup(rows, age, kind, before)
-    const result = await deleteOldChatMedia(admin, ctx.accountId, rows)
+    const result = await deleteOldChatMedia(
+      admin,
+      ctx.accountId,
+      before,
+      kind,
+      rows,
+    )
     return NextResponse.json({ preview, result })
   } catch (err) {
     return toErrorResponse(err)
