@@ -43,6 +43,19 @@ describe('parseSheetCsv', () => {
     const csv = `full_name,phone_number\nAna,+51911111111`;
     expect(parseSheetCsv(csv).rows[0]?.externalId).toMatch(/^row:/);
   });
+
+  it('maps Spanish Meta Instant Form headers (nombre_y_apellidos / número_de_whatsapp)', () => {
+    const csv = [
+      'id,created_time,ad_name,form_name,¿En qué país resides?,Nombre y apellidos,Número de WhatsApp,lead_status',
+      'l:1588501672582932,2026-10-27T12:47:19+0000,TOUR GOLF,FORM TOUR VIRU,🇵🇪_Perú,Karla Fabiola Del Aguila,+51927419048,CREATED',
+    ].join('\n');
+    const row = parseSheetCsv(csv).rows[0];
+    expect(row?.externalId).toBe('l:1588501672582932');
+    expect(row?.name).toBe('Karla Fabiola Del Aguila');
+    expect(row?.phone).toBe('+51927419048');
+    expect(row?.formName).toBe('FORM TOUR VIRU');
+    expect(row?.adName).toBe('TOUR GOLF');
+  });
 });
 
 describe('normalizeLeadPhone', () => {

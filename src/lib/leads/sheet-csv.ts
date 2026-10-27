@@ -21,15 +21,26 @@ export interface ParsedSheetCsv {
   rows: SheetLeadRow[];
 }
 
-const NAME_KEYS = ['full_name', 'fullname', 'name', 'nombre', 'nombre_completo'];
+const NAME_KEYS = [
+  'full_name',
+  'fullname',
+  'nombre_y_apellidos',
+  'nombres_y_apellidos',
+  'nombre_completo',
+  'nombre',
+  'name',
+];
 const PHONE_KEYS = [
   'phone_number',
-  'phone',
+  'numero_de_whatsapp',
+  'numero_whatsapp',
+  'whatsapp_number',
   'telefono',
   'teléfono',
   'whatsapp',
   'celular',
   'mobile',
+  'phone',
   'número',
   'numero',
 ];
@@ -40,29 +51,56 @@ const FORM_KEYS = ['form_name', 'form', 'formulario'];
 const CAMPAIGN_KEYS = ['campaign_name', 'campaign', 'campaña', 'campana'];
 const AD_KEYS = ['ad_name', 'ad', 'anuncio'];
 
-const CORE_KEYS = new Set([
+const CORE_ALIASES = [
   ...NAME_KEYS,
   ...PHONE_KEYS,
   ...EMAIL_KEYS,
   ...ID_KEYS,
   ...TIME_KEYS,
-]);
+];
 
 function normalizeHeader(value: string): string {
   return value
     .replace(/^\uFEFF/, '')
     .trim()
     .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/["']/g, '')
-    .replace(/\s+/g, '_');
+    .replace(/[^\p{L}\p{N}]+/gu, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+}
+
+/** Exact match, or header contains alias (alias length ≥ 5 so "name" ≠ "campaign_name"). */
+function headerMatches(header: string, alias: string): boolean {
+  const a = normalizeHeader(alias);
+  if (!a || !header) return false;
+  if (header === a) return true;
+  if (a.length < 5) return false;
+  return header.includes(a) || header.split('_').includes(a);
 }
 
 function pick(map: Record<string, string>, aliases: string[]): string | null {
-  for (const key of aliases) {
-    const value = map[key]?.trim();
-    if (value) return value;
+  const entries = Object.entries(map).filter(([, v]) => v.trim());
+  const sorted = [...aliases].sort((a, b) => b.length - a.length);
+
+  for (const alias of sorted) {
+    const normalized = normalizeHeader(alias);
+    for (const [key, value] of entries) {
+      if (key === normalized) return value.trim();
+    }
+  }
+  for (const alias of sorted) {
+    for (const [key, value] of entries) {
+      if (headerMatches(key, alias)) return value.trim();
+    }
   }
   return null;
+}
+
+function isCoreKey(key: string): boolean {
+  return CORE_ALIASES.some((alias) => headerMatches(key, alias));
 }
 
 /** Split a CSV document into rows of cells. Handles quoted commas/newlines. */
@@ -116,10 +154,10 @@ export function parseCsvDocument(text: string): string[][] {
 
 function looksLikeHeader(cells: string[]): boolean {
   const keys = cells.map(normalizeHeader);
-  const hasId = keys.some((k) => ID_KEYS.includes(k));
-  const hasPhone = keys.some((k) => PHONE_KEYS.includes(k));
-  const hasName = keys.some((k) => NAME_KEYS.includes(k));
-  const hasCreated = keys.some((k) => TIME_KEYS.includes(k));
+  const hasId = keys.some((k) => ID_KEYS.some((a) => headerMatches(k, a)));
+  const hasPhone = keys.some((k) => PHONE_KEYS.some((a) => headerMatches(k, a)));
+  const hasName = keys.some((k) => NAME_KEYS.some((a) => headerMatches(k, a)));
+  const hasCreated = keys.some((k) => TIME_KEYS.some((a) => headerMatches(k, a)));
   return (hasId && (hasPhone || hasName || hasCreated)) || (hasPhone && hasName);
 }
 
@@ -159,7 +197,7 @@ export function parseSheetCsv(text: string): ParsedSheetCsv {
     const extras: Record<string, string> = {};
     for (const [key, value] of Object.entries(raw)) {
       if (!value) continue;
-      if (CORE_KEYS.has(key)) continue;
+      if (isCoreKey(key)) continue;
       extras[key] = value;
     }
 
