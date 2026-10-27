@@ -11,8 +11,11 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { SettingsPanelHead } from './settings-panel-head';
 import {
+  CLEANUP_BEFORE_MONTH,
   CLEANUP_DAY_OPTIONS,
-  type CleanupOlderThanDays,
+  CLEANUP_KIND_OPTIONS,
+  type CleanupAgeScope,
+  type CleanupMediaKind,
   type MediaCleanupPreview,
 } from '@/lib/storage/cleanup-chat-media';
 
@@ -23,7 +26,8 @@ function formatMb(bytes: number): string {
 
 export function MediaCleanupPanel() {
   const t = useTranslations('Settings.storage');
-  const [days, setDays] = useState<CleanupOlderThanDays>(90);
+  const [age, setAge] = useState<CleanupAgeScope>(7);
+  const [kind, setKind] = useState<CleanupMediaKind>('video');
   const [preview, setPreview] = useState<MediaCleanupPreview | null>(null);
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -31,10 +35,13 @@ export function MediaCleanupPanel() {
   async function handlePreview() {
     setLoading(true);
     setPreview(null);
-    const res = await fetch(
-      `/api/admin/media-cleanup?olderThanDays=${days}`,
-      { cache: 'no-store' },
-    );
+    const params = new URLSearchParams({
+      age: String(age),
+      kind,
+    });
+    const res = await fetch(`/api/admin/media-cleanup?${params}`, {
+      cache: 'no-store',
+    });
     const json = await res.json().catch(() => ({}));
     setLoading(false);
     if (!res.ok) {
@@ -46,14 +53,16 @@ export function MediaCleanupPanel() {
 
   async function handleDelete() {
     if (!preview || preview.files === 0) return;
-    const ok = window.confirm(t('confirm', { files: preview.files, size: formatMb(preview.bytes) }));
+    const ok = window.confirm(
+      t('confirm', { files: preview.files, size: formatMb(preview.bytes) }),
+    );
     if (!ok) return;
 
     setDeleting(true);
     const res = await fetch('/api/admin/media-cleanup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ olderThanDays: days }),
+      body: JSON.stringify({ age, kind }),
     });
     const json = await res.json().catch(() => ({}));
     setDeleting(false);
@@ -63,7 +72,7 @@ export function MediaCleanupPanel() {
     }
     const deleted = json.result?.deleted ?? 0;
     toast.success(t('deleted', { count: deleted }));
-    setPreview(json.preview ? { ...json.preview, files: 0, bytes: 0 } : null);
+    setPreview(null);
     void handlePreview();
   }
 
@@ -78,24 +87,53 @@ export function MediaCleanupPanel() {
 
       <Card>
         <CardContent className="space-y-4 py-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="cleanup-days">{t('olderThan')}</Label>
-            <select
-              id="cleanup-days"
-              className="h-8 w-full max-w-xs rounded-lg border border-input bg-transparent px-2.5 text-sm"
-              value={days}
-              onChange={(e) => {
-                setDays(Number(e.target.value) as CleanupOlderThanDays);
-                setPreview(null);
-              }}
-            >
-              {CLEANUP_DAY_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {t('daysOption', { days: option })}
-                </option>
-              ))}
-            </select>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="cleanup-age">{t('olderThan')}</Label>
+              <select
+                id="cleanup-age"
+                className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
+                value={String(age)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setAge(
+                    value === CLEANUP_BEFORE_MONTH
+                      ? CLEANUP_BEFORE_MONTH
+                      : (Number(value) as CleanupAgeScope),
+                  );
+                  setPreview(null);
+                }}
+              >
+                {CLEANUP_DAY_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {t('daysOption', { days: option })}
+                  </option>
+                ))}
+                <option value={CLEANUP_BEFORE_MONTH}>{t('beforeMonth')}</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="cleanup-kind">{t('kindLabel')}</Label>
+              <select
+                id="cleanup-kind"
+                className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
+                value={kind}
+                onChange={(e) => {
+                  setKind(e.target.value as CleanupMediaKind);
+                  setPreview(null);
+                }}
+              >
+                {CLEANUP_KIND_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {t(`kind.${option}`)}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
+
+          <p className="text-xs text-muted-foreground">{t('hint')}</p>
 
           {preview ? (
             <p className="text-sm text-muted-foreground">
