@@ -16,6 +16,7 @@ import { NotificationsSettingsPanel } from '@/components/settings/notifications-
 import { ActivityLogsPanel } from '@/components/settings/activity-logs-panel';
 import { BrandingSettings } from '@/components/settings/branding-settings';
 import { WhatsAppConfig } from '@/components/settings/whatsapp-config';
+import { SheetLeadsPanel } from '@/components/settings/sheet-leads-panel';
 import { TemplateManager } from '@/components/settings/template-manager';
 import { QuickRepliesManager } from '@/components/settings/quick-replies-manager';
 import { FieldsAndTagsPanel } from '@/components/settings/fields-and-tags-panel';
@@ -91,6 +92,7 @@ function SettingsPageInner() {
     notifications: <NotificationsSettingsPanel />,
     branding: <BrandingSettings />,
     whatsapp: <WhatsAppConfig />,
+    forms: <SheetLeadsPanel />,
     templates: <TemplateManager />,
     'quick-replies': <QuickRepliesManager />,
     fields: <FieldsAndTagsPanel />,

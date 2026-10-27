@@ -174,6 +174,11 @@ export function SettingsOverview({
       ),
     },
     {
+      section: 'forms',
+      loading: false,
+      subtitle: t('formsTile'),
+    },
+    {
       section: 'members',
       loading: countsLoading,
       subtitle:

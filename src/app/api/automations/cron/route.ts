@@ -6,6 +6,10 @@ import type { AutomationContext } from '@/lib/automations/engine'
 import { sendDueTaskReminders, ensureTaskDueReminderLoop } from '@/lib/tasks/reminders'
 import { sendDueStaffReminders } from '@/lib/tasks/staff-reminder-send'
 import { sweepSilentAiConversations } from '@/lib/ai/silence-handoff'
+import {
+  ensureSheetLeadSyncLoop,
+  syncAllEnabledSheetSources,
+} from '@/lib/leads/import-sheet-leads'
 
 /**
  * Drain due `automation_pending_executions` rows. Meant to be hit
@@ -35,9 +39,11 @@ export async function GET(request: Request) {
 
   const admin = supabaseAdmin()
   ensureTaskDueReminderLoop()
+  ensureSheetLeadSyncLoop()
   const reminders = await sendDueTaskReminders(admin)
   const staff = await sendDueStaffReminders(admin)
   const silence = await sweepSilentAiConversations(admin)
+  const sheets = await syncAllEnabledSheetSources(admin)
 
   const { data: due, error } = await admin
     .from('automation_pending_executions')
@@ -49,7 +55,7 @@ export async function GET(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!due || due.length === 0) {
-    return NextResponse.json({ processed: 0, reminders, staff, silence })
+    return NextResponse.json({ processed: 0, reminders, staff, silence, sheets })
   }
 
   let processed = 0
@@ -80,5 +86,5 @@ export async function GET(request: Request) {
     processed++
   }
 
-  return NextResponse.json({ processed, reminders, staff, silence })
+  return NextResponse.json({ processed, reminders, staff, silence, sheets })
 }
