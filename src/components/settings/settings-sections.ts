@@ -6,6 +6,7 @@ import {
   LayoutGrid,
   Palette,
   FileSpreadsheet,
+  HardDrive,
   PlugZap,
   ScrollText,
   Shield,
@@ -40,6 +41,7 @@ export const SETTINGS_SECTIONS = [
   'deals',
   'members',
   'activity',
+  'storage',
   'api',
 ] as const;
 
@@ -85,6 +87,13 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
     id: 'activity',
     label: 'Logs',
     icon: ScrollText,
+    group: 'workspace',
+    adminOnly: true,
+  },
+  storage: {
+    id: 'storage',
+    label: 'Storage',
+    icon: HardDrive,
     group: 'workspace',
     adminOnly: true,
   },

@@ -1710,6 +1710,7 @@
       "appearance": "{mode} mode · {theme} accent",
       "notificationsTile": "Bell & sounds",
       "activityTile": "Automations and team",
+      "storageTile": "Delete old photos and videos",
       "formsTile": "Meta form leads",
       "yourAccount": "Your account",
       "loading": "Loading…"
@@ -2034,6 +2035,7 @@
       "notifications": "Notifications",
       "whatsapp": "WhatsApp",
       "forms": "Forms",
+      "storage": "Storage",
       "templates": "Templates",
       "quick-replies": "Quick replies",
       "fields": "Fields & tags",
@@ -2206,6 +2208,21 @@
       "syncOk": "{imported} leads imported, {assigned} assigned",
       "deleteFailed": "Could not disconnect",
       "deleted": "Sheet disconnected"
+    },
+    "storage": {
+      "title": "Storage",
+      "description": "Delete old WhatsApp photos, videos, audio, and PDFs. Admins only. Chat text is kept.",
+      "keepText": "Cleanup removes files from Storage. Conversations and text messages stay.",
+      "olderThan": "Delete media older than",
+      "daysOption": "{days} days",
+      "preview": "See how much it uses",
+      "delete": "Delete old media",
+      "previewSummary": "{files} files · {size}. Text is kept.",
+      "nothing": "No media that old.",
+      "confirm": "Delete {files} files ({size})? Chat text stays.",
+      "previewFailed": "Could not inspect storage",
+      "deleteFailed": "Could not delete media",
+      "deleted": "Deleted {count} files"
     },
     "apiKeys": {
       "title": "API keys",

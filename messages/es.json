@@ -1731,6 +1731,7 @@
       "appearance": "Modo {mode} · acento {theme}",
       "notificationsTile": "Campana y sonidos",
       "activityTile": "Automatizaciones y equipo",
+      "storageTile": "Borrar fotos y videos viejos",
       "formsTile": "Leads de formularios de Meta",
       "yourAccount": "Tu cuenta",
       "loading": "Cargando…"
@@ -2058,6 +2059,7 @@
       "notifications": "Notificaciones",
       "whatsapp": "WhatsApp",
       "forms": "Formularios",
+      "storage": "Almacenamiento",
       "templates": "Plantillas",
       "quick-replies": "Respuestas rápidas",
       "fields": "Campos y etiquetas",
@@ -2234,6 +2236,21 @@
       "syncOk": "{imported} leads importados, {assigned} asignados",
       "deleteFailed": "No se pudo desconectar",
       "deleted": "Hoja desconectada"
+    },
+    "storage": {
+      "title": "Almacenamiento",
+      "description": "Borra fotos, videos, audios y PDFs viejos de WhatsApp. Solo administradores. Los textos del chat no se tocan.",
+      "keepText": "La limpieza quita archivos de Storage. Las conversaciones y los mensajes de texto se quedan.",
+      "olderThan": "Borrar media anterior a",
+      "daysOption": "{days} días",
+      "preview": "Revisar cuánto ocupa",
+      "delete": "Borrar media vieja",
+      "previewSummary": "{files} archivos · {size}. Los textos se conservan.",
+      "nothing": "No hay media tan vieja.",
+      "confirm": "¿Borrar {files} archivos ({size})? Los textos del chat se quedan.",
+      "previewFailed": "No se pudo revisar el almacenamiento",
+      "deleteFailed": "No se pudo borrar la media",
+      "deleted": "Se borraron {count} archivos"
     },
     "apiKeys": {
       "title": "Claves API",

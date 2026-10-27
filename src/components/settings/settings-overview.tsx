@@ -234,6 +234,11 @@ export function SettingsOverview({
             loading: false,
             subtitle: t('activityTile'),
           },
+          {
+            section: 'storage' as const,
+            loading: false,
+            subtitle: t('storageTile'),
+          },
         ]
       : []),
     {

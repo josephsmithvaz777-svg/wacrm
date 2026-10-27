@@ -14,6 +14,7 @@ import { SecurityPanel } from '@/components/settings/security-panel';
 import { AppearancePanel } from '@/components/settings/appearance-panel';
 import { NotificationsSettingsPanel } from '@/components/settings/notifications-settings-panel';
 import { ActivityLogsPanel } from '@/components/settings/activity-logs-panel';
+import { MediaCleanupPanel } from '@/components/settings/media-cleanup-panel';
 import { BrandingSettings } from '@/components/settings/branding-settings';
 import { WhatsAppConfig } from '@/components/settings/whatsapp-config';
 import { SheetLeadsPanel } from '@/components/settings/sheet-leads-panel';
@@ -99,6 +100,7 @@ function SettingsPageInner() {
     deals: <DealsSettings />,
     members: <MembersTab />,
     activity: <ActivityLogsPanel />,
+    storage: <MediaCleanupPanel />,
     api: <ApiKeysSettings />,
   };
 

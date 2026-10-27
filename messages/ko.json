@@ -1709,6 +1709,7 @@
       "appearance": "{mode} 모드 · {theme} 색상",
       "notificationsTile": "알림 및 소리",
       "activityTile": "자동화 및 팀",
+      "storageTile": "오래된 사진·동영상 삭제",
       "formsTile": "Meta 폼 리드",
       "yourAccount": "내 계정",
       "loading": "불러오는 중…"
@@ -2033,6 +2034,7 @@
       "notifications": "알림",
       "whatsapp": "WhatsApp",
       "forms": "폼",
+      "storage": "저장공간",
       "templates": "템플릿",
       "quick-replies": "빠른 답장",
       "fields": "필드 & 태그",
@@ -2205,6 +2207,21 @@
       "syncOk": "리드 {imported}명 가져옴, {assigned}명 배정",
       "deleteFailed": "연결을 해제하지 못했습니다",
       "deleted": "시트 연결이 해제되었습니다"
+    },
+    "storage": {
+      "title": "저장공간",
+      "description": "오래된 WhatsApp 사진, 동영상, 오디오, PDF를 삭제합니다. 관리자만 사용할 수 있습니다. 채팅 텍스트는 남습니다.",
+      "keepText": "정리는 Storage 파일만 지웁니다. 대화와 텍스트 메시지는 그대로입니다.",
+      "olderThan": "다음보다 오래된 미디어 삭제",
+      "daysOption": "{days}일",
+      "preview": "용량 확인",
+      "delete": "오래된 미디어 삭제",
+      "previewSummary": "{files}개 파일 · {size}. 텍스트는 유지됩니다.",
+      "nothing": "그만큼 오래된 미디어가 없습니다.",
+      "confirm": "파일 {files}개({size})를 삭제할까요? 채팅 텍스트는 남습니다.",
+      "previewFailed": "저장공간을 확인하지 못했습니다",
+      "deleteFailed": "미디어를 삭제하지 못했습니다",
+      "deleted": "파일 {count}개를 삭제했습니다"
     },
     "apiKeys": {
       "title": "API 키",

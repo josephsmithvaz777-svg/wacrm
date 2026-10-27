@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildMediaPath, MEDIA_MAX_BYTES_BY_KIND } from "./upload-media";
+import {
+  accountMediaPrefix,
+  buildMediaPath,
+  isAccountMediaPath,
+  MEDIA_MAX_BYTES_BY_KIND,
+} from "./upload-media";
 
 const ACCOUNT = "11111111-2222-3333-4444-555555555555";
 
@@ -30,6 +35,18 @@ describe("buildMediaPath", () => {
   it("defaults the extension to bin when there is none", () => {
     const path = buildMediaPath(ACCOUNT, "README", 1700000000000);
     expect(path).toBe(`account-${ACCOUNT}/1700000000000-README.bin`);
+  });
+});
+
+describe("isAccountMediaPath", () => {
+  it("accepts only this account's folder", () => {
+    expect(
+      isAccountMediaPath(ACCOUNT, `${accountMediaPrefix(ACCOUNT)}170-photo.png`),
+    ).toBe(true);
+    expect(
+      isAccountMediaPath(ACCOUNT, "account-other/170-photo.png"),
+    ).toBe(false);
+    expect(isAccountMediaPath(ACCOUNT, "../secret")).toBe(false);
   });
 });
 

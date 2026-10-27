@@ -61,6 +61,19 @@ export function buildMediaPath(
   return `account-${accountId}/${now}-${safeBase}.${ext}`;
 }
 
+/** Folder prefix every chat-media object for this account lives under. */
+export function accountMediaPrefix(accountId: string): string {
+  return `account-${accountId}/`;
+}
+
+/** True when `path` is inside this account's chat-media folder. */
+export function isAccountMediaPath(accountId: string, path: string): boolean {
+  if (!accountId || !path || path.includes("..") || path.startsWith("/")) {
+    return false;
+  }
+  return path.startsWith(accountMediaPrefix(accountId));
+}
+
 export interface UploadAccountMediaResult {
   /** Public URL Meta can fetch at send time. */
   publicUrl: string;
