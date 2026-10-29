@@ -203,6 +203,28 @@ describe('maybeRoundRobinAssignNewConversation', () => {
     expect(id).toBe('agent-2')
   })
 
+  it('does not hand the chat to the next advisor when the contact already has one', async () => {
+    const db = dbReturning({
+      contacts: { phone: '51911111111', assigned_to: 'agent-1' },
+      profiles: [
+        { user_id: 'agent-1', phone: '51940912791', account_role: 'agent' },
+        { user_id: 'agent-2', phone: '51988824220', account_role: 'agent' },
+      ],
+      accounts: {
+        round_robin_enabled: true,
+        round_robin_last_user_id: 'agent-1',
+      },
+    })
+    const id = await maybeRoundRobinAssignNewConversation(db, {
+      accountId: 'acct',
+      contactId: 'contact-lead',
+      conversationId: 'conv-sheet',
+    })
+    expect(id).toBeNull()
+    expect(db.updates).not.toContain('accounts')
+    expect(db.updates).toContain('conversations')
+  })
+
   it('keeps the lead when it is already on an advisor in the pool', async () => {
     const db = dbReturning({
       contacts: { phone: '51911111111' },

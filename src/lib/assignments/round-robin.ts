@@ -347,6 +347,36 @@ async function claimRoundRobinAssignmentJs(
     if (inPool) return { agentId: current, claimed: false };
   }
 
+  // The sheet path can stamp contacts.assigned_to before this chat
+  // exists. Keep that advisor. A new pick would WhatsApp the next
+  // person for the same lead.
+  const { data: contactOwner } = await db
+    .from('contacts')
+    .select('assigned_to')
+    .eq('id', opts.contactId)
+    .eq('account_id', opts.accountId)
+    .maybeSingle();
+  const existingOwner =
+    typeof contactOwner?.assigned_to === 'string'
+      ? contactOwner.assigned_to
+      : null;
+  if (existingOwner) {
+    const ownerInPool = await userIsInAutoAssignPool(
+      db,
+      opts.accountId,
+      existingOwner,
+    );
+    if (ownerInPool) {
+      await assignConversationToAgent(db, {
+        accountId: opts.accountId,
+        contactId: opts.contactId,
+        conversationId: opts.conversationId,
+        agentId: existingOwner,
+      });
+      return { agentId: existingOwner, claimed: false };
+    }
+  }
+
   const { data: account } = await db
     .from('accounts')
     .select('round_robin_enabled')

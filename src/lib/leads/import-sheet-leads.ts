@@ -5,12 +5,6 @@ import {
   findOrCreateContact,
   resolveAuditUserId,
 } from '@/lib/api/v1/contacts';
-import {
-  assignConversationToAgent,
-  claimRoundRobinAssignment,
-  pickRoundRobinAgent,
-} from '@/lib/assignments/round-robin';
-import { runAutomationsForTrigger } from '@/lib/automations/engine';
 import { supabaseAdmin } from '@/lib/automations/admin-client';
 import { addContactTagAndDispatch } from '@/lib/contacts/tag-events';
 import { resolveImportTagIds } from '@/lib/contacts/resolve-import-tags';
@@ -272,13 +266,20 @@ async function importOneRow(
       .eq('account_id', source.account_id);
   }
 
+  // The Facebook form also delivers "Completé el formulario" on
+  // WhatsApp. That message is the one that round-robins and WhatsApps
+  // the agent. Doing it here as well handed the same person to the
+  // next advisor (Isaac and Jimena both received Ankiza).
   let assignedTo: string | null = null;
-  if (source.assign_round_robin && conversationId) {
-    assignedTo = await assignSheetLead(db, {
-      accountId: source.account_id,
-      contactId,
-      conversationId,
-    });
+  if (conversationId) {
+    const { data: existing } = await db
+      .from('conversations')
+      .select('assigned_agent_id')
+      .eq('id', conversationId)
+      .eq('account_id', source.account_id)
+      .maybeSingle();
+    assignedTo =
+      (existing?.assigned_agent_id as string | null | undefined) ?? null;
   }
 
   await ensureInboundLeadInFunnel(db, {
@@ -289,37 +290,6 @@ async function importOneRow(
     actorUserId: auditUserId,
   });
 
-  if (created) {
-    await runAutomationsForTrigger({
-      accountId: source.account_id,
-      triggerType: 'new_contact_created',
-      contactId,
-      context: { conversation_id: conversationId ?? undefined },
-    });
-    await runAutomationsForTrigger({
-      accountId: source.account_id,
-      triggerType: 'first_inbound_message',
-      contactId,
-      context: {
-        conversation_id: conversationId ?? undefined,
-        message_text: row.formName
-          ? `Formulario: ${row.formName}`
-          : 'Lead de formulario',
-      },
-    });
-  }
-  if (assignedTo) {
-    await runAutomationsForTrigger({
-      accountId: source.account_id,
-      triggerType: 'conversation_assigned',
-      contactId,
-      context: {
-        conversation_id: conversationId ?? undefined,
-        agent_id: assignedTo,
-      },
-    });
-  }
-
   await recordImport(
     db,
     source,
@@ -329,22 +299,6 @@ async function importOneRow(
     assignedTo,
   );
   return assignedTo ? 'assigned' : 'imported';
-}
-
-async function assignSheetLead(
-  db: SupabaseClient,
-  opts: { accountId: string; contactId: string; conversationId: string },
-): Promise<string | null> {
-  const claim = await claimRoundRobinAssignment(db, opts);
-  if (claim.agentId) return claim.agentId;
-
-  const agentId = await pickRoundRobinAgent(db, opts.accountId);
-  if (!agentId) return null;
-  const assigned = await assignConversationToAgent(db, {
-    ...opts,
-    agentId,
-  });
-  return assigned ? agentId : null;
 }
 
 async function fillMissingContactFields(

@@ -24,7 +24,6 @@ import {
   resolveAuditUserId,
   ContactError,
 } from '@/lib/api/v1/contacts';
-import { distributeInboundContact } from '@/lib/leads/distribute-inbound-contact';
 
 // PostgREST filter values are comma/paren-delimited; strip anything
 // that could break the `.or()` grammar before interpolating a search
@@ -135,20 +134,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Facebook sheet rows land here with no WhatsApp chat. Assign and
-    // message the next agent now; a failure must not reject the contact.
-    try {
-      const distributed = await distributeInboundContact(ctx.supabase, {
-        accountId: ctx.accountId,
-        contactId: id,
-        actorUserId: auditUserId,
-        created,
-      });
-      console.info('[api/v1/contacts] distribute', distributed);
-    } catch (err) {
-      console.warn('[api/v1/contacts] distribute failed:', err);
-    }
-
+    // Do not assign or WhatsApp an agent here. These Facebook leads also
+    // arrive as the "Completé el formulario" chat, and that path already
+    // round-robins once. A second assign from the sheet handed the same
+    // person to the next advisor.
     const contact = await getContactById(ctx.supabase, ctx.accountId, id);
     return ok(contact, created ? 201 : 200);
   } catch (err) {
