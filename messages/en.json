@@ -44,6 +44,11 @@
     "signIn": "Sign in",
     "errorPasswordMismatch": "Passwords do not match",
     "errorPasswordShort": "Password must be at least 6 characters",
+    "errorEmailTaken": "An account with that email already exists. Sign in instead.",
+    "errorEmailNotConfigured": "Email delivery is not configured. Contact an administrator.",
+    "errorEmailFailed": "The confirmation email could not be sent. Try again in a few minutes.",
+    "errorInvalid": "Check the name, email, and password.",
+    "errorGeneric": "The account could not be created. Try again.",
     "checkEmailTitle": "Check your email",
     "checkEmailBody": "We've sent a confirmation link to {email}. Please check your inbox and click the link to verify your account.",
     "backToSignIn": "Back to sign in"
@@ -57,7 +62,10 @@
     "sendLink": "Send reset link",
     "backToSignIn": "Back to sign in",
     "checkEmailTitle": "Check your email",
-    "checkEmailBody": "We've sent a password reset link to {email}. Please check your inbox."
+    "checkEmailBody": "We've sent a password reset link to {email}. Please check your inbox.",
+    "errorEmailNotConfigured": "Email delivery is not configured. Contact an administrator.",
+    "errorEmailFailed": "The email could not be sent. Try again in a few minutes.",
+    "errorGeneric": "The reset link could not be sent. Try again."
   },
   "ResetPasswordPage": {
     "title": "Choose a new password",
@@ -1719,6 +1727,7 @@
       "title": "Team members",
       "description": "People with access to this account. Change each teammate’s role, and optionally limit which contacts agents can see.",
       "inviteMember": "Invite member",
+      "addMember": "Add user",
       "online": "online",
       "away": "away",
       "offline": "offline",
@@ -1799,6 +1808,26 @@
       "copied": "Invite link copied",
       "clipboardBlocked": "Clipboard blocked — copy the link manually",
       "whatsappMessage": "Join {accountName} on wacrm using this link (valid for {expiresInDays} days): {url}"
+    },
+    "addMember": {
+      "dialogTitle": "Add user",
+      "dialogDesc": "Create the login now, without a confirmation email. Only an administrator can do this. Share the password with them — they can sign in right away.",
+      "fullName": "Name",
+      "email": "Email",
+      "password": "Password",
+      "confirmPassword": "Confirm password",
+      "passwordHint": "At least 6 characters. The password is not emailed.",
+      "roleLabel": "Role",
+      "cancel": "Cancel",
+      "submit": "Create user",
+      "creating": "Creating…",
+      "errorMismatch": "Passwords do not match",
+      "errorShort": "Password must be at least 6 characters",
+      "errorEmailTaken": "An account with that email already exists",
+      "errorForbidden": "Only an administrator can add users",
+      "errorGeneric": "The user could not be created",
+      "createdToast": "{name} can sign in now.",
+      "emailSkipped": "The notice email could not be sent. Share the password directly."
     },
     "tagsAndFields": {
       "title": "Fields & tags",

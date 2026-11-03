@@ -4,7 +4,6 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +20,21 @@ import {
   useInviteBrand,
   useSiteBrand,
 } from "@/hooks/use-invite-brand";
+
+function signupErrorKey(code: string | undefined) {
+  switch (code) {
+    case "email_taken":
+      return "errorEmailTaken" as const;
+    case "email_not_configured":
+      return "errorEmailNotConfigured" as const;
+    case "email_failed":
+      return "errorEmailFailed" as const;
+    case "invalid":
+      return "errorInvalid" as const;
+    default:
+      return "errorGeneric" as const;
+  }
+}
 
 export default function SignupPage() {
   return (
@@ -46,7 +60,6 @@ function SignupPageInner() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const supabase = createClient();
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,29 +77,31 @@ function SignupPageInner() {
 
     setLoading(true);
 
-    const emailRedirectTo = inviteToken
-      ? `${window.location.origin}/join/${encodeURIComponent(inviteToken)}`
-      : undefined;
-
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-        },
-        ...(emailRedirectTo ? { emailRedirectTo } : {}),
-      },
-    });
-
-    if (error) {
-      setError(error.message);
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName,
+          email,
+          password,
+          inviteToken: inviteToken || undefined,
+        }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      if (!res.ok) {
+        setError(t(signupErrorKey(payload.error)));
+        setLoading(false);
+        return;
+      }
+      setSuccess(true);
+    } catch {
+      setError(t("errorGeneric"));
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setSuccess(true);
-    setLoading(false);
   };
 
   if (success) {

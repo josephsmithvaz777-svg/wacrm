@@ -44,6 +44,11 @@
     "signIn": "로그인",
     "errorPasswordMismatch": "비밀번호가 일치하지 않습니다",
     "errorPasswordShort": "비밀번호는 최소 6자여야 합니다",
+    "errorEmailTaken": "이미 이 이메일로 가입된 계정이 있습니다. 로그인해 주세요.",
+    "errorEmailNotConfigured": "이메일 발송이 설정되어 있지 않습니다. 관리자에게 알려 주세요.",
+    "errorEmailFailed": "확인 메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.",
+    "errorInvalid": "이름, 이메일, 비밀번호를 확인해 주세요.",
+    "errorGeneric": "계정을 만들지 못했습니다. 다시 시도해 주세요.",
     "checkEmailTitle": "이메일을 확인하세요",
     "checkEmailBody": "{email}로 확인 링크를 보냈습니다. 받은편지함에서 링크를 클릭해 계정을 인증하세요.",
     "backToSignIn": "로그인으로 돌아가기"
@@ -57,7 +62,10 @@
     "sendLink": "재설정 링크 보내기",
     "backToSignIn": "로그인으로 돌아가기",
     "checkEmailTitle": "이메일을 확인하세요",
-    "checkEmailBody": "{email}로 비밀번호 재설정 링크를 보냈습니다. 받은편지함을 확인하세요."
+    "checkEmailBody": "{email}로 비밀번호 재설정 링크를 보냈습니다. 받은편지함을 확인하세요.",
+    "errorEmailNotConfigured": "이메일 발송이 설정되어 있지 않습니다. 관리자에게 알려 주세요.",
+    "errorEmailFailed": "메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.",
+    "errorGeneric": "재설정 링크를 보내지 못했습니다. 다시 시도해 주세요."
   },
   "ResetPasswordPage": {
     "title": "새 비밀번호 선택",
@@ -1718,6 +1726,7 @@
       "title": "팀원",
       "description": "이 계정에 접근 권한이 있는 사람들입니다. 역할에 따라 각 팀원이 할 수 있는 작업이 결정됩니다.",
       "inviteMember": "멤버 초대",
+      "addMember": "사용자 추가",
       "online": "온라인",
       "away": "자리비움",
       "offline": "오프라인",
@@ -1798,6 +1807,26 @@
       "copied": "초대 링크가 복사되었습니다",
       "clipboardBlocked": "클립보드 접근이 차단되었습니다 — 링크를 직접 복사하세요",
       "whatsappMessage": "이 링크(유효 기간 {expiresInDays}일)로 wacrm의 {accountName}에 참여하세요: {url}"
+    },
+    "addMember": {
+      "dialogTitle": "사용자 추가",
+      "dialogDesc": "확인 메일 없이 바로 로그인을 만듭니다. 관리자만 할 수 있습니다. 비밀번호를 직접 전달하면 즉시 로그인할 수 있습니다.",
+      "fullName": "이름",
+      "email": "이메일",
+      "password": "비밀번호",
+      "confirmPassword": "비밀번호 확인",
+      "passwordHint": "최소 6자. 비밀번호는 메일로 보내지 않습니다.",
+      "roleLabel": "역할",
+      "cancel": "취소",
+      "submit": "사용자 만들기",
+      "creating": "만드는 중…",
+      "errorMismatch": "비밀번호가 일치하지 않습니다",
+      "errorShort": "비밀번호는 최소 6자여야 합니다",
+      "errorEmailTaken": "이미 이 이메일로 가입된 계정이 있습니다",
+      "errorForbidden": "관리자만 사용자를 추가할 수 있습니다",
+      "errorGeneric": "사용자를 만들지 못했습니다",
+      "createdToast": "{name} 님이 바로 로그인할 수 있습니다.",
+      "emailSkipped": "안내 메일을 보내지 못했습니다. 비밀번호를 직접 전달하세요."
     },
     "tagsAndFields": {
       "title": "필드 & 태그",

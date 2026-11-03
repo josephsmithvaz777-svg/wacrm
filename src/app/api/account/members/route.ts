@@ -14,8 +14,23 @@
 
 import { NextResponse } from "next/server";
 
-import { getCurrentAccount, toErrorResponse } from "@/lib/auth/account";
+import { getCurrentAccount, requireRole, toErrorResponse } from "@/lib/auth/account";
+import { attachFreshUser, rollbackFreshUser } from "@/lib/auth/attach-member";
+import {
+  isEmailTakenError,
+  localeFromRequest,
+  requestPublicOrigin,
+  welcomeMemberMail,
+} from "@/lib/auth/auth-mail";
+import { parseManualMember } from "@/lib/auth/manual-member";
 import { canManageMembers, isAccountRole } from "@/lib/auth/roles";
+import { sendPlainEmail } from "@/lib/email/send";
+import { supabaseAdmin } from "@/lib/automations/admin-client";
+import {
+  checkRateLimit,
+  rateLimitResponse,
+  RATE_LIMITS,
+} from "@/lib/rate-limit";
 import type { AccountMember } from "@/types";
 
 interface ProfileRow {
@@ -85,6 +100,92 @@ export async function GET() {
     });
 
     return NextResponse.json({ members });
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}
+
+// POST — admin creates a teammate directly. The account is confirmed
+// immediately, so they can sign in with the password the admin chose
+// even when the confirmation email never arrives. The welcome mail is
+// best-effort and does not include the password.
+export async function POST(request: Request) {
+  try {
+    const ctx = await requireRole("admin");
+
+    const limit = checkRateLimit(
+      `admin:memberCreate:${ctx.userId}`,
+      RATE_LIMITS.adminAction,
+    );
+    if (!limit.success) return rateLimitResponse(limit);
+
+    const body = await request.json().catch(() => null);
+    const parsed = parseManualMember(body);
+    if (!parsed.ok) {
+      return NextResponse.json({ error: "invalid" }, { status: 400 });
+    }
+
+    const admin = supabaseAdmin();
+    const { data, error } = await admin.auth.admin.createUser({
+      email: parsed.email,
+      password: parsed.password,
+      email_confirm: true,
+      user_metadata: { full_name: parsed.fullName },
+    });
+
+    if (error || !data.user) {
+      if (isEmailTakenError(error)) {
+        return NextResponse.json({ error: "email_taken" }, { status: 409 });
+      }
+      console.error("[POST /api/account/members] createUser:", error?.message);
+      return NextResponse.json({ error: "create_failed" }, { status: 500 });
+    }
+
+    const userId = data.user.id;
+    try {
+      await attachFreshUser(admin, {
+        userId,
+        accountId: ctx.accountId,
+        role: parsed.role,
+        fullName: parsed.fullName,
+        email: parsed.email,
+      });
+    } catch (attachError) {
+      console.error("[POST /api/account/members] attach:", attachError);
+      await rollbackFreshUser(admin, userId);
+      const message =
+        attachError instanceof Error ? attachError.message : "";
+      if (message === "user_belongs_elsewhere") {
+        return NextResponse.json({ error: "email_taken" }, { status: 409 });
+      }
+      return NextResponse.json({ error: "create_failed" }, { status: 500 });
+    }
+
+    const loginUrl = `${requestPublicOrigin(request)}/login`;
+    const mail = welcomeMemberMail(
+      localeFromRequest(request),
+      parsed.fullName,
+      ctx.account.name,
+      loginUrl,
+    );
+    const sent = await sendPlainEmail({ to: parsed.email, ...mail });
+    if (!sent.ok) {
+      console.warn("[POST /api/account/members] welcome email:", sent.error);
+    }
+
+    return NextResponse.json(
+      {
+        ok: true,
+        emailSent: sent.ok,
+        member: {
+          user_id: userId,
+          full_name: parsed.fullName,
+          email: parsed.email,
+          role: parsed.role,
+        },
+      },
+      { status: 201 },
+    );
   } catch (err) {
     return toErrorResponse(err);
   }

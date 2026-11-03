@@ -2,6 +2,7 @@ export async function sendPlainEmail(opts: {
   to: string;
   subject: string;
   text: string;
+  html?: string;
 }): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
   const apiKey = process.env.RESEND_API_KEY?.trim();
   const from =
@@ -21,6 +22,7 @@ export async function sendPlainEmail(opts: {
       to: [opts.to],
       subject: opts.subject,
       text: opts.text,
+      ...(opts.html ? { html: opts.html } : {}),
     }),
   });
 

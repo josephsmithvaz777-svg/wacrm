@@ -44,6 +44,11 @@
     "signIn": "Iniciar sesión",
     "errorPasswordMismatch": "Las contraseñas no coinciden",
     "errorPasswordShort": "La contraseña debe tener al menos 6 caracteres",
+    "errorEmailTaken": "Ya existe una cuenta con ese correo. Inicia sesión.",
+    "errorEmailNotConfigured": "El envío de correo no está configurado. Avisa al administrador.",
+    "errorEmailFailed": "No se pudo enviar el correo de confirmación. Inténtalo de nuevo en unos minutos.",
+    "errorInvalid": "Revisa el nombre, el correo y la contraseña.",
+    "errorGeneric": "No se pudo crear la cuenta. Inténtalo de nuevo.",
     "checkEmailTitle": "Revisa tu correo",
     "checkEmailBody": "Enviamos un enlace de confirmación a {email}. Revisa tu bandeja y haz clic para verificar tu cuenta.",
     "backToSignIn": "Volver a iniciar sesión"
@@ -57,7 +62,10 @@
     "sendLink": "Enviar enlace",
     "backToSignIn": "Volver a iniciar sesión",
     "checkEmailTitle": "Revisa tu correo",
-    "checkEmailBody": "Enviamos un enlace para restablecer la contraseña a {email}. Revisa tu bandeja."
+    "checkEmailBody": "Enviamos un enlace para restablecer la contraseña a {email}. Revisa tu bandeja.",
+    "errorEmailNotConfigured": "El envío de correo no está configurado. Avisa al administrador.",
+    "errorEmailFailed": "No se pudo enviar el correo. Inténtalo de nuevo en unos minutos.",
+    "errorGeneric": "No se pudo enviar el enlace. Inténtalo de nuevo."
   },
   "ResetPasswordPage": {
     "title": "Elige una nueva contraseña",
@@ -1740,6 +1748,7 @@
       "title": "Miembros del equipo",
       "description": "Personas con acceso a esta cuenta. Cambia el rol de cada agente y, si quieres, limita qué contactos pueden ver.",
       "inviteMember": "Invitar miembro",
+      "addMember": "Agregar usuario",
       "online": "en línea",
       "away": "ausente",
       "offline": "desconectado",
@@ -1820,6 +1829,26 @@
       "copied": "Invite link copied",
       "clipboardBlocked": "Clipboard blocked — copy the link manually",
       "whatsappMessage": "Join {accountName} on wacrm using this link (valid for {expiresInDays} days): {url}"
+    },
+    "addMember": {
+      "dialogTitle": "Agregar usuario",
+      "dialogDesc": "Crea el acceso ahora, sin correo de confirmación. Solo un administrador puede hacerlo. Comparte la contraseña con la persona: podrá iniciar sesión de inmediato.",
+      "fullName": "Nombre",
+      "email": "Correo",
+      "password": "Contraseña",
+      "confirmPassword": "Confirmar contraseña",
+      "passwordHint": "Mínimo 6 caracteres. No se envía por correo.",
+      "roleLabel": "Rol",
+      "cancel": "Cancelar",
+      "submit": "Crear usuario",
+      "creating": "Creando…",
+      "errorMismatch": "Las contraseñas no coinciden",
+      "errorShort": "La contraseña debe tener al menos 6 caracteres",
+      "errorEmailTaken": "Ya existe una cuenta con ese correo",
+      "errorForbidden": "Solo un administrador puede agregar usuarios",
+      "errorGeneric": "No se pudo crear el usuario",
+      "createdToast": "Se creó a {name}. Ya puede iniciar sesión.",
+      "emailSkipped": "No se pudo enviar el aviso por correo. Comparte la contraseña directamente."
     },
     "tagsAndFields": {
       "title": "Campos y etiquetas",
