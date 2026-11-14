@@ -237,6 +237,14 @@ export async function resumePendingExecution(pending: {
     }
   }
 
+  if (pending.log_id) {
+    await db
+      .from('automation_logs')
+      .update({ status: 'running' })
+      .eq('id', pending.log_id)
+      .in('status', ['queued', 'failed'])
+  }
+
   try {
     await executeStepsFrom({
       automation: row,
@@ -282,15 +290,11 @@ async function executeAutomation(automation: Automation, input: DispatchInput) {
       contact_id: input.contactId ?? null,
       trigger_event: input.triggerType,
       steps_executed: [],
-      // Seeded pessimistically. The row is written BEFORE any step runs,
-      // and every terminal path below overwrites it (`appendResults` at
-      // the outermost scope, or `finalizeLog`). Seeding 'success' meant a
-      // run that died mid-flight — the process frozen, the pod recycled —
-      // left a permanent `status: 'success'` with `steps_executed: []`,
-      // indistinguishable from an automation that genuinely had nothing
-      // to do. 'failed' inverts that: the status only becomes success if
-      // execution actually reached the end. See issue #409.
-      status: 'failed',
+      // Written before any step runs. 'running' is not a success: a
+      // process that dies mid-flight leaves an in-progress row, and the
+      // terminal path (`appendResults` / `finalizeLog`) overwrites it.
+      // Enrolamiento uses 'queued' until this resume starts. See issue #409.
+      status: 'running',
     })
     .select()
     .single()

@@ -1280,10 +1280,13 @@
       "step": "{count} step",
       "stepPlural": "{count} steps",
       "noSteps": "No steps recorded.",
+      "inQueue": "Queued",
       "status": {
         "success": "success",
         "partial": "partial",
-        "failed": "failed"
+        "failed": "failed",
+        "queued": "Queued",
+        "running": "Running"
       },
       "back": "Back",
       "backAria": "Back"

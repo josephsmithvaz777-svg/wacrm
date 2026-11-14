@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/automations/admin-client'
 import { resumePendingExecution } from '@/lib/automations/engine'
 import type { AutomationContext } from '@/lib/automations/engine'
+import { isStaleRunning } from '@/lib/automations/pending-claim'
 import { sendDueTaskReminders, ensureTaskDueReminderLoop } from '@/lib/tasks/reminders'
 import { sendDueStaffReminders } from '@/lib/tasks/staff-reminder-send'
 import { sweepSilentAiConversations } from '@/lib/ai/silence-handoff'
@@ -49,6 +50,7 @@ export async function GET(request: Request) {
   const staff = await sendDueStaffReminders(admin)
   const silence = await sweepSilentAiConversations(admin)
   const sheets = await syncAllEnabledSheetSources(admin)
+  await reclaimStaleRunning(admin)
 
   const { data: due, error } = await admin
     .from('automation_pending_executions')
@@ -65,13 +67,7 @@ export async function GET(request: Request) {
 
   let processed = 0
   for (const row of due) {
-    const { data: claim } = await admin
-      .from('automation_pending_executions')
-      .update({ status: 'running' })
-      .eq('id', row.id)
-      .eq('status', 'pending')
-      .select('id')
-      .maybeSingle()
+    const claim = await claimPendingRow(admin, row.id as string)
     if (!claim) continue
 
     await resumePendingExecution({
@@ -93,4 +89,69 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json({ processed, reminders, staff, silence, sheets })
+}
+
+/**
+ * A crashed resume leaves the row in `running`. After 5 minutes it
+ * goes back to `pending` so the next pass can take it again.
+ */
+async function reclaimStaleRunning(
+  admin: ReturnType<typeof supabaseAdmin>,
+): Promise<void> {
+  const now = Date.now()
+  const { data, error } = await admin
+    .from('automation_pending_executions')
+    .select('id, claimed_at, created_at')
+    .eq('status', 'running')
+    .limit(100)
+  if (error) {
+    console.warn('[automations] reclaim running:', error.message)
+    return
+  }
+  const ids = (data ?? [])
+    .filter((row) =>
+      isStaleRunning(
+        {
+          claimed_at: (row.claimed_at as string | null) ?? null,
+          created_at: (row.created_at as string | null) ?? null,
+        },
+        now,
+      ),
+    )
+    .map((row) => row.id as string)
+  if (ids.length === 0) return
+  const { error: updateError } = await admin
+    .from('automation_pending_executions')
+    .update({ status: 'pending', claimed_at: null })
+    .in('id', ids)
+    .eq('status', 'running')
+  if (!updateError) return
+  await admin
+    .from('automation_pending_executions')
+    .update({ status: 'pending' })
+    .in('id', ids)
+    .eq('status', 'running')
+}
+
+async function claimPendingRow(
+  admin: ReturnType<typeof supabaseAdmin>,
+  id: string,
+): Promise<{ id: string } | null> {
+  const claimedAt = new Date().toISOString()
+  const first = await admin
+    .from('automation_pending_executions')
+    .update({ status: 'running', claimed_at: claimedAt })
+    .eq('id', id)
+    .eq('status', 'pending')
+    .select('id')
+    .maybeSingle()
+  if (!first.error) return (first.data as { id: string } | null) ?? null
+  const second = await admin
+    .from('automation_pending_executions')
+    .update({ status: 'running' })
+    .eq('id', id)
+    .eq('status', 'pending')
+    .select('id')
+    .maybeSingle()
+  return (second.data as { id: string } | null) ?? null
 }

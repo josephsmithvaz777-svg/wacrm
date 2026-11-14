@@ -25,6 +25,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { SettingsPanelHead } from "@/components/settings/settings-panel-head";
 import { cn } from "@/lib/utils";
+import { automationLogStatusClass, displayLogStatus } from "@/lib/automations/log-display"
 import { formatRelative } from "@/lib/automations/trigger-meta";
 import type {
   AutomationLog,
@@ -143,6 +144,7 @@ function AutomationRunsList() {
   const tLogs = useTranslations("Automations.logs");
   const { accountId } = useAuth();
   const [rows, setRows] = useState<AutomationLog[] | null>(null);
+  const [pendingLogIds, setPendingLogIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [openLogId, setOpenLogId] = useState<string | null>(null);
@@ -155,19 +157,34 @@ function AutomationRunsList() {
     setLoading(true);
     setError(null);
     const supabase = createClient();
-    const { data, error: fetchErr } = await supabase
-      .from("automation_logs")
-      .select("*, contact:contacts(id, name, phone), automation:automations(id, name)")
-      .eq("account_id", accountId)
-      .order("created_at", { ascending: false })
-      .limit(150);
+    const [logRes, pendingRes] = await Promise.all([
+      supabase
+        .from("automation_logs")
+        .select("*, contact:contacts(id, name, phone), automation:automations(id, name)")
+        .eq("account_id", accountId)
+        .order("created_at", { ascending: false })
+        .limit(150),
+      supabase
+        .from("automation_pending_executions")
+        .select("log_id")
+        .eq("account_id", accountId)
+        .eq("status", "pending")
+        .limit(500),
+    ]);
     setLoading(false);
-    if (fetchErr) {
-      setError(fetchErr.message);
+    if (logRes.error) {
+      setError(logRes.error.message);
       setRows([]);
       return;
     }
-    setRows((data ?? []) as AutomationLog[]);
+    setRows((logRes.data ?? []) as AutomationLog[]);
+    const queued = new Set<string>();
+    if (!pendingRes.error) {
+      for (const row of pendingRes.data ?? []) {
+        if (typeof row.log_id === "string") queued.add(row.log_id);
+      }
+    }
+    setPendingLogIds(queued);
   }, [accountId]);
 
   useEffect(() => {
@@ -208,6 +225,13 @@ function AutomationRunsList() {
             const isOpen = openLogId === log.id;
             const contactName =
               log.contact?.name || log.contact?.phone || tLogs("unknownContact");
+            const shownStatus = displayLogStatus(
+              log.status,
+              log.steps_executed?.length ?? 0,
+              pendingLogIds.has(log.id),
+            );
+            const waiting =
+              shownStatus === "queued" && (log.steps_executed?.length ?? 0) === 0;
             return (
               <li
                 key={log.id}
@@ -223,7 +247,7 @@ function AutomationRunsList() {
                   ) : (
                     <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
                   )}
-                  <RunStatus status={log.status} />
+                  <RunStatus status={shownStatus} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-foreground">
                       {log.automation?.name || t("unnamedAutomation")}
@@ -249,7 +273,7 @@ function AutomationRunsList() {
                       ))}
                       {(log.steps_executed ?? []).length === 0 ? (
                         <li className="text-xs text-muted-foreground">
-                          {tLogs("noSteps")}
+                          {waiting ? tLogs("inQueue") : tLogs("noSteps")}
                         </li>
                       ) : null}
                     </ul>
@@ -266,12 +290,7 @@ function AutomationRunsList() {
 
 function RunStatus({ status }: { status: AutomationLog["status"] }) {
   const t = useTranslations("Automations.logs");
-  const classes =
-    status === "success"
-      ? "border-primary/30 bg-primary/10 text-primary"
-      : status === "partial"
-        ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
-        : "border-red-500/30 bg-red-500/10 text-red-300";
+  const classes = automationLogStatusClass(status);
   return (
     <span
       className={cn(

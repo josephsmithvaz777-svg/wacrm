@@ -1279,10 +1279,13 @@
       "step": "단계 {count}개",
       "stepPlural": "단계 {count}개",
       "noSteps": "기록된 단계가 없습니다.",
+      "inQueue": "대기 중",
       "status": {
         "success": "성공",
         "partial": "부분 성공",
-        "failed": "실패"
+        "failed": "실패",
+        "queued": "대기 중",
+        "running": "실행 중"
       },
       "back": "뒤로",
       "backAria": "뒤로"

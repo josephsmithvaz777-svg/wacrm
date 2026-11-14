@@ -587,7 +587,12 @@ export type AutomationStepType =
   /** WhatsApp a staff phone (owner and/or assigned agent). */
   | 'notify_staff';
 
-export type AutomationLogStatus = 'success' | 'partial' | 'failed';
+export type AutomationLogStatus =
+  | 'success'
+  | 'partial'
+  | 'failed'
+  | 'queued'
+  | 'running';
 
 export interface KeywordMatchTriggerConfig {
   keywords: string[];

@@ -187,7 +187,7 @@ export async function enrollContactsInWarming(
       contact_id: row.contactId,
       trigger_event: 'warming_enroll',
       steps_executed: [],
-      status: 'failed',
+      status: 'queued',
     }))
     const { data: logRows, error: logErr } = await db
       .from('automation_logs')
