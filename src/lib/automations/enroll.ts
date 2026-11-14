@@ -120,7 +120,7 @@ export async function enrollContactsInWarming(
       .from('automation_pending_executions')
       .select('contact_id')
       .eq('automation_id', automation.id)
-      .eq('status', 'pending')
+      .in('status', ['pending', 'running'])
       .in('contact_id', ids)
     for (const row of pending ?? []) {
       if (typeof row.contact_id === 'string') pendingIds.add(row.contact_id)

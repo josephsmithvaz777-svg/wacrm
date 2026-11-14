@@ -116,6 +116,24 @@ export async function removeNamedTag(
   await removeContactTag(db, { accountId, contactId, tagId: tag.id })
 }
 
+/** True when this contact currently carries the calentamiento tag. */
+export async function contactHasWarmingTag(
+  db: SupabaseClient,
+  accountId: string,
+  contactId: string,
+): Promise<boolean> {
+  const tag = await findTagByName(db, accountId, isWarmingTagName)
+  if (!tag) return false
+  const { data, error } = await db
+    .from('contact_tags')
+    .select('id')
+    .eq('contact_id', contactId)
+    .eq('tag_id', tag.id)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  return !!data
+}
+
 /**
  * True when the contact sent a WhatsApp message strictly after `sinceIso`.
  * Used before a wait resumes, so a reply that landed while the row was
@@ -148,9 +166,11 @@ export async function customerRepliedSince(
 }
 
 /**
- * Inbound reply: cancel queued waits of automations that opted into
- * "stop on reply", and drop the calentamiento tag so the AI agent can
- * take the thread. Never throws — the webhook must still return 200.
+ * Inbound reply: cancel queued and in-flight waits of automations that
+ * opted into "stop on reply". The running row is marked cancelled so
+ * the engine loop stops at its next send or wait check. The
+ * calentamiento tag comes off only when this contact actually had one
+ * of those executions. Never throws — the webhook must still return 200.
  */
 export async function stopWarmingOnInboundReply(
   db: SupabaseClient,
@@ -164,38 +184,40 @@ export async function stopWarmingOnInboundReply(
       .eq('stop_on_reply', true)
     if (autoErr) {
       console.warn('[warming] stop_on_reply lookup:', autoErr.message)
-    } else if (autos && autos.length > 0) {
-      const automationIds = autos
-        .map((row) => row.id as string)
-        .filter((id) => typeof id === 'string')
-      const { data: rows, error: pendingErr } = await db
-        .from('automation_pending_executions')
-        .select('id, log_id')
-        .eq('account_id', args.accountId)
-        .eq('contact_id', args.contactId)
-        .eq('status', 'pending')
-        .in('automation_id', automationIds)
-      if (pendingErr) {
-        console.warn('[warming] pending cancel:', pendingErr.message)
-      } else if (rows && rows.length > 0) {
-        const ids = rows.map((row) => row.id as string)
-        await db
-          .from('automation_pending_executions')
-          .update({ status: 'cancelled' })
-          .in('id', ids)
-        const logIds = rows
-          .map((row) => row.log_id as string | null)
-          .filter((id): id is string => typeof id === 'string' && id.length > 0)
-        if (logIds.length > 0) {
-          await db
-            .from('automation_logs')
-            .update({
-              status: 'partial',
-              error_message: 'El contacto respondió; se detuvo la secuencia.',
-            })
-            .in('id', logIds)
-        }
-      }
+      return
+    }
+    if (!autos || autos.length === 0) return
+    const automationIds = autos
+      .map((row) => row.id as string)
+      .filter((id) => typeof id === 'string')
+    const { data: rows, error: pendingErr } = await db
+      .from('automation_pending_executions')
+      .select('id, log_id')
+      .eq('account_id', args.accountId)
+      .eq('contact_id', args.contactId)
+      .in('status', ['pending', 'running'])
+      .in('automation_id', automationIds)
+    if (pendingErr) {
+      console.warn('[warming] pending cancel:', pendingErr.message)
+      return
+    }
+    if (!rows || rows.length === 0) return
+    const ids = rows.map((row) => row.id as string)
+    await db
+      .from('automation_pending_executions')
+      .update({ status: 'cancelled' })
+      .in('id', ids)
+    const logIds = rows
+      .map((row) => row.log_id as string | null)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    if (logIds.length > 0) {
+      await db
+        .from('automation_logs')
+        .update({
+          status: 'partial',
+          error_message: 'El contacto respondió; se detuvo la secuencia.',
+        })
+        .in('id', logIds)
     }
     await removeNamedTag(db, args.accountId, args.contactId, isWarmingTagName)
   } catch (err) {

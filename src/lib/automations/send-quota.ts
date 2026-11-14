@@ -49,6 +49,11 @@ export interface SendSlot {
   claimed: boolean
   /** When claimed is false, the pending row should run again at this time. */
   retryAt: string | null
+  /**
+   * Row to delete if WhatsApp rejects the send. Null when the slot was
+   * not recorded (cap miss, or migration 078 is not applied yet).
+   */
+  eventId: string | null
   /** Migration not applied yet — caller should send, not block the queue. */
   unavailable?: boolean
 }
@@ -59,7 +64,8 @@ function isMissingRpc(error: { code?: string; message?: string } | null): boolea
   return (
     error.code === 'PGRST202' ||
     error.code === '42883' ||
-    message.includes('claim_automation_send_slot')
+    message.includes('claim_automation_send_slot') ||
+    message.includes('release_automation_send_slot')
   )
 }
 
@@ -80,22 +86,43 @@ export async function claimAutomationSendSlot(
       console.warn(
         '[automations] claim_automation_send_slot is missing — apply migration 077. Sends are not capped.',
       )
-      return { claimed: true, retryAt: null, unavailable: true }
+      return { claimed: true, retryAt: null, eventId: null, unavailable: true }
     }
     console.error('[automations] claim send slot:', error.message)
     return {
       claimed: false,
       retryAt: new Date(Date.now() + 60_000).toISOString(),
+      eventId: null,
     }
   }
   const row = (Array.isArray(data) ? data[0] : data) as
-    | { claimed?: boolean; retry_at?: string | null }
+    | { claimed?: boolean; retry_at?: string | null; event_id?: string | null }
     | null
     | undefined
-  if (row?.claimed) return { claimed: true, retryAt: null }
+  if (row?.claimed) {
+    return {
+      claimed: true,
+      retryAt: null,
+      eventId: typeof row.event_id === 'string' ? row.event_id : null,
+    }
+  }
   const retryAt =
     typeof row?.retry_at === 'string' && row.retry_at
       ? row.retry_at
       : new Date(Date.now() + 60_000).toISOString()
-  return { claimed: false, retryAt }
+  return { claimed: false, retryAt, eventId: null }
+}
+
+/** Give the hourly slot back when the provider call did not succeed. */
+export async function releaseAutomationSendSlot(
+  db: SupabaseClient,
+  eventId: string | null,
+): Promise<void> {
+  if (!eventId) return
+  const { error } = await db.rpc('release_automation_send_slot', {
+    p_event_id: eventId,
+  })
+  if (error && !isMissingRpc(error)) {
+    console.warn('[automations] release send slot:', error.message)
+  }
 }
