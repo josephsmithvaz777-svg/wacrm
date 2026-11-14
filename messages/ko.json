@@ -533,6 +533,21 @@
       "selectedCount": "{count}개 선택됨",
       "clearSelection": "지우기",
       "deleteSelected": "선택 항목 삭제",
+      "addToWarming": "워밍에 추가",
+      "warmingTitle": "워밍에 추가",
+      "warmingDesc": "첫날 발송은 시간당 한도에 맞춰 나뉩니다. 연락처에 워밍 태그가 붙습니다. 답장하면 시퀀스가 멈추도록 자동화에서 «답장하면 중지»를 켜세요.",
+      "warmingAutomation": "자동화",
+      "warmingSelected": "선택한 연락처만 ({count})",
+      "warmingFiltered": "현재 필터와 일치하는 모두 ({count})",
+      "warmingConfirm": "대기열에 넣기",
+      "warmingCancel": "취소",
+      "warmingNoAutomations": "활성 자동화가 없습니다. 등록하기 전에 하나를 활성화하세요.",
+      "warmingLoadFailed": "자동화를 불러오지 못했습니다",
+      "warmingFailed": "워밍에 추가하지 못했습니다",
+      "warmingInactive": "그 자동화는 활성 상태가 아닙니다",
+      "warmingEmpty": "추가할 연락처가 없습니다",
+      "warmingQueued": "대기열: {count}. 이미 대기 중: {pending}. 전화번호 없음: {noPhone}.",
+      "warmingTruncated": "처음 2000명만 대기열에 넣었습니다.",
       "tableColumns": {
         "name": "이름",
         "phone": "전화번호",
@@ -1226,7 +1241,12 @@
         "updateError": "업데이트하지 못했습니다",
         "duplicateError": "복제하지 못했습니다",
         "deleteError": "삭제하지 못했습니다"
-      }
+      },
+      "hourlyTitle": "시간당 발송",
+      "hourlyHint": "자동화 크론은 계정당 이 수보다 많이 보내지 않습니다. 나머지는 대기열에 남고, 발송 사이에 무작위 간격이 있습니다.",
+      "hourlySave": "저장",
+      "hourlySaved": "한도를 저장했습니다",
+      "hourlySaveFailed": "한도를 저장하지 못했습니다"
     },
     "leadHandoff": {
       "title": "리드 알림",
@@ -1270,6 +1290,7 @@
     "builder": {
       "steps": {
         "send_message": "메시지 보내기",
+        "send_file": "파일 보내기",
         "send_buttons": "버튼 보내기",
         "send_list": "목록 보내기",
         "send_template": "템플릿 보내기",
@@ -1329,6 +1350,8 @@
       "scheduleHint": "Cron 표현식 (예: 0 9 * * 1-5)",
       "active": "활성",
       "activeAria": "활성",
+      "stopOnReply": "답장하면 중지",
+      "stopOnReplyAria": "연락처가 답장하면 시퀀스를 중지",
       "save": "저장",
       "saveDraft": "초안 저장",
       "untitled": "제목 없는 자동화",
@@ -1387,6 +1410,19 @@
         "notifyTextHint": "자리 표시자: {{contact_name}}, {{contact_phone}}, {{time}}, {{message.text}}. 알림은 리드를 받는 것과 같은 왓츠앱 번호에서 발송됩니다. 각자 설정 → 프로필에 번호를 저장해야 합니다.",
         "placeholderMessageText": "안녕하세요! 문의해주셔서 감사합니다…",
         "messageVarsHint": "{{greeting}}, {{agent.name}}, {{contact.name}}, {{contact.phone}}, {{message.text}}",
+        "fileUrl": "파일 URL",
+        "fileUrlPlaceholder": "https://your-vps.example/media/photo.jpg",
+        "fileUrlHint": "VPS에 있는 http(s) 링크를 붙여 넣으세요. Supabase에는 올리지 않습니다. WhatsApp이 그 URL을 받아 이미지, 동영상 또는 PDF로 보내고, 선택 텍스트는 캡션이 됩니다.",
+        "fileKind": "유형",
+        "fileKinds": {
+          "image": "이미지",
+          "video": "동영상",
+          "document": "PDF"
+        },
+        "fileCaption": "선택 텍스트",
+        "fileCaptionPlaceholder": "평면도를 보냅니다…",
+        "fileName": "PDF 이름",
+        "fileNamePlaceholder": "plan.pdf",
         "tagLabel": "태그",
         "modeLabel": "모드",
         "modes": {

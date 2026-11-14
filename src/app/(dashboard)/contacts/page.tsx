@@ -52,10 +52,12 @@ import {
   UserRound,
   CalendarDays,
   X,
+  Flame,
 } from 'lucide-react';
 import { ContactForm } from '@/components/contacts/contact-form';
 import { ContactDetailView } from '@/components/contacts/contact-detail-view';
 import { ImportModal } from '@/components/contacts/import-modal';
+import { WarmingEnrollDialog } from '@/components/contacts/warming-enroll-dialog';
 import { CustomFieldsManager } from '@/components/contacts/custom-fields-manager';
 import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
@@ -123,6 +125,7 @@ export default function ContactsPage() {
   // Bulk selection (page-scoped — only the loaded rows are selectable)
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [warmingOpen, setWarmingOpen] = useState(false);
 
   // All tags for display
   const [tagsMap, setTagsMap] = useState<Record<string, Tag>>({});
@@ -971,6 +974,17 @@ export default function ContactsPage() {
                 {t('exportSelected')}
               </Button>
             )}
+            {canEdit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setWarmingOpen(true)}
+                className="border-border"
+              >
+                <Flame className="size-4" />
+                {t('addToWarming')}
+              </Button>
+            )}
             <GatedButton
               variant="destructive"
               size="sm"
@@ -1382,6 +1396,21 @@ export default function ContactsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <WarmingEnrollDialog
+        open={warmingOpen}
+        onOpenChange={setWarmingOpen}
+        selectedIds={[...selected]}
+        filteredCount={totalCount}
+        filters={{
+          search,
+          tagIds: selectedTagIds,
+          assignedTo: selectedAgentIds,
+          includeUnassigned,
+          createdFrom,
+          createdTo,
+        }}
+      />
 
       {/* Bulk Delete Confirmation */}
       <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>

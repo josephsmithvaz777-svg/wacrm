@@ -570,6 +570,8 @@ export type AutomationTriggerType =
 
 export type AutomationStepType =
   | 'send_message'
+  /** Image, video, or PDF fetched by WhatsApp from an external URL. */
+  | 'send_file'
   | 'send_buttons'
   | 'send_list'
   | 'send_template'
@@ -626,6 +628,17 @@ export type AutomationTriggerConfig =
 
 export interface SendMessageStepConfig {
   text: string;
+}
+
+/**
+ * Native media send. `url` is an http(s) address the WhatsApp provider
+ * downloads. The file itself is never stored in Supabase.
+ */
+export interface SendFileStepConfig {
+  url: string;
+  kind: 'image' | 'video' | 'document';
+  caption?: string;
+  filename?: string;
 }
 
 /**
@@ -706,6 +719,7 @@ export interface NotifyStaffStepConfig {
 
 export type AutomationStepConfig =
   | SendMessageStepConfig
+  | SendFileStepConfig
   | SendButtonsStepConfig
   | SendListStepConfig
   | SendTemplateStepConfig
@@ -734,6 +748,12 @@ export interface Automation {
   trigger_type: AutomationTriggerType;
   trigger_config: AutomationTriggerConfig;
   is_active: boolean;
+  /**
+   * When true, an inbound reply cancels this automation's queued waits
+   * for that contact. Default false so automations saved before
+   * migration 077 keep their previous behavior.
+   */
+  stop_on_reply?: boolean;
   execution_count: number;
   last_executed_at?: string | null;
   created_at: string;

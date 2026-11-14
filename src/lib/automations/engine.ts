@@ -22,7 +22,16 @@ import type {
 import { contactBelongsToAccountStaff } from '@/lib/assignments/staff-contact'
 import { notifyStaffViaWhatsApp } from './staff-notify'
 import { supabaseAdmin } from './admin-client'
-import { addContactTagIfAbsent } from '@/lib/contacts/tag-write'
+import { addContactTagIfAbsent, removeContactTag } from '@/lib/contacts/tag-write'
+import { parseSendFileConfig } from './send-file'
+import { claimAutomationSendSlot, isPacedSendStep, releaseAutomationSendSlot } from './send-quota'
+import {
+  contactHasWarmingTag,
+  customerRepliedSince,
+  markColdAfterSequence,
+  stopWarmingOnInboundReply,
+} from './warming'
+import { sendMessageToConversation } from '@/lib/whatsapp/send-message'
 import { MAX_TAG_CHAIN_DEPTH, getTagChainDepth } from '@/lib/contacts/tag-chain'
 import { engineSendText, engineSendTemplate, engineSendInteractive } from './meta-send'
 import { validateInteractivePayload } from '@/lib/whatsapp/interactive'
@@ -52,9 +61,21 @@ export interface AutomationContext {
   agent_id?: string
   /** Button / list-row id the customer tapped, for interactive_reply. */
   interactive_reply_id?: string
+  /** Set when Contactos → Añadir a calentamiento queued this run. */
+  warming_enroll?: boolean
 }
 
-/** Inbound events that treat the sender as a customer / lead. */
+/** Stops a stop-on-reply run without recording the step as a provider failure. */
+class SequenceStopped extends Error {
+  constructor() {
+    super('sequence stopped')
+    this.name = 'SequenceStopped'
+  }
+}
+
+function isSequenceStopped(err: unknown): err is SequenceStopped {
+  return err instanceof SequenceStopped
+}
 function isCustomerLeadTrigger(trigger: AutomationTriggerType): boolean {
   return (
     trigger === 'first_inbound_message' ||
@@ -169,6 +190,9 @@ export async function resumePendingExecution(pending: {
   branch: 'yes' | 'no' | null
   next_step_position: number
   context: AutomationContext
+  /** When the wait row was queued. Reply checks use the automation log's
+   *  created_at (sequence start), not this timestamp. */
+  created_at?: string | null
 }): Promise<void> {
   const db = supabaseAdmin()
   const { data: automation, error } = await db
@@ -183,9 +207,39 @@ export async function resumePendingExecution(pending: {
     return
   }
 
+  const row = automation as Automation
+  const sequenceStartedAt = await loadSequenceStartedAt(db, pending.log_id)
+  if (row.stop_on_reply && pending.contact_id) {
+    try {
+      const cancelled = await pendingExecutionCancelled(db, pending.id)
+      const replied = sequenceStartedAt
+        ? await customerRepliedSince(
+            db,
+            row.account_id,
+            pending.contact_id,
+            sequenceStartedAt,
+          )
+        : false
+      if (cancelled || replied) {
+        if (replied) {
+          await stopWarmingOnInboundReply(db, {
+            accountId: row.account_id,
+            contactId: pending.contact_id,
+          })
+        }
+        await markPending(pending.id, 'cancelled')
+        return
+      }
+    } catch (err) {
+      console.error('[automations] reply check failed:', err)
+      await markPending(pending.id, 'failed')
+      return
+    }
+  }
+
   try {
     await executeStepsFrom({
-      automation: automation as Automation,
+      automation: row,
       contactId: pending.contact_id,
       context: pending.context ?? {},
       parentStepId: pending.parent_step_id,
@@ -193,9 +247,16 @@ export async function resumePendingExecution(pending: {
       startPosition: pending.next_step_position,
       logId: pending.log_id,
       triggerEvent: 'resumed_wait',
+      enforceSendQuota: true,
+      pendingExecutionId: pending.id,
+      sequenceStartedAt,
     })
     await markPending(pending.id, 'done')
   } catch (err) {
+    if (isSequenceStopped(err)) {
+      await markPending(pending.id, 'cancelled')
+      return
+    }
     console.error('[automations] resume failed:', err)
     await markPending(pending.id, 'failed')
   }
@@ -239,16 +300,24 @@ async function executeAutomation(automation: Automation, input: DispatchInput) {
     return
   }
 
-  await executeStepsFrom({
-    automation,
-    contactId: input.contactId ?? null,
-    context: input.context ?? {},
-    parentStepId: null,
-    branch: null,
-    startPosition: 0,
-    logId: log.id,
-    triggerEvent: input.triggerType,
-  })
+  const sequenceStartedAt =
+    typeof log.created_at === 'string' ? log.created_at : null
+
+  try {
+    await executeStepsFrom({
+      automation,
+      contactId: input.contactId ?? null,
+      context: input.context ?? {},
+      parentStepId: null,
+      branch: null,
+      startPosition: 0,
+      logId: log.id,
+      triggerEvent: input.triggerType,
+      sequenceStartedAt,
+    })
+  } catch (err) {
+    if (!isSequenceStopped(err)) throw err
+  }
 
   // Atomic counter update via the SQL function from migration 007.
   // Doing this with a client-side read-modify-write raced when the
@@ -271,6 +340,12 @@ interface ExecuteArgs {
   startPosition: number
   logId: string | null
   triggerEvent: string
+  /** Cron resumes and stop-on-reply sequences share the hourly cap. */
+  enforceSendQuota?: boolean
+  /** The pending row this resume is driving. Inbound cancel flips it to cancelled. */
+  pendingExecutionId?: string | null
+  /** automation_logs.created_at for this run. Reply checks use this, not the wait row. */
+  sequenceStartedAt?: string | null
 }
 
 async function executeStepsFrom(args: ExecuteArgs): Promise<void> {
@@ -297,6 +372,7 @@ async function executeStepsFrom(args: ExecuteArgs): Promise<void> {
   if (!steps || steps.length === 0) {
     if (args.parentStepId === null && args.logId) {
       await finalizeLog(args.logId, 'success', null)
+      await maybeMarkCold(args)
     }
     return
   }
@@ -306,6 +382,63 @@ async function executeStepsFrom(args: ExecuteArgs): Promise<void> {
   let errorMessage: string | null = null
 
   for (const step of steps as AutomationStep[]) {
+    const watchesReply =
+      args.automation.stop_on_reply &&
+      (step.step_type === 'send_message' ||
+        step.step_type === 'send_file' ||
+        step.step_type === 'wait')
+    if (watchesReply && (await warmingRunShouldStop(db, args))) {
+      if (args.contactId) {
+        await stopWarmingOnInboundReply(db, {
+          accountId: args.automation.account_id,
+          contactId: args.contactId,
+        })
+      }
+      await stopSequence(args, results, step, 'stopped: contact replied or run cancelled')
+    }
+
+    let claimedEventId: string | null = null
+    if (
+      isPacedSendStep(step.step_type) &&
+      (args.enforceSendQuota || args.automation.stop_on_reply)
+    ) {
+      const slot = await claimAutomationSendSlot(db, args.automation.account_id)
+      if (!slot.claimed) {
+        if (watchesReply && (await warmingRunShouldStop(db, args))) {
+          if (args.contactId) {
+            await stopWarmingOnInboundReply(db, {
+              accountId: args.automation.account_id,
+              contactId: args.contactId,
+            })
+          }
+          await stopSequence(args, results, step, 'stopped: contact replied or run cancelled')
+        }
+        await db.from('automation_pending_executions').insert({
+          automation_id: args.automation.id,
+          account_id: args.automation.account_id,
+          user_id: args.automation.user_id,
+          contact_id: args.contactId,
+          log_id: args.logId,
+          parent_step_id: args.parentStepId,
+          branch: args.branch,
+          next_step_position: step.position,
+          context: args.context,
+          run_at: slot.retryAt ?? new Date(Date.now() + 60_000).toISOString(),
+          status: 'pending',
+        })
+        results.push({
+          step_id: step.id,
+          step_type: step.step_type,
+          status: 'skipped',
+          detail: `deferred until ${slot.retryAt}`,
+        })
+        status = 'partial'
+        await appendResults(args.logId, results, status, errorMessage)
+        return
+      }
+      claimedEventId = slot.eventId
+    }
+
     // `wait` is the suspension point: enqueue and stop processing this
     // scope. The cron endpoint will pick it up later.
     if (step.step_type === 'wait') {
@@ -334,6 +467,21 @@ async function executeStepsFrom(args: ExecuteArgs): Promise<void> {
       status = 'partial'
       await appendResults(args.logId, results, status, errorMessage)
       return
+    }
+
+    if (
+      (step.step_type === 'send_message' || step.step_type === 'send_file') &&
+      args.automation.stop_on_reply &&
+      (await warmingRunShouldStop(db, args))
+    ) {
+      if (claimedEventId) await releaseAutomationSendSlot(db, claimedEventId)
+      if (args.contactId) {
+        await stopWarmingOnInboundReply(db, {
+          accountId: args.automation.account_id,
+          contactId: args.contactId,
+        })
+      }
+      await stopSequence(args, results, step, 'stopped: contact replied or run cancelled')
     }
 
     try {
@@ -366,6 +514,10 @@ async function executeStepsFrom(args: ExecuteArgs): Promise<void> {
         detail,
       })
     } catch (err) {
+      if (claimedEventId && !whatsappSendLanded(err)) {
+        await releaseAutomationSendSlot(db, claimedEventId)
+      }
+      if (isSequenceStopped(err)) throw err
       const msg = err instanceof Error ? err.message : String(err)
       results.push({
         step_id: step.id,
@@ -381,6 +533,7 @@ async function executeStepsFrom(args: ExecuteArgs): Promise<void> {
 
   if (args.parentStepId === null) {
     await appendResults(args.logId, results, status, errorMessage)
+    if (status === 'success') await maybeMarkCold(args)
   } else {
     // Nested branch — just append results; parent scope decides final status.
     await appendResults(args.logId, results, null, errorMessage)
@@ -405,6 +558,32 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
         text,
       })
       return `sent (${whatsapp_message_id})`
+    }
+
+    case 'send_file': {
+      const parsed = parseSendFileConfig(
+        step.step_config as unknown as Record<string, unknown>,
+      )
+      if (!parsed.ok) throw new Error(parsed.message)
+      if (!args.contactId) throw new Error('send_file needs a contact')
+      const caption = parsed.value.caption
+        ? (await interpolate(parsed.value.caption, args)).trim()
+        : ''
+      const conversationId = await resolveConversationId(args)
+      // The URL is handed to WAHA/Meta as media. Nothing is uploaded.
+      const { whatsappMessageId } = await sendMessageToConversation(
+        db,
+        args.automation.account_id,
+        {
+          conversationId,
+          messageType: parsed.value.kind,
+          mediaUrl: parsed.value.url,
+          contentText: caption || null,
+          filename: parsed.value.filename,
+          senderType: 'bot',
+        },
+      )
+      return `file sent (${whatsappMessageId})`
     }
 
     case 'send_buttons':
@@ -504,11 +683,11 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
       // ownership guard, since contact_tags carries no account_id.
       const cfg = step.step_config as TagStepConfig
       if (!args.contactId || !cfg.tag_id) throw new Error('remove_tag needs contact + tag_id')
-      await db
-        .from('contact_tags')
-        .delete()
-        .eq('contact_id', args.contactId)
-        .eq('tag_id', cfg.tag_id)
+      await removeContactTag(db, {
+        accountId: args.automation.account_id,
+        contactId: args.contactId,
+        tagId: cfg.tag_id,
+      })
       return `tag ${cfg.tag_id} removed`
     }
 
@@ -1012,7 +1191,132 @@ async function finalizeLog(
     .eq('id', logId)
 }
 
-async function markPending(id: string, status: 'done' | 'failed') {
+async function maybeMarkCold(args: ExecuteArgs): Promise<void> {
+  if (!args.automation.stop_on_reply || !args.contactId || !args.logId) return
+  const db = supabaseAdmin()
+  const { data: log, error } = await db
+    .from('automation_logs')
+    .select('created_at, trigger_event')
+    .eq('id', args.logId)
+    .maybeSingle()
+  if (error) {
+    console.warn('[automations] cold tag lookup:', error.message)
+    return
+  }
+  if (typeof log?.created_at !== 'string' || !log.created_at) return
+  const enrolled =
+    args.context.warming_enroll === true || log.trigger_event === 'warming_enroll'
+  let tagged = false
+  if (!enrolled) {
+    try {
+      tagged = await contactHasWarmingTag(
+        db,
+        args.automation.account_id,
+        args.contactId,
+      )
+    } catch (err) {
+      console.warn('[automations] warming tag lookup:', err)
+      return
+    }
+  }
+  if (!enrolled && !tagged) return
+  try {
+    await markColdAfterSequence(db, {
+      accountId: args.automation.account_id,
+      userId: args.automation.user_id,
+      contactId: args.contactId,
+      sinceIso: log.created_at,
+    })
+  } catch (err) {
+    console.warn('[automations] cold tag:', err)
+  }
+}
+
+async function loadSequenceStartedAt(
+  db: ReturnType<typeof supabaseAdmin>,
+  logId: string | null,
+): Promise<string | null> {
+  if (!logId) return null
+  const { data, error } = await db
+    .from('automation_logs')
+    .select('created_at')
+    .eq('id', logId)
+    .maybeSingle()
+  if (error) {
+    console.warn('[automations] sequence start lookup:', error.message)
+    return null
+  }
+  return typeof data?.created_at === 'string' ? data.created_at : null
+}
+
+async function pendingExecutionCancelled(
+  db: ReturnType<typeof supabaseAdmin>,
+  pendingId: string | null | undefined,
+): Promise<boolean> {
+  if (!pendingId) return false
+  const { data, error } = await db
+    .from('automation_pending_executions')
+    .select('status')
+    .eq('id', pendingId)
+    .maybeSingle()
+  if (error) {
+    console.warn('[automations] pending status lookup:', error.message)
+    return false
+  }
+  return data?.status === 'cancelled'
+}
+
+/**
+ * Reply window is the automation log's created_at (the sequence start),
+ * not the wait row. A cancelled pending/running row also stops the loop
+ * before the next send or wait is written.
+ */
+async function warmingRunShouldStop(
+  db: ReturnType<typeof supabaseAdmin>,
+  args: ExecuteArgs,
+): Promise<boolean> {
+  if (!args.automation.stop_on_reply || !args.contactId) return false
+  if (await pendingExecutionCancelled(db, args.pendingExecutionId)) return true
+  if (!args.sequenceStartedAt) return false
+  return customerRepliedSince(
+    db,
+    args.automation.account_id,
+    args.contactId,
+    args.sequenceStartedAt,
+  )
+}
+
+async function stopSequence(
+  args: ExecuteArgs,
+  results: AutomationLogStepResult[],
+  step: AutomationStep,
+  detail: string,
+): Promise<never> {
+  results.push({
+    step_id: step.id,
+    step_type: step.step_type,
+    status: 'skipped',
+    detail,
+  })
+  const message = 'El contacto respondió; se detuvo la secuencia.'
+  if (args.parentStepId === null) {
+    await appendResults(args.logId, results, 'partial', message)
+  } else {
+    await appendResults(args.logId, results, null, message)
+  }
+  throw new SequenceStopped()
+}
+
+function whatsappSendLanded(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return (
+    msg.includes('sent to Meta') ||
+    msg.includes('sent to WAHA') ||
+    msg.includes('DB insert failed')
+  )
+}
+
+async function markPending(id: string, status: 'done' | 'failed' | 'cancelled') {
   await supabaseAdmin()
     .from('automation_pending_executions')
     .update({ status })

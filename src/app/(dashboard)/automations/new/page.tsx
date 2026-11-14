@@ -44,6 +44,7 @@ function NewAutomationPageInner() {
         trigger_type: t.trigger_type,
         trigger_config: t.trigger_config as Record<string, unknown>,
         is_active: false,
+        stop_on_reply: false,
         steps,
       }
     }
@@ -53,6 +54,7 @@ function NewAutomationPageInner() {
       trigger_type: "new_message_received" as AutomationTriggerType,
       trigger_config: {},
       is_active: false,
+      stop_on_reply: false,
       steps: [],
     }
   }, [template])

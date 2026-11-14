@@ -1,5 +1,6 @@
 import type { AutomationTriggerType } from '@/types'
 import { validateInteractivePayload } from '@/lib/whatsapp/interactive'
+import { parseSendFileConfig } from '@/lib/automations/send-file'
 
 // ------------------------------------------------------------
 // Pre-flight config validation for automations about to be activated.
@@ -59,6 +60,13 @@ function validateOne(step: StepLike, path: string, issues: ValidationIssue[]): v
         issues.push({ path: `${path}.text`, message: 'message text is required' })
       }
       break
+    case 'send_file': {
+      const parsed = parseSendFileConfig(c)
+      if (!parsed.ok) {
+        issues.push({ path: `${path}.url`, message: parsed.message })
+      }
+      break
+    }
     case 'send_buttons':
     case 'send_list': {
       // The whole step_config IS the interactive payload; validate it

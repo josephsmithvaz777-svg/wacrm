@@ -24,6 +24,7 @@ import {
   type WahaClientOptions,
 } from '@/lib/whatsapp/waha-api';
 import { runAutomationsForTrigger } from '@/lib/automations/engine';
+import { stopWarmingOnInboundReply } from '@/lib/automations/warming';
 import { dispatchInboundToFlows } from '@/lib/flows/engine';
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply';
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver';
@@ -736,6 +737,11 @@ export async function processWahaEvent(
   }
 
   try {
+    await stopWarmingOnInboundReply(admin(), {
+      accountId: config.account_id,
+      contactId: contactOutcome.contact.id,
+    });
+
     const flowResult = await dispatchInboundToFlows({
       accountId: config.account_id,
       userId: config.user_id,

@@ -10,6 +10,7 @@ import { verifyMetaWebhookSignature } from '@/lib/whatsapp/webhook-signature'
 import { extractMetaReferral } from '@/lib/whatsapp/ad-context'
 import { persistAdCreativeSafe } from '@/lib/whatsapp/waha-media'
 import { runAutomationsForTrigger } from '@/lib/automations/engine'
+import { stopWarmingOnInboundReply } from '@/lib/automations/warming'
 import { dispatchInboundToFlows } from '@/lib/flows/engine'
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply'
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver'
@@ -807,6 +808,11 @@ async function processMessage(
   // so the broadcast's `replied_count` advances (via the aggregate
   // trigger installed in migration 003).
   await flagBroadcastReplyIfAny(accountId, contactRecord.id)
+
+  await stopWarmingOnInboundReply(supabaseAdmin(), {
+    accountId,
+    contactId: contactRecord.id,
+  })
 
   // ============================================================
   // Flow runner dispatch.

@@ -17,6 +17,11 @@ import {
  * secret via the `x-cron-secret` header to match
  * `AUTOMATION_CRON_SECRET`.
  *
+ * Call it about once a minute. Each resumed send is capped per account
+ * (default 40 in the rolling hour, `accounts.automation_hourly_send_limit`)
+ * and the next send for that account waits a random 15–45s. Anything
+ * over the cap stays `pending` with a later `run_at`.
+ *
  * The claim step (status = 'running') serves as a simple lock so
  * overlapping invocations don't double-process rows. Best-effort
  * only; expensive SELECT ... FOR UPDATE is avoided in favor of a
@@ -82,6 +87,7 @@ export async function GET(request: Request) {
       branch: (row.branch as 'yes' | 'no' | null) ?? null,
       next_step_position: row.next_step_position as number,
       context: (row.context as AutomationContext) ?? {},
+      created_at: (row.created_at as string | null) ?? null,
     })
     processed++
   }

@@ -25,6 +25,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { useTranslations } from "next-intl"
 import type { Automation } from "@/types"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { GatedButton } from "@/components/ui/gated-button"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -68,12 +69,49 @@ const TEMPLATE_ICON: Record<TemplateSlug, typeof Zap> = {
 export default function AutomationsPage() {
   const router = useRouter()
   const canCreate = useCan("send-messages")
+  const canEditSettings = useCan("edit-settings")
   const { canManageMembers } = useAuth()
   const t = useTranslations("Automations.list")
   const [automations, setAutomations] = useState<Automation[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pendingDelete, setPendingDelete] = useState<Automation | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [hourlyLimit, setHourlyLimit] = useState("40")
+  const [savingLimit, setSavingLimit] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    void fetch("/api/automations/settings")
+      .then(async (res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (cancelled || typeof body?.hourly_send_limit !== "number") return
+        setHourlyLimit(String(body.hourly_send_limit))
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function saveHourlyLimit() {
+    setSavingLimit(true)
+    try {
+      const res = await fetch("/api/automations/settings", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ hourly_send_limit: Number(hourlyLimit) }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(typeof body?.error === "string" ? body.error : t("hourlySaveFailed"))
+        return
+      }
+      setHourlyLimit(String(body.hourly_send_limit ?? hourlyLimit))
+      toast.success(t("hourlySaved"))
+    } finally {
+      setSavingLimit(false)
+    }
+  }
 
   async function load() {
     try {
@@ -184,6 +222,30 @@ export default function AutomationsPage() {
           <Plus className="h-4 w-4" />
           {t("create")}
         </GatedButton>
+      </div>
+
+      <div className="flex flex-col gap-2 rounded-xl border border-border bg-card px-4 py-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm font-medium text-foreground">{t("hourlyTitle")}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{t("hourlyHint")}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            min={1}
+            max={500}
+            value={hourlyLimit}
+            disabled={!canEditSettings || savingLimit}
+            onChange={(e) => setHourlyLimit(e.target.value)}
+            className="w-24 bg-muted"
+            aria-label={t("hourlyTitle")}
+          />
+          {canEditSettings && (
+            <Button variant="outline" onClick={saveHourlyLimit} disabled={savingLimit}>
+              {savingLimit ? <Loader2 className="h-4 w-4 animate-spin" /> : t("hourlySave")}
+            </Button>
+          )}
+        </div>
       </div>
 
       {canManageMembers ? <LeadHandoffPanel onSaved={() => void load()} /> : null}
