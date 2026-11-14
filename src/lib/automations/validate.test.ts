@@ -29,6 +29,29 @@ describe("validateStepsForActivation", () => {
     expect(issues).toEqual([]);
   });
 
+  it("accepts a send_file step that only stores an external URL", () => {
+    expect(
+      validateStepsForActivation([
+        {
+          step_type: "send_file",
+          step_config: {
+            url: "https://files.example.com/plano.pdf",
+            kind: "document",
+            caption: "El plano",
+            filename: "plano.pdf",
+          },
+        },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("rejects a send_file step without an http URL", () => {
+    const issues = validateStepsForActivation([
+      { step_type: "send_file", step_config: { url: "nota.pdf", kind: "document" } },
+    ]);
+    expect(issues[0]?.path).toBe("steps[0].url");
+  });
+
   it("allows has_phone conditions without an operand", () => {
     expect(
       validateStepsForActivation([

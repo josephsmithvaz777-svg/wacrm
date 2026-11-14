@@ -17,6 +17,7 @@ import {
   Trash2,
   GripVertical,
   MessageSquare,
+  Paperclip,
   FileText,
   Tag,
   TagIcon,
@@ -85,6 +86,8 @@ export interface BuilderInitial {
   trigger_type: AutomationTriggerType
   trigger_config: Record<string, unknown>
   is_active: boolean
+  /** Cancel queued waits when the contact replies. Off for older automations. */
+  stop_on_reply: boolean
   steps: BuilderStep[]
 }
 
@@ -101,6 +104,7 @@ interface StepMeta {
 
 const STEP_META: Record<AutomationStepType, StepMeta> = {
   send_message: { label: "send_message", icon: MessageSquare, border: "border-l-primary" },
+  send_file: { label: "send_file", icon: Paperclip, border: "border-l-primary" },
   send_buttons: { label: "send_buttons", icon: MousePointerClick, border: "border-l-primary" },
   send_list: { label: "send_list", icon: List, border: "border-l-primary" },
   send_template: { label: "send_template", icon: FileText, border: "border-l-primary" },
@@ -118,6 +122,7 @@ const STEP_META: Record<AutomationStepType, StepMeta> = {
 
 const ADDABLE_STEPS: AutomationStepType[] = [
   "send_message",
+  "send_file",
   "send_buttons",
   "send_list",
   "send_template",
@@ -169,6 +174,8 @@ function blankConfig(type: AutomationStepType): Record<string, unknown> {
   switch (type) {
     case "send_message":
       return { text: "" }
+    case "send_file":
+      return { url: "", kind: "image", caption: "", filename: "" }
     case "send_buttons":
       return toStepConfig(blankButtonsPayload())
     case "send_list":
@@ -684,6 +691,7 @@ export function AutomationBuilder({ initial }: { initial: BuilderInitial }) {
         trigger_type: state.trigger_type,
         trigger_config: state.trigger_config,
         is_active: state.is_active,
+        stop_on_reply: state.stop_on_reply === true,
         steps: toApiSteps(state.steps),
       }
 
@@ -744,6 +752,14 @@ export function AutomationBuilder({ initial }: { initial: BuilderInitial }) {
           placeholder={t("untitled")}
           className="min-w-0 flex-1 rounded-md bg-transparent px-2 py-1 text-sm font-semibold text-foreground placeholder:text-muted-foreground focus:bg-muted focus:outline-none sm:text-base"
         />
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="hidden lg:inline">{t("stopOnReply")}</span>
+          <Switch
+            checked={state.stop_on_reply === true}
+            onCheckedChange={(v) => patchTop("stop_on_reply", !!v)}
+            aria-label={t("stopOnReplyAria")}
+          />
+        </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="hidden sm:inline">{t("active")}</span>
           <Switch
@@ -1324,6 +1340,51 @@ function StepEditor({
           </p>
         </FieldBlock>
       )
+    case "send_file":
+      return (
+        <>
+          <FieldBlock label={t("config.fileUrl")}>
+            <Input
+              value={(cfg.url as string) ?? ""}
+              onChange={(e) => set({ url: e.target.value })}
+              placeholder={t("config.fileUrlPlaceholder")}
+              className="bg-muted text-foreground"
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              {t("config.fileUrlHint")}
+            </p>
+          </FieldBlock>
+          <FieldBlock label={t("config.fileKind")}>
+            <select
+              value={(cfg.kind as string) ?? "image"}
+              onChange={(e) => set({ kind: e.target.value })}
+              className="w-full rounded-md border border-border bg-muted px-2 py-1.5 text-sm text-foreground"
+            >
+              <option value="image">{t("config.fileKinds.image")}</option>
+              <option value="video">{t("config.fileKinds.video")}</option>
+              <option value="document">{t("config.fileKinds.document")}</option>
+            </select>
+          </FieldBlock>
+          <FieldBlock label={t("config.fileCaption")}>
+            <Textarea
+              value={(cfg.caption as string) ?? ""}
+              onChange={(e) => set({ caption: e.target.value })}
+              placeholder={t("config.fileCaptionPlaceholder")}
+              className="min-h-16 bg-muted text-foreground"
+            />
+          </FieldBlock>
+          {cfg.kind === "document" && (
+            <FieldBlock label={t("config.fileName")}>
+              <Input
+                value={(cfg.filename as string) ?? ""}
+                onChange={(e) => set({ filename: e.target.value })}
+                placeholder={t("config.fileNamePlaceholder")}
+                className="bg-muted text-foreground"
+              />
+            </FieldBlock>
+          )}
+        </>
+      )
     case "send_buttons":
     case "send_list":
       // The whole step_config IS the interactive payload; the shared
@@ -1576,6 +1637,8 @@ function previewFor(step: BuilderStep): string {
   switch (step.step_type) {
     case "send_message":
       return (step.step_config.text as string) || "no text yet"
+    case "send_file":
+      return (step.step_config.url as string) || "sin URL"
     case "send_buttons":
     case "send_list":
       return interactivePayloadPreviewText(asInteractive(step.step_config)) || "no body yet"

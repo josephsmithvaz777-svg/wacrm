@@ -22,7 +22,15 @@ import type {
 import { contactBelongsToAccountStaff } from '@/lib/assignments/staff-contact'
 import { notifyStaffViaWhatsApp } from './staff-notify'
 import { supabaseAdmin } from './admin-client'
-import { addContactTagIfAbsent } from '@/lib/contacts/tag-write'
+import { addContactTagIfAbsent, removeContactTag } from '@/lib/contacts/tag-write'
+import { parseSendFileConfig } from './send-file'
+import { claimAutomationSendSlot, isPacedSendStep } from './send-quota'
+import {
+  customerRepliedSince,
+  markColdAfterSequence,
+  stopWarmingOnInboundReply,
+} from './warming'
+import { sendMessageToConversation } from '@/lib/whatsapp/send-message'
 import { MAX_TAG_CHAIN_DEPTH, getTagChainDepth } from '@/lib/contacts/tag-chain'
 import { engineSendText, engineSendTemplate, engineSendInteractive } from './meta-send'
 import { validateInteractivePayload } from '@/lib/whatsapp/interactive'
@@ -169,6 +177,9 @@ export async function resumePendingExecution(pending: {
   branch: 'yes' | 'no' | null
   next_step_position: number
   context: AutomationContext
+  /** When the wait was queued. A customer message after this cancels
+   *  automations that opted into stop_on_reply. */
+  created_at?: string | null
 }): Promise<void> {
   const db = supabaseAdmin()
   const { data: automation, error } = await db
@@ -183,9 +194,33 @@ export async function resumePendingExecution(pending: {
     return
   }
 
+  const row = automation as Automation
+  if (row.stop_on_reply && pending.contact_id && pending.created_at) {
+    try {
+      const replied = await customerRepliedSince(
+        db,
+        row.account_id,
+        pending.contact_id,
+        pending.created_at,
+      )
+      if (replied) {
+        await stopWarmingOnInboundReply(db, {
+          accountId: row.account_id,
+          contactId: pending.contact_id,
+        })
+        await markPending(pending.id, 'cancelled')
+        return
+      }
+    } catch (err) {
+      console.error('[automations] reply check failed:', err)
+      await markPending(pending.id, 'failed')
+      return
+    }
+  }
+
   try {
     await executeStepsFrom({
-      automation: automation as Automation,
+      automation: row,
       contactId: pending.contact_id,
       context: pending.context ?? {},
       parentStepId: pending.parent_step_id,
@@ -193,6 +228,7 @@ export async function resumePendingExecution(pending: {
       startPosition: pending.next_step_position,
       logId: pending.log_id,
       triggerEvent: 'resumed_wait',
+      enforceSendQuota: true,
     })
     await markPending(pending.id, 'done')
   } catch (err) {
@@ -271,6 +307,8 @@ interface ExecuteArgs {
   startPosition: number
   logId: string | null
   triggerEvent: string
+  /** Cron resumes and stop-on-reply sequences share the hourly cap. */
+  enforceSendQuota?: boolean
 }
 
 async function executeStepsFrom(args: ExecuteArgs): Promise<void> {
@@ -297,6 +335,7 @@ async function executeStepsFrom(args: ExecuteArgs): Promise<void> {
   if (!steps || steps.length === 0) {
     if (args.parentStepId === null && args.logId) {
       await finalizeLog(args.logId, 'success', null)
+      await maybeMarkCold(args)
     }
     return
   }
@@ -306,6 +345,37 @@ async function executeStepsFrom(args: ExecuteArgs): Promise<void> {
   let errorMessage: string | null = null
 
   for (const step of steps as AutomationStep[]) {
+    if (
+      isPacedSendStep(step.step_type) &&
+      (args.enforceSendQuota || args.automation.stop_on_reply)
+    ) {
+      const slot = await claimAutomationSendSlot(db, args.automation.account_id)
+      if (!slot.claimed) {
+        await db.from('automation_pending_executions').insert({
+          automation_id: args.automation.id,
+          account_id: args.automation.account_id,
+          user_id: args.automation.user_id,
+          contact_id: args.contactId,
+          log_id: args.logId,
+          parent_step_id: args.parentStepId,
+          branch: args.branch,
+          next_step_position: step.position,
+          context: args.context,
+          run_at: slot.retryAt ?? new Date(Date.now() + 60_000).toISOString(),
+          status: 'pending',
+        })
+        results.push({
+          step_id: step.id,
+          step_type: step.step_type,
+          status: 'skipped',
+          detail: `deferred until ${slot.retryAt}`,
+        })
+        status = 'partial'
+        await appendResults(args.logId, results, status, errorMessage)
+        return
+      }
+    }
+
     // `wait` is the suspension point: enqueue and stop processing this
     // scope. The cron endpoint will pick it up later.
     if (step.step_type === 'wait') {
@@ -381,6 +451,7 @@ async function executeStepsFrom(args: ExecuteArgs): Promise<void> {
 
   if (args.parentStepId === null) {
     await appendResults(args.logId, results, status, errorMessage)
+    if (status === 'success') await maybeMarkCold(args)
   } else {
     // Nested branch — just append results; parent scope decides final status.
     await appendResults(args.logId, results, null, errorMessage)
@@ -405,6 +476,32 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
         text,
       })
       return `sent (${whatsapp_message_id})`
+    }
+
+    case 'send_file': {
+      const parsed = parseSendFileConfig(
+        step.step_config as unknown as Record<string, unknown>,
+      )
+      if (!parsed.ok) throw new Error(parsed.message)
+      if (!args.contactId) throw new Error('send_file needs a contact')
+      const caption = parsed.value.caption
+        ? (await interpolate(parsed.value.caption, args)).trim()
+        : ''
+      const conversationId = await resolveConversationId(args)
+      // The URL is handed to WAHA/Meta as media. Nothing is uploaded.
+      const { whatsappMessageId } = await sendMessageToConversation(
+        db,
+        args.automation.account_id,
+        {
+          conversationId,
+          messageType: parsed.value.kind,
+          mediaUrl: parsed.value.url,
+          contentText: caption || null,
+          filename: parsed.value.filename,
+          senderType: 'bot',
+        },
+      )
+      return `file sent (${whatsappMessageId})`
     }
 
     case 'send_buttons':
@@ -504,11 +601,11 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
       // ownership guard, since contact_tags carries no account_id.
       const cfg = step.step_config as TagStepConfig
       if (!args.contactId || !cfg.tag_id) throw new Error('remove_tag needs contact + tag_id')
-      await db
-        .from('contact_tags')
-        .delete()
-        .eq('contact_id', args.contactId)
-        .eq('tag_id', cfg.tag_id)
+      await removeContactTag(db, {
+        accountId: args.automation.account_id,
+        contactId: args.contactId,
+        tagId: cfg.tag_id,
+      })
       return `tag ${cfg.tag_id} removed`
     }
 
@@ -1012,7 +1109,33 @@ async function finalizeLog(
     .eq('id', logId)
 }
 
-async function markPending(id: string, status: 'done' | 'failed') {
+async function maybeMarkCold(args: ExecuteArgs): Promise<void> {
+  if (!args.automation.stop_on_reply || !args.contactId || !args.logId) return
+  const db = supabaseAdmin()
+  const { data: log, error } = await db
+    .from('automation_logs')
+    .select('created_at')
+    .eq('id', args.logId)
+    .maybeSingle()
+  if (error) {
+    console.warn('[automations] cold tag lookup:', error.message)
+    return
+  }
+  const since =
+    typeof log?.created_at === 'string' ? log.created_at : new Date().toISOString()
+  try {
+    await markColdAfterSequence(db, {
+      accountId: args.automation.account_id,
+      userId: args.automation.user_id,
+      contactId: args.contactId,
+      sinceIso: since,
+    })
+  } catch (err) {
+    console.warn('[automations] cold tag:', err)
+  }
+}
+
+async function markPending(id: string, status: 'done' | 'failed' | 'cancelled') {
   await supabaseAdmin()
     .from('automation_pending_executions')
     .update({ status })

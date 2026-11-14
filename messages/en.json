@@ -534,6 +534,21 @@
       "selectedCount": "{count} selected",
       "clearSelection": "Clear",
       "deleteSelected": "Delete selected",
+      "addToWarming": "Add to warming",
+      "warmingTitle": "Add to warming",
+      "warmingDesc": "First-day sends are spread using the hourly limit. The contact gets the warming tag. Turn on “Stop if they reply” on the automation so a reply ends the sequence.",
+      "warmingAutomation": "Automation",
+      "warmingSelected": "Only the selected contacts ({count})",
+      "warmingFiltered": "Everyone matching the current filter ({count})",
+      "warmingConfirm": "Queue",
+      "warmingCancel": "Cancel",
+      "warmingNoAutomations": "There are no active automations. Activate one before enrolling.",
+      "warmingLoadFailed": "Could not load automations",
+      "warmingFailed": "Could not add to warming",
+      "warmingInactive": "That automation is not active",
+      "warmingEmpty": "There are no contacts to add",
+      "warmingQueued": "Queued: {count}. Already waiting: {pending}. No phone: {noPhone}.",
+      "warmingTruncated": "Only the first 2000 contacts were queued.",
       "tableColumns": {
         "name": "Name",
         "phone": "Phone",
@@ -1227,7 +1242,12 @@
         "updateError": "Failed to update",
         "duplicateError": "Failed to duplicate",
         "deleteError": "Failed to delete"
-      }
+      },
+      "hourlyTitle": "Sends per hour",
+      "hourlyHint": "The automations cron will not send more than this many messages per account in an hour. The rest stay queued, with a random pause between sends.",
+      "hourlySave": "Save",
+      "hourlySaved": "Limit updated",
+      "hourlySaveFailed": "Could not save the limit"
     },
     "leadHandoff": {
       "title": "Lead alerts",
@@ -1271,6 +1291,7 @@
     "builder": {
       "steps": {
         "send_message": "Send Message",
+        "send_file": "Send file",
         "send_buttons": "Send Buttons",
         "send_list": "Send List",
         "send_template": "Send Template",
@@ -1330,6 +1351,8 @@
       "scheduleHint": "Cron expression (e.g. 0 9 * * 1-5)",
       "active": "Active",
       "activeAria": "Active",
+      "stopOnReply": "Stop if they reply",
+      "stopOnReplyAria": "Stop the sequence when the contact replies",
       "save": "Save",
       "saveDraft": "Save Draft",
       "untitled": "Untitled automation",
@@ -1384,6 +1407,19 @@
         "messageText": "Message text",
         "placeholderMessageText": "Hi! Thanks for reaching out…",
         "messageVarsHint": "{{greeting}}, {{agent.name}}, {{contact.name}}, {{contact.phone}}, {{message.text}}",
+        "fileUrl": "File URL",
+        "fileUrlPlaceholder": "https://your-vps.example/media/photo.jpg",
+        "fileUrlHint": "Paste an http(s) link hosted on your VPS. Nothing is uploaded to Supabase: WhatsApp downloads that URL and sends it as an image, video, or PDF, with the optional text as a caption.",
+        "fileKind": "Type",
+        "fileKinds": {
+          "image": "Image",
+          "video": "Video",
+          "document": "PDF"
+        },
+        "fileCaption": "Optional text",
+        "fileCaptionPlaceholder": "Here is the floor plan…",
+        "fileName": "PDF name",
+        "fileNamePlaceholder": "plan.pdf",
         "notifyOwner": "Send to the account owner",
         "notifyAssigned": "Send to the assigned agent",
         "notifyText": "Alert text",

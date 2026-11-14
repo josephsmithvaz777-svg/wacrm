@@ -84,9 +84,11 @@ export async function PATCH(
     'trigger_type',
     'trigger_config',
     'is_active',
+    'stop_on_reply',
   ] as const) {
     if (k in body) update[k] = body[k]
   }
+  if ('stop_on_reply' in update) update.stop_on_reply = update.stop_on_reply === true
 
   // If this PATCH leaves the automation active (either explicitly
   // activating it OR editing an already-active one), validate the

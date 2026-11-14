@@ -115,6 +115,7 @@ export async function POST(request: Request) {
       trigger_type: effectiveTriggerType,
       trigger_config: effectiveTriggerConfig ?? {},
       is_active: !!is_active,
+      stop_on_reply: body.stop_on_reply === true,
     })
     .select()
     .single()

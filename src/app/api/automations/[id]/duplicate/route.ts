@@ -46,6 +46,9 @@ export async function POST(
       trigger_type: original.trigger_type,
       trigger_config: original.trigger_config,
       is_active: false,
+      ...(typeof original.stop_on_reply === 'boolean'
+        ? { stop_on_reply: original.stop_on_reply }
+        : {}),
     })
     .select()
     .single()

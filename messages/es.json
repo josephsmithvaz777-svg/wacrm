@@ -534,6 +534,21 @@
       "selectedCount": "{count} seleccionados",
       "clearSelection": "Limpiar",
       "deleteSelected": "Eliminar seleccionados",
+      "addToWarming": "Añadir a calentamiento",
+      "warmingTitle": "Añadir a calentamiento",
+      "warmingDesc": "Los envíos del primer día se reparten según el límite por hora. El contacto recibe la etiqueta calentamiento. Activa «Detener si responde» en la automatización para cortar la secuencia cuando escriba.",
+      "warmingAutomation": "Automatización",
+      "warmingSelected": "Solo los seleccionados ({count})",
+      "warmingFiltered": "Todos los que coinciden con el filtro ({count})",
+      "warmingConfirm": "Poner en cola",
+      "warmingCancel": "Cancelar",
+      "warmingNoAutomations": "No hay automatizaciones activas. Activa una antes de enrolar.",
+      "warmingLoadFailed": "No se pudieron cargar las automatizaciones",
+      "warmingFailed": "No se pudo añadir al calentamiento",
+      "warmingInactive": "Esa automatización no está activa",
+      "warmingEmpty": "No hay contactos para añadir",
+      "warmingQueued": "En cola: {count}. Ya tenían espera: {pending}. Sin teléfono: {noPhone}.",
+      "warmingTruncated": "Solo se encolaron los primeros 2000 contactos.",
       "tableColumns": {
         "name": "Nombre",
         "phone": "Teléfono",
@@ -1248,7 +1263,12 @@
         "updateError": "Failed to update",
         "duplicateError": "Failed to duplicate",
         "deleteError": "Failed to delete"
-      }
+      },
+      "hourlyTitle": "Envíos por hora",
+      "hourlyHint": "El cron de automatizaciones no manda más de esta cantidad por cuenta en una hora. El resto queda en espera, con una pausa al azar entre cada envío.",
+      "hourlySave": "Guardar",
+      "hourlySaved": "Límite actualizado",
+      "hourlySaveFailed": "No se pudo guardar el límite"
     },
     "leadHandoff": {
       "title": "Avisos de leads",
@@ -1292,6 +1312,7 @@
     "builder": {
       "steps": {
         "send_message": "Send Message",
+        "send_file": "Enviar archivo",
         "send_buttons": "Send Buttons",
         "send_list": "Send List",
         "send_template": "Send Template",
@@ -1351,6 +1372,8 @@
       "scheduleHint": "Cron expression (e.g. 0 9 * * 1-5)",
       "active": "Active",
       "activeAria": "Active",
+      "stopOnReply": "Detener si responde",
+      "stopOnReplyAria": "Detener la secuencia si el contacto responde",
       "save": "Save",
       "saveDraft": "Save Draft",
       "untitled": "Untitled automation",
@@ -1405,6 +1428,19 @@
         "messageText": "Message text",
         "placeholderMessageText": "Hi! Thanks for reaching out…",
         "messageVarsHint": "{{greeting}}, {{agent.name}}, {{contact.name}}, {{contact.phone}}, {{message.text}}",
+        "fileUrl": "URL del archivo",
+        "fileUrlPlaceholder": "https://tu-vps.ejemplo/media/fachada.jpg",
+        "fileUrlHint": "Pega un enlace http(s) de tu VPS. No se sube nada a Supabase: WhatsApp descarga esa URL y la envía como imagen, video o PDF, con el texto opcional como pie.",
+        "fileKind": "Tipo",
+        "fileKinds": {
+          "image": "Imagen",
+          "video": "Video",
+          "document": "PDF"
+        },
+        "fileCaption": "Texto opcional",
+        "fileCaptionPlaceholder": "Te dejo el plano…",
+        "fileName": "Nombre del PDF",
+        "fileNamePlaceholder": "plano.pdf",
         "notifyOwner": "Enviar al dueño de la cuenta",
         "notifyAssigned": "Enviar al asesor asignado",
         "notifyText": "Texto del aviso",
