@@ -280,7 +280,9 @@ export interface SendMediaMessageArgs {
  *
  * Used by the Flows engine's `send_media` node and the inbox composer's
  * agent-initiated media sends. Mirrors `sendTextMessage` — single fetch,
- * throws on non-2xx, returns Meta's message id.
+ * throws on non-2xx, returns Meta's message id. `link` is passed through
+ * as-is: a VPS media URL and a legacy Supabase public URL are both just
+ * https that Meta fetches itself.
  *
  * Audio is special-cased: Meta rejects `caption` and `filename` on audio
  * messages, so we send `{ link }` only. WhatsApp auto-renders an

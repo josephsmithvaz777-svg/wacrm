@@ -38,9 +38,49 @@ is included.
   `docker-compose.yml`. If you change any of them, rebuild:
   `docker compose --env-file .env.local up --build -d`.
 - Everything else (`SUPABASE_SERVICE_ROLE_KEY`, `ENCRYPTION_KEY`,
-  `META_APP_SECRET`, …) is read at **runtime** from `.env.local` via
-  `env_file` and is never baked into the image — safe to change with
-  just a container restart.
+  `META_APP_SECRET`, `MEDIA_LOCAL_DIR`, `MEDIA_PUBLIC_BASE_URL`, …)
+  is read at **runtime** from `.env.local` via `env_file` and is never
+  baked into the image — safe to change with just a container restart.
+
+## Media files on the VPS
+
+New uploads (chat, flows, avatars, logos, notification sounds, inbound
+WAHA copies) are written to disk, not Supabase Storage. Existing
+database URLs are left as they are.
+
+The app does not serve the bytes itself. nginx on the same host already
+publishes `https://media.joshuavazquez.com` from `/var/www/media`. A
+file at `/data/media/{bucket}/{path}` inside the CRM container is
+`https://media.joshuavazquez.com/crm/{bucket}/{path}`.
+
+### Coolify volume
+
+On the wacrm application, add one persistent storage mount:
+
+| Host path            | Container path | Mode       |
+| -------------------- | -------------- | ---------- |
+| `/var/www/media/crm` | `/data/media`  | read-write |
+
+Then set these environment variables on the same application and redeploy:
+
+```
+MEDIA_LOCAL_DIR=/data/media
+MEDIA_PUBLIC_BASE_URL=https://media.joshuavazquez.com/crm
+```
+
+Before the first deploy that uses the mount, on the VPS:
+
+```bash
+sudo mkdir -p /var/www/media/crm
+sudo chown 100:101 /var/www/media/crm
+sudo chmod 775 /var/www/media/crm
+```
+
+`100:101` is the `nextjs` user in the image. New files are written mode
+`644` so nginx can read them. Do not add an upload API to the media
+nginx; it only serves the files it already has on disk.
+
+`/api/media/upload` fails on purpose when either variable is unset.
 
 ## Plain Docker (no Compose)
 

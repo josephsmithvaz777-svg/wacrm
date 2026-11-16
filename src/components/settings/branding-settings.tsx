@@ -6,6 +6,7 @@ import { Building2, Loader2, Trash2, Upload } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { createClient } from "@/lib/supabase/client";
+import { uploadAccountMedia } from "@/lib/storage/upload-media";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -106,24 +107,13 @@ export function BrandingSettings() {
       let nextLogoUrl: string | null = removeLogo ? null : logoUrl;
 
       if (pendingFile) {
-        const ext =
-          pendingFile.type === "image/svg+xml"
-            ? "svg"
-            : pendingFile.type.split("/")[1] || "png";
-        const path = `${accountId}/logo-${Date.now()}.${ext}`;
-        const { error: uploadError } = await supabase.storage
-          .from("account-logos")
-          .upload(path, pendingFile, {
-            contentType: pendingFile.type,
-            upsert: true,
-          });
-        if (uploadError) {
-          throw new Error(t("uploadFailed", { message: uploadError.message }));
+        try {
+          const { publicUrl } = await uploadAccountMedia("account-logos", pendingFile);
+          nextLogoUrl = publicUrl;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Upload failed.";
+          throw new Error(t("uploadFailed", { message }));
         }
-        const { data } = supabase.storage
-          .from("account-logos")
-          .getPublicUrl(path);
-        nextLogoUrl = data.publicUrl;
       }
 
       const { error } = await supabase

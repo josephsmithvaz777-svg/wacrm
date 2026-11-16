@@ -21,8 +21,9 @@ interface ResolvedMedia {
 /**
  * Resolve a `messages.media_url` into something an `<img>` can render.
  *
- * Public `chat-media` URLs are handed straight back — the browser fetches
- * and caches them itself. Inbound `/api/whatsapp/media/*` URLs are pulled
+ * Public media URLs (the VPS host and legacy Supabase bucket URLs) are
+ * handed straight back — the browser fetches and caches them itself.
+ * Inbound `/api/whatsapp/media/*` URLs are pulled
  * through `loadMediaBlob` (credentialed, cached, de-duplicated) and turned
  * into an object URL that is revoked when the URL changes or the component
  * unmounts.

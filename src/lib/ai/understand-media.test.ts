@@ -42,6 +42,11 @@ describe('parseProxiedMediaId', () => {
     expect(
       parseProxiedMediaId('https://xxx.supabase.co/storage/v1/object/public/chat-media/a.jpg'),
     ).toBeNull()
+    expect(
+      parseProxiedMediaId(
+        'https://media.joshuavazquez.com/crm/chat-media/account-a/1-a.jpg',
+      ),
+    ).toBeNull()
   })
 })
 

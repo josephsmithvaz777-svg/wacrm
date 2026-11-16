@@ -1,32 +1,23 @@
 // ============================================================
 // Shared WAHA media handling — download from the engine and store a
-// copy in the `chat-media` bucket. Used both by the webhook
+// copy under MEDIA_LOCAL_DIR/chat-media. Used both by the webhook
 // (waha-inbound) and by the pull-based history sync (waha-sync), which
 // must not import the inbound module because that pulls in the flow /
 // automation / AI engines.
+//
+// No Supabase Storage fallback: a failed write is logged and the
+// caller gets null (the message still lands, without a hosted copy).
 // ============================================================
 
-import { createClient } from '@supabase/supabase-js';
 import { downloadWahaMedia, type WahaClientOptions } from '@/lib/whatsapp/waha-api';
 import { buildMediaPath } from '@/lib/storage/upload-media';
+import { writeLocalMedia } from '@/lib/storage/local-media';
 import { isDeliverableUrl } from '@/lib/webhooks/ssrf';
 import {
   toStoredAdContext,
   type ExtractedAdContext,
   type MessageAdContext,
 } from '@/lib/whatsapp/ad-context';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _admin: any = null;
-function admin() {
-  if (!_admin) {
-    _admin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
-  }
-  return _admin;
-}
 
 export function mimeToContentType(mime: string | null | undefined): string {
   if (!mime) return 'document';
@@ -48,18 +39,13 @@ export async function uploadWahaMedia(
     const name =
       filename || `waha-${Date.now()}.${(mime || contentType).split('/')[1] || 'bin'}`;
     const path = buildMediaPath(accountId, name);
-    const { error } = await admin()
-      .storage.from('chat-media')
-      .upload(path, buffer, {
-        contentType: mime || contentType,
-        upsert: false,
-      });
-    if (error) {
-      console.error('[waha-media] storage upload failed:', error.message);
+    try {
+      const saved = await writeLocalMedia('chat-media', path, buffer);
+      return saved.publicUrl;
+    } catch (err) {
+      console.error('[waha-media] storage upload failed:', err);
       return null;
     }
-    const { data } = admin().storage.from('chat-media').getPublicUrl(path);
-    return data.publicUrl as string;
   } catch (err) {
     console.error('[waha-media] media download failed:', err);
     return null;
@@ -101,22 +87,20 @@ async function uploadChatMediaBytes(
   mime: string,
   basename: string,
 ): Promise<string | null> {
-  const path = buildMediaPath(accountId, basename);
-  const { error } = await admin()
-    .storage.from('chat-media')
-    .upload(path, buffer, { contentType: mime, upsert: false });
-  if (error) {
-    console.error('[waha-media] ad image upload failed:', error.message);
+  try {
+    const path = buildMediaPath(accountId, basename);
+    const saved = await writeLocalMedia('chat-media', path, buffer);
+    return saved.publicUrl || null;
+  } catch (err) {
+    console.error('[waha-media] ad image upload failed:', err);
     return null;
   }
-  const { data } = admin().storage.from('chat-media').getPublicUrl(path);
-  return (data.publicUrl as string) || null;
 }
 
 /**
- * Copy a Click-to-WhatsApp creative into `chat-media` so the inbox
- * still has the image after Facebook CDN URLs expire. Falls back to
- * the original URL when the copy fails.
+ * Copy a Click-to-WhatsApp creative onto the VPS media volume so the
+ * inbox still has the image after Facebook CDN URLs expire. Keeps the
+ * original URL when the copy fails.
  */
 export async function persistAdCreative(
   accountId: string,

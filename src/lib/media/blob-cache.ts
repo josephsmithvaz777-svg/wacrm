@@ -10,8 +10,11 @@
  *      `Cache-Control: no-store` on every `/api/*` response, so nothing
  *      caches them at the HTTP layer either.
  *
- *   2. OUTBOUND — a public `chat-media` bucket URL (migration 023). Plain
- *      https that the browser fetches and caches like any other image.
+ *   2. OUTBOUND — a public https URL. New uploads are
+ *      `https://media.joshuavazquez.com/crm/...`; older rows still point
+ *      at Supabase Storage (`*.supabase.co/storage/v1/object/public/...`).
+ *      Both are plain https the browser fetches and caches like any
+ *      other image. Nothing here special-cases the host.
  *
  * The thumbnail, the lightbox and a download all want the same bytes. For
  * (1) that would otherwise be three separate multi-MB round trips through

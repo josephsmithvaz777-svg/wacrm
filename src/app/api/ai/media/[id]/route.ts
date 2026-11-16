@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
+import { deleteLocalMedia } from '@/lib/storage/local-media'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -78,6 +79,12 @@ export async function DELETE(_request: Request, { params }: Params) {
     }
 
     if (row.storage_path) {
+      try {
+        await deleteLocalMedia('chat-media', row.storage_path)
+      } catch (err) {
+        console.warn('[ai/media/[id] DELETE] local cleanup:', err)
+      }
+      // Files uploaded before the VPS move still live in Supabase Storage.
       const { error: storageErr } = await supabase.storage
         .from('chat-media')
         .remove([row.storage_path])
