@@ -6,6 +6,11 @@ import { Bell, Loader2, MessageSquareText, Trash2, Upload, Volume2 } from "lucid
 import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
+import {
+  deleteAccountMedia,
+  listAccountMedia,
+  uploadAccountMedia,
+} from "@/lib/storage/upload-media";
 import { useAuth } from "@/hooks/use-auth";
 import { useSoundPrefs } from "@/hooks/use-sound-prefs";
 import {
@@ -178,11 +183,8 @@ function AccountNotificationSoundCard() {
 
   async function clearFolder() {
     if (!accountId) return;
-    const { data } = await supabase.storage.from(SOUND_BUCKET).list(accountId);
-    const paths = (data ?? []).map((row) => `${accountId}/${row.name}`);
-    if (paths.length > 0) {
-      await supabase.storage.from(SOUND_BUCKET).remove(paths);
-    }
+    const paths = await listAccountMedia(SOUND_BUCKET, accountId);
+    await Promise.all(paths.map((path) => deleteAccountMedia(SOUND_BUCKET, path)));
   }
 
   async function onPickFile(file: File | null) {
@@ -199,18 +201,9 @@ function AccountNotificationSoundCard() {
     setPendingName(file.name);
     try {
       await clearFolder();
-      const ext = (file.name.split(".").pop() || "mp3").toLowerCase();
-      const path = `${accountId}/notify-${Date.now()}.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from(SOUND_BUCKET)
-        .upload(path, file, {
-          contentType: file.type || "audio/mpeg",
-          upsert: true,
-        });
-      if (uploadError) throw new Error(uploadError.message);
-      const { data } = supabase.storage.from(SOUND_BUCKET).getPublicUrl(path);
-      await persist({ notification_sound_url: data.publicUrl });
-      setSoundUrl(data.publicUrl);
+      const { publicUrl } = await uploadAccountMedia(SOUND_BUCKET, file);
+      await persist({ notification_sound_url: publicUrl });
+      setSoundUrl(publicUrl);
       toast.success(t("uploadSuccess"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("uploadFailed"));

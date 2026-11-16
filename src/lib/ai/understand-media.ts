@@ -323,7 +323,8 @@ async function loadMetaAccessToken(
 }
 
 /**
- * Pull attachment bytes from the Meta proxy path or a public chat-media URL.
+ * Pull attachment bytes from the Meta proxy path or a public https URL
+ * (VPS media host, legacy Supabase bucket, or any other deliverable URL).
  */
 export async function fetchMessageMediaBytes(
   db: SupabaseClient,

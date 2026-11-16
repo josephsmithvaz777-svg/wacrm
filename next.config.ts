@@ -61,13 +61,15 @@ const SECURITY_HEADERS = [
       // https URLs paste-able from the UI), OG images, data URLs for
       // tiny inline assets.
       "img-src 'self' data: blob: https:",
-      // Outbound media previews (blob: from MediaRecorder + file picker)
-      // and Supabase public-bucket audio/video the inbox renders.
-      "media-src 'self' blob: https://*.supabase.co",
+      // Outbound media previews (blob: from MediaRecorder + file picker),
+      // legacy Supabase public-bucket audio/video, and files served from
+      // the VPS media host.
+      "media-src 'self' blob: https://*.supabase.co https://media.joshuavazquez.com",
       "font-src 'self' data:",
-      // Supabase REST + realtime (WSS). All Meta API calls happen
-      // server-side, so graph.facebook.com does not belong here.
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+      // Supabase REST + realtime (WSS), plus fetch() of public media
+      // (download button). All Meta API calls happen server-side, so
+      // graph.facebook.com does not belong here.
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://media.joshuavazquez.com",
       // Embedded Altaterra quote tool (iframe on /cotizador).
       `frame-src ${cotizadorFrameOrigin()}`,
       "frame-ancestors 'none'",
@@ -87,6 +89,13 @@ const nextConfig: NextConfig = {
   // Docker image can run without node_modules or the Next CLI.
   // Harmless outside Docker: `next start` keeps working as before.
   output: "standalone",
+
+  experimental: {
+    // Middleware clones every matched request body. The default 10 MB
+    // ceiling would reject a 16 MB chat/flow upload before the route
+    // handler sees it.
+    proxyClientMaxBodySize: "20mb",
+  },
 
   /**
    * Version-skew protection. Coolify sets SOURCE_COMMIT at build time.

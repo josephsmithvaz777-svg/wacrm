@@ -654,6 +654,8 @@ export async function sendWahaMedia(
 ): Promise<{ messageId: string }> {
   const session = opts.session || 'default';
   const chatId = await resolveOutboundChatId(opts, toPhone);
+  // Public https, host included. WAHA downloads `link` itself, so a VPS
+  // media URL is sent the same way as a legacy Supabase public URL.
   const file: Record<string, string> = { url: link };
   if (filename) file.filename = filename;
 

@@ -9,6 +9,7 @@ import {
 
 const PROXY = "/api/whatsapp/media/";
 const BUCKET = "https://x.supabase.co/storage/v1/object/public/chat-media/a/1-p.png";
+const VPS_MEDIA = "https://media.joshuavazquez.com/crm/chat-media/account-a/1-p.png";
 
 function okResponse(body: string): Response {
   return new Response(body, { status: 200 });
@@ -30,9 +31,10 @@ beforeEach(() => {
 });
 
 describe("isProxiedMediaUrl", () => {
-  it("recognises inbound media, not bucket URLs", () => {
+  it("recognises inbound media, not public bucket or VPS URLs", () => {
     expect(isProxiedMediaUrl(`${PROXY}123`)).toBe(true);
     expect(isProxiedMediaUrl(BUCKET)).toBe(false);
+    expect(isProxiedMediaUrl(VPS_MEDIA)).toBe(false);
   });
 });
 
@@ -61,12 +63,15 @@ describe("loadMediaBlob", () => {
 
   it("does not cache public bucket URLs", async () => {
     // The browser's HTTP cache already covers these, and a 16 MB video has
-    // no business being pinned in JS memory.
+    // no business being pinned in JS memory. The VPS host is the same kind
+    // of URL as a legacy Supabase public object.
     const fetchImpl = trackingFetch();
     await loadMediaBlob(BUCKET, fetchImpl);
     await loadMediaBlob(BUCKET, fetchImpl);
+    await loadMediaBlob(VPS_MEDIA, fetchImpl);
+    await loadMediaBlob(VPS_MEDIA, fetchImpl);
 
-    expect(fetchImpl.calls).toEqual([BUCKET, BUCKET]);
+    expect(fetchImpl.calls).toEqual([BUCKET, BUCKET, VPS_MEDIA, VPS_MEDIA]);
   });
 
   it("evicts the least-recently-used entry past the cap", async () => {

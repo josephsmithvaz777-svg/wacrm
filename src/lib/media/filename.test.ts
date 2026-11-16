@@ -72,6 +72,11 @@ describe("basenameFromUrl", () => {
         "https://x.supabase.co/storage/v1/object/public/chat-media/account-abc/1770000000000-invoice.pdf",
       ),
     ).toBe("invoice.pdf");
+    expect(
+      basenameFromUrl(
+        "https://media.joshuavazquez.com/crm/chat-media/account-abc/1770000000000-invoice.pdf",
+      ),
+    ).toBe("invoice.pdf");
   });
 
   it("ignores query strings and percent-decodes", () => {
@@ -126,7 +131,7 @@ describe("mediaFilename", () => {
           content_type: "document",
           content_text: "here is the thing you asked for",
           media_url:
-            "https://x.supabase.co/storage/v1/object/public/chat-media/account-a/1770000000000-contract.pdf",
+            "https://media.joshuavazquez.com/crm/chat-media/account-a/1770000000000-contract.pdf",
           created_at: AT,
         },
         "application/pdf",
@@ -142,7 +147,7 @@ describe("mediaFilename", () => {
           content_type: "image",
           content_text: "is this the right cat.jpg",
           media_url:
-            "https://x.supabase.co/storage/v1/object/public/chat-media/account-a/1770000000000-tabby.png",
+            "https://media.joshuavazquez.com/crm/chat-media/account-a/1770000000000-tabby.png",
           created_at: AT,
         },
         "image/png",

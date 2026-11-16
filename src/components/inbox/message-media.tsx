@@ -24,7 +24,7 @@ import { useMediaBlobUrl } from "@/hooks/use-media-blob-url";
  *
  * Both are less trivial than they look, because the two flavours of
  * `media_url` behave differently in the browser. See
- * `@/lib/media/blob-cache` for the proxy-vs-bucket split and
+ * `@/lib/media/blob-cache` for the proxy-vs-public-URL split and
  * `@/lib/media/download` for why `<a download>` alone isn't enough.
  */
 
