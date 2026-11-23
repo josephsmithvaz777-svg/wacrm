@@ -1,5 +1,6 @@
 import type { AccountMember } from '@/types';
-import { canReceiveLeads, canSendMessages } from '@/lib/auth/roles';
+import { canReceiveLeads, canSendMessages, isAccountRole } from '@/lib/auth/roles';
+import { createClient } from '@/lib/supabase/client';
 
 /**
  * Fetch the current account's members from the API (which applies the
@@ -28,6 +29,56 @@ export function memberLabel(m: AccountMember): string {
 /** Members who may own a conversation. Owner/admin watch and write but do not keep the lead. */
 export function assignableMembers(members: AccountMember[]): AccountMember[] {
   return members.filter((m) => canReceiveLeads(m.role));
+}
+
+/**
+ * Teammates for the inbox assignee filter.
+ *
+ * Not the same as {@link assignableMembers}. Some accounts keep leads on
+ * viewers, so a filter limited to role `agent` only offers "all" and
+ * "unassigned". Every member of the account is a valid filter.
+ */
+export function membersForInboxFilter(members: AccountMember[]): AccountMember[] {
+  return [...members].sort((a, b) =>
+    memberLabel(a).localeCompare(memberLabel(b), 'es'),
+  );
+}
+
+/**
+ * Load the inbox filter roster. The members API is preferred (it hides
+ * emails from agents). If it fails, read profiles directly — the same
+ * query the thread header uses to show the current assignee.
+ */
+export async function fetchInboxFilterMembers(): Promise<AccountMember[]> {
+  const fromApi = await fetchAccountMembers();
+  const rows = fromApi.length > 0 ? fromApi : await membersFromProfiles();
+  return membersForInboxFilter(rows);
+}
+
+async function membersFromProfiles(): Promise<AccountMember[]> {
+  try {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('user_id, full_name, email, avatar_url, account_role, created_at');
+    if (error || !data) return [];
+    return data.flatMap((row) => {
+      const role = row.account_role;
+      if (!isAccountRole(role)) return [];
+      return [
+        {
+          user_id: row.user_id,
+          full_name: row.full_name ?? '',
+          email: row.email,
+          avatar_url: row.avatar_url,
+          role,
+          joined_at: row.created_at,
+        },
+      ];
+    });
+  } catch {
+    return [];
+  }
 }
 
 /** Members who may own a task (anyone who can work the inbox). */
