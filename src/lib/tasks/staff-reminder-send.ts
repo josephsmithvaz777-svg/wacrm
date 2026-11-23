@@ -87,7 +87,13 @@ export async function sendStaffReminder(
   recipients: StaffReminderRecipientRow[],
   now: Date = new Date(),
   options?: { whatsappOnly?: boolean },
-): Promise<{ whatsapp: number; email: number; notified: number; errors: string[] }> {
+): Promise<{
+  whatsapp: number;
+  email: number;
+  notified: number;
+  phoneAttempts: number;
+  errors: string[];
+}> {
   const errors: string[] = [];
   const when = reminder.due_at
     ? formatAlertDateTime(new Date(reminder.due_at))
@@ -196,7 +202,13 @@ export async function sendStaffReminder(
       .eq("id", reminder.id);
   }
 
-  return { whatsapp, email: emailSent, notified: seenUser.size, errors };
+  return {
+    whatsapp,
+    email: emailSent,
+    notified: seenUser.size,
+    phoneAttempts: seenPhone.size,
+    errors,
+  };
 }
 
 export async function sendDueStaffReminders(
@@ -227,18 +239,22 @@ export async function sendDueStaffReminders(
 
   for (const reminder of rows) {
     const retryWhatsApp = Boolean(reminder.reminder_sent_at);
-    if (!retryWhatsApp) {
-      const { data: claimed } = await db
-        .from("staff_reminders")
-        .update({ reminder_sent_at: now.toISOString() })
-        .eq("id", reminder.id)
-        .is("reminder_sent_at", null)
-        .select("id")
-        .maybeSingle();
-      if (!claimed) {
-        summary.skipped += 1;
-        continue;
-      }
+    // Claim before sending. The minute cron and the 30s loop both see a
+    // due row while WhatsApp is still in flight; without this, each one
+    // sends the same reminder.
+    const { data: claimed } = await db
+      .from("staff_reminders")
+      .update({
+        reminder_sent_at: now.toISOString(),
+        reminder_whatsapp_at: now.toISOString(),
+      })
+      .eq("id", reminder.id)
+      .is("reminder_whatsapp_at", null)
+      .select("id")
+      .maybeSingle();
+    if (!claimed) {
+      summary.skipped += 1;
+      continue;
     }
 
     const { data: recipients, error: recErr } = await db
@@ -246,6 +262,10 @@ export async function sendDueStaffReminders(
       .select("id, reminder_id, user_id, phone, email, label")
       .eq("reminder_id", reminder.id);
     if (recErr) {
+      await db
+        .from("staff_reminders")
+        .update({ reminder_whatsapp_at: null })
+        .eq("id", reminder.id);
       summary.errors.push(`${reminder.id} ${recErr.message}`);
       summary.skipped += 1;
       continue;
@@ -258,6 +278,12 @@ export async function sendDueStaffReminders(
       now,
       { whatsappOnly: retryWhatsApp },
     );
+    if (result.phoneAttempts > 0 && result.whatsapp === 0) {
+      await db
+        .from("staff_reminders")
+        .update({ reminder_whatsapp_at: null })
+        .eq("id", reminder.id);
+    }
     if (result.whatsapp > 0 || result.email > 0 || result.notified > 0) summary.sent += 1;
     else summary.skipped += 1;
     summary.errors.push(
