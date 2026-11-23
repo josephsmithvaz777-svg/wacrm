@@ -17,8 +17,7 @@ import { formatDistanceToNow } from "date-fns";
 import { useTranslations } from "next-intl";
 import { useCan } from "@/hooks/use-can";
 import {
-  assignableMembers,
-  fetchAccountMembers,
+  fetchInboxFilterMembers,
   memberLabel,
 } from "@/lib/account/members";
 import { Input } from "@/components/ui/input";
@@ -160,8 +159,8 @@ export function ConversationList({
       return;
     }
     let cancelled = false;
-    void fetchAccountMembers().then((all) => {
-      if (!cancelled) setAgents(assignableMembers(all));
+    void fetchInboxFilterMembers().then((all) => {
+      if (!cancelled) setAgents(all);
     });
     return () => {
       cancelled = true;
