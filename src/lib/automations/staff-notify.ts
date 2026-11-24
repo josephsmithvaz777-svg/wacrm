@@ -22,6 +22,10 @@ import { sendWahaText, type WahaClientOptions } from '@/lib/whatsapp/waha-api';
 export const DEFAULT_STAFF_ALERT_TEXT =
   'Nuevo lead asignado\nNombre: {{contact_name}}\nNúmero: {{contact_phone}}\nHora: {{time}}\n{{message.text}}';
 
+/** Sent once, to the advisor who already owned a warming lead that replied. */
+export const WARMING_REPLY_ALERT_TEXT =
+  'Tu lead respondió al calentamiento\nNombre: {{contact_name}}\nNúmero: {{contact_phone}}\nHora: {{time}}\n{{message.text}}';
+
 export type StaffNotifyRole = 'owner' | 'assigned_agent';
 
 export interface StaffNotifyCandidate {
@@ -88,6 +92,12 @@ export async function notifyStaffViaWhatsApp(params: {
   assignedAgentId?: string | null;
   notifyOwner: boolean;
   notifyAssigned: boolean;
+  /**
+   * Assignment alerts only ping agents in the lead pool. A warming
+   * reply instead pings whoever already owned the lead, including an
+   * owner or admin who was assigned by hand.
+   */
+  assignedMustReceiveLeads?: boolean;
   textTemplate: string;
   messageText: string;
 }): Promise<string> {
@@ -99,6 +109,7 @@ export async function notifyStaffViaWhatsApp(params: {
     assignedAgentId,
     notifyOwner,
     notifyAssigned,
+    assignedMustReceiveLeads = true,
     textTemplate,
     messageText,
   } = params;
@@ -179,8 +190,15 @@ export async function notifyStaffViaWhatsApp(params: {
         .eq('user_id', agentId)
         .maybeSingle();
       const role = agent?.account_role;
-      if (!isAccountRole(role) || !canReceiveLeads(role)) {
-        skipReasons.push('assigned agent cannot receive leads');
+      const canTakeThisAlert =
+        isAccountRole(role) &&
+        (assignedMustReceiveLeads ? canReceiveLeads(role) : role !== 'viewer');
+      if (!canTakeThisAlert) {
+        skipReasons.push(
+          assignedMustReceiveLeads
+            ? 'assigned agent cannot receive leads'
+            : 'assigned user cannot receive this alert',
+        );
       } else {
         const phone = (agent?.phone as string | null | undefined) ?? null;
         if (!isUsableStaffPhone(phone)) {

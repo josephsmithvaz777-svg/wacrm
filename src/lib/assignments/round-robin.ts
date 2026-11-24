@@ -259,6 +259,44 @@ export function shouldFireAssignmentNotify(opts: {
   return opts.isFirstInboundMessage && Boolean(opts.assigneeId);
 }
 
+/**
+ * Advisor who already owned the lead before this inbound. The
+ * conversation assignee wins; otherwise the contact's saved owner
+ * (sheet import / manual assign) counts. A blank string is nobody.
+ */
+export function priorAssignedAgentId(
+  conversationAgentId: string | null | undefined,
+  contactAgentId: string | null | undefined,
+): string | null {
+  const conversation = conversationAgentId?.trim() || '';
+  if (conversation) return conversation;
+  const contact = contactAgentId?.trim() || '';
+  return contact || null;
+}
+
+/** Snapshot the owner before round-robin can stamp a new one. */
+export async function loadPriorAssignedAgentId(
+  db: Db,
+  args: {
+    accountId: string;
+    contactId: string;
+    conversationAgentId?: string | null;
+  },
+): Promise<string | null> {
+  const fromConversation = priorAssignedAgentId(args.conversationAgentId, null);
+  if (fromConversation) return fromConversation;
+  const { data, error } = await db
+    .from('contacts')
+    .select('assigned_to')
+    .eq('id', args.contactId)
+    .eq('account_id', args.accountId)
+    .maybeSingle();
+  if (error) return null;
+  const assigned =
+    typeof data?.assigned_to === 'string' ? data.assigned_to : null;
+  return priorAssignedAgentId(null, assigned);
+}
+
 function parseClaimPayload(data: unknown): RoundRobinClaim | null {
   if (!data || typeof data !== 'object') return null;
   const row = data as { agent_id?: unknown; claimed?: unknown };

@@ -1,5 +1,8 @@
 import { NextResponse, after } from 'next/server'
-import { shouldFireAssignmentNotify } from '@/lib/assignments/round-robin'
+import {
+  loadPriorAssignedAgentId,
+  shouldFireAssignmentNotify,
+} from '@/lib/assignments/round-robin'
 import { createClient } from '@supabase/supabase-js'
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption'
 import { getMediaUrl, downloadMedia } from '@/lib/whatsapp/meta-api'
@@ -617,6 +620,16 @@ async function processMessage(
   // a reaction still fires the event, and a subscriber always sees the
   // thread open before its first message.received.
   let assignedNow: string | null = null
+  let priorAgentId: string | null = null
+  try {
+    priorAgentId = await loadPriorAssignedAgentId(supabaseAdmin(), {
+      accountId,
+      contactId: contactRecord.id,
+      conversationAgentId: conversation.assigned_agent_id ?? null,
+    })
+  } catch (err) {
+    console.warn('[webhook] prior assignee lookup failed:', err)
+  }
   if (convResult.created) {
     await dispatchWebhookEvent(supabaseAdmin(), accountId, 'conversation.created', {
       conversation_id: conversation.id,
@@ -812,6 +825,10 @@ async function processMessage(
   await stopWarmingOnInboundReply(supabaseAdmin(), {
     accountId,
     contactId: contactRecord.id,
+    conversationId: conversation.id,
+    messageText: contentText ?? message.text?.body ?? '',
+    priorAgentId,
+    usePriorAgentOnly: true,
   })
 
   // ============================================================

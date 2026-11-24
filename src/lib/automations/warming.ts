@@ -1,5 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { priorAssignedAgentId } from '@/lib/assignments/round-robin'
 import { addContactTagIfAbsent, removeContactTag } from '@/lib/contacts/tag-write'
+import {
+  WARMING_REPLY_ALERT_TEXT,
+  notifyStaffViaWhatsApp,
+} from '@/lib/automations/staff-notify'
 
 export const WARMING_TAG_NAME = 'calentamiento'
 export const COLD_TAG_NAME = 'frío'
@@ -170,11 +175,24 @@ export async function customerRepliedSince(
  * opted into "stop on reply". The running row is marked cancelled so
  * the engine loop stops at its next send or wait check. The
  * calentamiento tag comes off only when this contact actually had one
- * of those executions. Never throws — the webhook must still return 200.
+ * of those executions. The advisor who already owned the lead gets one
+ * WhatsApp. Never throws — the webhook must still return 200.
+ *
+ * `priorAgentId` is the assignee from before this inbound's round-robin.
+ * Pass null when nobody owned the lead yet (a brand-new assign already
+ * has its own alert). Omit it only from the engine, which looks the
+ * current owner up if it wins the cancel.
  */
 export async function stopWarmingOnInboundReply(
   db: SupabaseClient,
-  args: { accountId: string; contactId: string },
+  args: {
+    accountId: string
+    contactId: string
+    conversationId?: string | null
+    messageText?: string | null
+    priorAgentId?: string | null
+    usePriorAgentOnly?: boolean
+  },
 ): Promise<void> {
   try {
     const { data: autos, error: autoErr } = await db
@@ -203,11 +221,18 @@ export async function stopWarmingOnInboundReply(
     }
     if (!rows || rows.length === 0) return
     const ids = rows.map((row) => row.id as string)
-    await db
+    const { data: cancelled, error: cancelErr } = await db
       .from('automation_pending_executions')
       .update({ status: 'cancelled' })
       .in('id', ids)
-    const logIds = rows
+      .in('status', ['pending', 'running'])
+      .select('id, log_id')
+    if (cancelErr) {
+      console.warn('[warming] pending cancel:', cancelErr.message)
+      return
+    }
+    if (!cancelled || cancelled.length === 0) return
+    const logIds = cancelled
       .map((row) => row.log_id as string | null)
       .filter((id): id is string => typeof id === 'string' && id.length > 0)
     if (logIds.length > 0) {
@@ -220,7 +245,118 @@ export async function stopWarmingOnInboundReply(
         .in('id', logIds)
     }
     await removeNamedTag(db, args.accountId, args.contactId, isWarmingTagName)
+    await notifyPriorAgentOfWarmingReply(db, args)
   } catch (err) {
     console.warn('[warming] stop on reply failed:', err)
   }
+}
+
+async function notifyPriorAgentOfWarmingReply(
+  db: SupabaseClient,
+  args: {
+    accountId: string
+    contactId: string
+    conversationId?: string | null
+    messageText?: string | null
+    priorAgentId?: string | null
+    usePriorAgentOnly?: boolean
+  },
+): Promise<void> {
+  const agentId = args.usePriorAgentOnly
+    ? priorAssignedAgentId(args.priorAgentId, null)
+    : await resolveWarmingReplyAgent(db, args)
+  if (!agentId) return
+  const messageText =
+    args.messageText?.trim() ||
+    (await latestCustomerText(db, args.accountId, args.contactId))
+  try {
+    const detail = await notifyStaffViaWhatsApp({
+      db,
+      accountId: args.accountId,
+      contactId: args.contactId,
+      conversationId: null,
+      assignedAgentId: agentId,
+      notifyOwner: false,
+      notifyAssigned: true,
+      assignedMustReceiveLeads: false,
+      textTemplate: WARMING_REPLY_ALERT_TEXT,
+      messageText,
+    })
+    if (detail.startsWith('skipped')) {
+      console.info('[warming] reply alert:', detail)
+    }
+  } catch (err) {
+    console.warn('[warming] reply alert failed:', err)
+  }
+}
+
+async function resolveWarmingReplyAgent(
+  db: SupabaseClient,
+  args: {
+    accountId: string
+    contactId: string
+    conversationId?: string | null
+    priorAgentId?: string | null
+  },
+): Promise<string | null> {
+  const explicit = priorAssignedAgentId(args.priorAgentId, null)
+  if (explicit) return explicit
+  let conversationAgent: string | null = null
+  if (args.conversationId) {
+    const { data } = await db
+      .from('conversations')
+      .select('assigned_agent_id')
+      .eq('id', args.conversationId)
+      .eq('account_id', args.accountId)
+      .maybeSingle()
+    conversationAgent =
+      typeof data?.assigned_agent_id === 'string' ? data.assigned_agent_id : null
+  } else {
+    const { data } = await db
+      .from('conversations')
+      .select('assigned_agent_id')
+      .eq('account_id', args.accountId)
+      .eq('contact_id', args.contactId)
+      .not('assigned_agent_id', 'is', null)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+    const row = Array.isArray(data) ? data[0] : data
+    conversationAgent =
+      typeof row?.assigned_agent_id === 'string' ? row.assigned_agent_id : null
+  }
+  const { data: contact } = await db
+    .from('contacts')
+    .select('assigned_to')
+    .eq('id', args.contactId)
+    .eq('account_id', args.accountId)
+    .maybeSingle()
+  const contactAgent =
+    typeof contact?.assigned_to === 'string' ? contact.assigned_to : null
+  return priorAssignedAgentId(conversationAgent, contactAgent)
+}
+
+async function latestCustomerText(
+  db: SupabaseClient,
+  accountId: string,
+  contactId: string,
+): Promise<string> {
+  const { data: convs, error } = await db
+    .from('conversations')
+    .select('id')
+    .eq('account_id', accountId)
+    .eq('contact_id', contactId)
+  if (error || !convs?.length) return ''
+  const ids = convs
+    .map((row) => row.id as string)
+    .filter((id) => typeof id === 'string')
+  if (ids.length === 0) return ''
+  const { data: message } = await db
+    .from('messages')
+    .select('content_text')
+    .in('conversation_id', ids)
+    .eq('sender_type', 'customer')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return typeof message?.content_text === 'string' ? message.content_text : ''
 }
