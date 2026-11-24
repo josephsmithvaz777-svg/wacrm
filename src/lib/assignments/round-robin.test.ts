@@ -6,6 +6,7 @@ import {
   claimRoundRobinAssignment,
   maybeRoundRobinAssignNewConversation,
   resolveHandoffAssignee,
+  priorAssignedAgentId,
   shouldFireAssignmentNotify,
 } from './round-robin'
 
@@ -394,5 +395,23 @@ describe('shouldFireAssignmentNotify', () => {
         isFirstInboundMessage: true,
       }),
     ).toBe(false)
+  })
+})
+
+describe('priorAssignedAgentId', () => {
+  it('keeps the conversation assignee ahead of the contact owner', () => {
+    expect(priorAssignedAgentId('agent-isaac', 'agent-jimena')).toBe(
+      'agent-isaac',
+    )
+  })
+
+  it('falls back to the contact owner when the thread has nobody', () => {
+    expect(priorAssignedAgentId(null, 'agent-jimena')).toBe('agent-jimena')
+    expect(priorAssignedAgentId('  ', 'agent-jimena')).toBe('agent-jimena')
+  })
+
+  it('returns null when neither side had an assignee', () => {
+    expect(priorAssignedAgentId(null, null)).toBeNull()
+    expect(priorAssignedAgentId('', '  ')).toBeNull()
   })
 })

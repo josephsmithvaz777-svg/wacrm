@@ -2,7 +2,10 @@
 // WAHA inbound event processing → contacts / conversations / messages
 // ============================================================
 
-import { shouldFireAssignmentNotify } from '@/lib/assignments/round-robin';
+import {
+  loadPriorAssignedAgentId,
+  shouldFireAssignmentNotify,
+} from '@/lib/assignments/round-robin';
 import { createClient } from '@supabase/supabase-js';
 import { findExistingContact, isUniqueViolation } from '@/lib/contacts/dedupe';
 import { reopenClosedConversation } from '@/lib/conversations/reopen';
@@ -561,6 +564,18 @@ export async function processWahaEvent(
   }
 
   let assignedNow: string | null = null;
+  let priorAgentId: string | null = null;
+  if (!isGroup) {
+    try {
+      priorAgentId = await loadPriorAssignedAgentId(admin(), {
+        accountId: config.account_id,
+        contactId: contactOutcome.contact.id,
+        conversationAgentId: convResult.conversation.assigned_agent_id ?? null,
+      });
+    } catch (err) {
+      console.warn('[waha-inbound] prior assignee lookup failed:', err);
+    }
+  }
   if (convResult.created) {
     await dispatchWebhookEvent(admin(), config.account_id, 'conversation.created', {
       conversation_id: convResult.conversation.id,
@@ -740,6 +755,10 @@ export async function processWahaEvent(
     await stopWarmingOnInboundReply(admin(), {
       accountId: config.account_id,
       contactId: contactOutcome.contact.id,
+      conversationId: convResult.conversation.id,
+      messageText: inboundText,
+      priorAgentId,
+      usePriorAgentOnly: true,
     });
 
     const flowResult = await dispatchInboundToFlows({
