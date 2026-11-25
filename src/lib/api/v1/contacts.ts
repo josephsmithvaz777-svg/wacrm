@@ -170,7 +170,11 @@ export async function setContactTags(
     tagNames,
     canCreateTags: true,
   });
-  const desired = new Set(tagIdByKey.values());
+  const desired = new Set<string>();
+  for (const name of tagNames) {
+    const tagId = tagIdByKey.get(name.trim().toLowerCase());
+    if (tagId) desired.add(tagId);
+  }
 
   // Diff against the current joins rather than delete-all-then-insert:
   // a diff only touches tags that actually change, so a mid-operation

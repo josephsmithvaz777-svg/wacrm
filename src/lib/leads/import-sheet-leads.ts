@@ -359,7 +359,11 @@ async function applyLeadTags(
       tagNames: names,
       canCreateTags: true,
     });
-    for (const tagId of tagIdByKey.values()) {
+    const applied = new Set<string>();
+    for (const name of names) {
+      const tagId = tagIdByKey.get(name.trim().toLowerCase());
+      if (!tagId || applied.has(tagId)) continue;
+      applied.add(tagId);
       await addContactTagAndDispatch({
         db,
         accountId: source.account_id,
