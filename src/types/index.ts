@@ -476,6 +476,8 @@ export interface PipelineStage {
   position: number;
   color: string;
   created_at: string;
+  /** How Meta should read this stage once CRM events are connected. */
+  meta_funnel_role?: 'unspecified' | 'positive' | 'negative';
 }
 
 export type DealStatus = 'open' | 'won' | 'lost';
@@ -587,7 +589,12 @@ export type AutomationStepType =
   /** WhatsApp a staff phone (owner and/or assigned agent). */
   | 'notify_staff';
 
-export type AutomationLogStatus = 'success' | 'partial' | 'failed';
+export type AutomationLogStatus =
+  | 'success'
+  | 'partial'
+  | 'failed'
+  | 'queued'
+  | 'running';
 
 export interface KeywordMatchTriggerConfig {
   keywords: string[];

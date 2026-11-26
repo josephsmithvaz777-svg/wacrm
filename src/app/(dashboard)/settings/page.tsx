@@ -18,6 +18,7 @@ import { MediaCleanupPanel } from '@/components/settings/media-cleanup-panel';
 import { BrandingSettings } from '@/components/settings/branding-settings';
 import { WhatsAppConfig } from '@/components/settings/whatsapp-config';
 import { SheetLeadsPanel } from '@/components/settings/sheet-leads-panel';
+import { MetaCapiPanel } from '@/components/settings/meta-capi-panel';
 import { TemplateManager } from '@/components/settings/template-manager';
 import { QuickRepliesManager } from '@/components/settings/quick-replies-manager';
 import { FieldsAndTagsPanel } from '@/components/settings/fields-and-tags-panel';
@@ -93,7 +94,12 @@ function SettingsPageInner() {
     notifications: <NotificationsSettingsPanel />,
     branding: <BrandingSettings />,
     whatsapp: <WhatsAppConfig />,
-    forms: <SheetLeadsPanel />,
+    forms: (
+      <>
+        <SheetLeadsPanel />
+        <MetaCapiPanel />
+      </>
+    ),
     templates: <TemplateManager />,
     'quick-replies': <QuickRepliesManager />,
     fields: <FieldsAndTagsPanel />,

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   dealTitleForContact,
   pickNewLeadStageId,
+  profileIdForAssignee,
   resolveInboundDealAction,
 } from './inbound-deal';
 
@@ -30,6 +31,23 @@ describe('dealTitleForContact', () => {
   it('falls back to phone then Lead', () => {
     expect(dealTitleForContact({ name: '  ', phone: '51999' })).toBe('51999');
     expect(dealTitleForContact({})).toBe('Lead');
+  });
+});
+
+describe('profileIdForAssignee', () => {
+  const rows = [{ id: 'profile-1', user_id: 'user-1' }];
+
+  it('keeps a profiles.id', () => {
+    expect(profileIdForAssignee(rows, 'profile-1')).toBe('profile-1');
+  });
+
+  it('maps an auth user id to the profile id', () => {
+    expect(profileIdForAssignee(rows, 'user-1')).toBe('profile-1');
+  });
+
+  it('returns null when the id is not a profile', () => {
+    expect(profileIdForAssignee(rows, 'missing')).toBeNull();
+    expect(profileIdForAssignee(rows, null)).toBeNull();
   });
 });
 

@@ -24,6 +24,12 @@ import type { AccountMember, LeadTask } from "@/types";
 
 const DATE_LOCALE = { en: enUS, es, ko } as const;
 
+function localYmd(day: Date): string {
+  const month = String(day.getMonth() + 1).padStart(2, "0");
+  const date = String(day.getDate()).padStart(2, "0");
+  return `${day.getFullYear()}-${month}-${date}`;
+}
+
 export function TaskCalendar({
   tasks,
   view,
@@ -38,6 +44,7 @@ export function TaskCalendar({
   onAssign,
   onReschedule,
   onCreateNext,
+  onCreateAt,
 }: {
   tasks: LeadTask[];
   view: "day" | "week" | "month";
@@ -55,6 +62,7 @@ export function TaskCalendar({
     patch: { title: string; dueAt: string | null },
   ) => Promise<void>;
   onCreateNext?: (task: LeadTask, dueAt: string, result?: string) => Promise<void>;
+  onCreateAt?: (when: { date: string; time: string }) => void;
 }) {
   const t = useTranslations("Tasks.page");
   const locale = useLocale();
@@ -122,10 +130,14 @@ export function TaskCalendar({
             return (
               <div
                 key={day.toISOString()}
+                onClick={() =>
+                  onCreateAt?.({ date: localYmd(day), time: "09:00" })
+                }
                 className={cn(
-                  "min-h-[7.5rem] border-b border-r border-border p-1.5",
+                  "min-h-[7.5rem] border-b border-r border-border p-1.5 text-left",
                   !inMonth && "bg-muted/40",
                   isSameLocalDay(day, today) && "bg-primary/5",
+                  onCreateAt && "cursor-pointer hover:bg-primary/10",
                 )}
               >
                 <p
@@ -140,8 +152,12 @@ export function TaskCalendar({
                 </p>
                 <div className="space-y-1">
                   {items.slice(0, 3).map((task) => (
-                    <TaskEventChip
+                    <div
                       key={task.id}
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => event.stopPropagation()}
+                    >
+                    <TaskEventChip
                       task={task}
                       fallbackLead={fallbackLead}
                       accountName={accountName}
@@ -154,6 +170,7 @@ export function TaskCalendar({
                       onReschedule={onReschedule}
                       onCreateNext={onCreateNext}
                     />
+                    </div>
                   ))}
                   {extra > 0 ? (
                     <p className="px-0.5 text-[10px] text-muted-foreground">
@@ -221,13 +238,28 @@ export function TaskCalendar({
                       CALENDAR_HOUR_HEIGHT,
                   }}
                 >
-                  {hours.map((hour) => (
-                    <div
-                      key={hour}
-                      className="border-t border-border/70"
-                      style={{ height: CALENDAR_HOUR_HEIGHT }}
-                    />
-                  ))}
+                  {hours.map((hour) => {
+                    const time = `${String(hour).padStart(2, "0")}:00`;
+                    return (
+                      <div
+                        key={hour}
+                        title={
+                          onCreateAt
+                            ? t("createAt", {
+                                date: format(day, "d MMM", { locale: dateLocale }),
+                                time,
+                              })
+                            : undefined
+                        }
+                        onClick={() => onCreateAt?.({ date: localYmd(day), time })}
+                        className={cn(
+                          "border-t border-border/70",
+                          onCreateAt && "cursor-pointer hover:bg-primary/10",
+                        )}
+                        style={{ height: CALENDAR_HOUR_HEIGHT }}
+                      />
+                    );
+                  })}
                   {items.map((task, index) => {
                     const due = new Date(task.due_at as string);
                     return (

@@ -175,8 +175,8 @@ describe("runAutomationsForTrigger — tenant isolation", () => {
   });
 });
 
-describe("automation_logs — status is seeded pessimistically (issue #409)", () => {
-  it("writes the log row as 'failed' before any step runs", async () => {
+describe("automation_logs — status is seeded in progress (issue #409)", () => {
+  it("writes the log row as 'running' before any step runs", async () => {
     h.state.owned = { id: "c1" };
     h.state.automations = [automationWithUpdateStep()];
     h.state.steps = [updateStep()];
@@ -192,7 +192,7 @@ describe("automation_logs — status is seeded pessimistically (issue #409)", ()
     // not leave behind a row that claims it succeeded.
     expect(h.state.logInserts).toHaveLength(1);
     expect(h.state.logInserts[0]).toMatchObject({
-      status: "failed",
+      status: "running",
       steps_executed: [],
     });
   });
