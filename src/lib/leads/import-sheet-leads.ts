@@ -10,6 +10,9 @@ import { addContactTagAndDispatch } from '@/lib/contacts/tag-events';
 import { resolveImportTagIds } from '@/lib/contacts/resolve-import-tags';
 import { findOrCreateConversation } from '@/lib/conversations/find-or-create';
 import { ensureInboundLeadInFunnel } from '@/lib/pipelines/inbound-deal';
+import { rowHasCuriousAnswer, markCuriousLead } from '@/lib/meta/curious-lead';
+import { flushMetaCrmEvents } from '@/lib/meta/flush-crm-events';
+import { rememberMetaLead } from '@/lib/meta/lead-links';
 import { isValidE164 } from '@/lib/whatsapp/phone-utils';
 
 import { fetchSheetCsv, SheetFetchError } from './fetch-sheet';
@@ -124,6 +127,7 @@ async function syncSheetSource(
     const csv = await fetchSheetCsv(source.spreadsheet_id, source.sheet_gid);
     const parsed = parseSheetCsv(csv);
     const result = await importParsedRows(db, source, parsed.rows);
+    await flushMetaCrmEvents(db);
     await db
       .from('google_sheet_sources')
       .update({
@@ -245,6 +249,11 @@ async function importOneRow(
 
   await addLeadNote(db, source, contactId, auditUserId, row);
   await applyLeadTags(db, source, contactId, auditUserId, row);
+  await rememberMetaLead(db, {
+    accountId: source.account_id,
+    contactId,
+    externalId: row.externalId,
+  });
 
   const conversationId = await findOrCreateConversation(
     db,
@@ -289,6 +298,14 @@ async function importOneRow(
     assignedAgentId: assignedTo,
     actorUserId: auditUserId,
   });
+
+  if (rowHasCuriousAnswer(row)) {
+    await markCuriousLead(db, {
+      accountId: source.account_id,
+      userId: auditUserId,
+      contactId,
+    });
+  }
 
   await recordImport(
     db,

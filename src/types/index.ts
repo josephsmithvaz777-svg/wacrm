@@ -476,6 +476,8 @@ export interface PipelineStage {
   position: number;
   color: string;
   created_at: string;
+  /** How Meta should read this stage once CRM events are connected. */
+  meta_funnel_role?: 'unspecified' | 'positive' | 'negative';
 }
 
 export type DealStatus = 'open' | 'won' | 'lost';

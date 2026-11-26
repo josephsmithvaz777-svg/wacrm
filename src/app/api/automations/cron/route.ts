@@ -11,6 +11,7 @@ import {
   ensureSheetLeadSyncLoop,
   syncAllEnabledSheetSources,
 } from '@/lib/leads/import-sheet-leads'
+import { flushMetaCrmEvents } from '@/lib/meta/flush-crm-events'
 
 /**
  * Drain due `automation_pending_executions` rows. Meant to be hit
@@ -50,6 +51,7 @@ export async function GET(request: Request) {
   const staff = await sendDueStaffReminders(admin)
   const silence = await sweepSilentAiConversations(admin)
   const sheets = await syncAllEnabledSheetSources(admin)
+  const meta = await flushMetaCrmEvents(admin)
   await reclaimStaleRunning(admin)
 
   const { data: due, error } = await admin
@@ -62,7 +64,7 @@ export async function GET(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!due || due.length === 0) {
-    return NextResponse.json({ processed: 0, reminders, staff, silence, sheets })
+    return NextResponse.json({ processed: 0, reminders, staff, silence, sheets, meta })
   }
 
   let processed = 0
@@ -88,7 +90,7 @@ export async function GET(request: Request) {
     processed++
   }
 
-  return NextResponse.json({ processed, reminders, staff, silence, sheets })
+  return NextResponse.json({ processed, reminders, staff, silence, sheets, meta })
 }
 
 /**
