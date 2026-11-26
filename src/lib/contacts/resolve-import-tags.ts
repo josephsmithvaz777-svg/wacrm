@@ -3,7 +3,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 const DEFAULT_TAG_COLOR = '#3b82f6';
 
 export interface ResolveImportTagsResult {
-  /** Lowercase tag name → tag id. */
+  /**
+   * Requested tag names (lowercase) → tag id.
+   * Only names passed in `tagNames` appear here. Other tags that already
+   * exist on the account are used for matching and are not returned.
+   */
   tagIdByKey: Map<string, string>;
   /** Names that could not be matched and were not created. */
   skippedNames: string[];
@@ -53,18 +57,23 @@ export async function resolveImportTagIds(
 
   if (fetchError) throw fetchError;
 
-  const tagIdByKey = new Map<string, string>();
+  const existingByKey = new Map<string, string>();
   for (const tag of existing ?? []) {
     const key = tag.name.trim().toLowerCase();
-    if (!tagIdByKey.has(key)) tagIdByKey.set(key, tag.id);
+    if (!existingByKey.has(key)) existingByKey.set(key, tag.id);
   }
 
+  const tagIdByKey = new Map<string, string>();
   const skippedNames: string[] = [];
   const toCreate: string[] = [];
 
   for (const name of uniqueNames) {
     const key = name.toLowerCase();
-    if (tagIdByKey.has(key)) continue;
+    const existingId = existingByKey.get(key);
+    if (existingId) {
+      tagIdByKey.set(key, existingId);
+      continue;
+    }
     if (canCreateTags) toCreate.push(name);
     else skippedNames.push(name);
   }

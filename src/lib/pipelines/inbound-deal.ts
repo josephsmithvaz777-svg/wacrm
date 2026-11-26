@@ -31,6 +31,50 @@ export function resolveInboundDealAction(opts: {
 }
 
 /**
+ * deals.assigned_to references profiles.id. Conversation assignees are
+ * often auth user ids (profiles.user_id). Use the profile id when one
+ * matches; otherwise leave the deal unassigned.
+ */
+export function profileIdForAssignee(
+  rows: { id: string; user_id?: string | null }[],
+  assignedTo: string | null | undefined,
+): string | null {
+  if (!assignedTo) return null;
+  const byId = rows.find((row) => row.id === assignedTo);
+  if (byId) return byId.id;
+  const byUser = rows.find((row) => row.user_id === assignedTo);
+  return byUser?.id ?? null;
+}
+
+async function resolveDealAssignee(
+  db: Db,
+  assignedTo: string | null | undefined,
+): Promise<string | null> {
+  if (!assignedTo) return null;
+  try {
+    const byId = await db
+      .from('profiles')
+      .select('id, user_id')
+      .eq('id', assignedTo)
+      .maybeSingle();
+    const byUser = byId.data
+      ? null
+      : await db
+          .from('profiles')
+          .select('id, user_id')
+          .eq('user_id', assignedTo)
+          .maybeSingle();
+    const rows = [byId.data, byUser?.data].filter(Boolean) as {
+      id: string;
+      user_id?: string | null;
+    }[];
+    return profileIdForAssignee(rows, assignedTo);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Best-effort: never throws. A missing pipeline or a write error must
  * not fail the WhatsApp webhook.
  */
@@ -83,6 +127,8 @@ export async function ensureInboundLeadInFunnel(
 
     if (action === 'unchanged') return 'unchanged';
 
+    const assignedTo = await resolveDealAssignee(db, opts.assignedAgentId);
+
     if (action === 'move' && openDeal?.id) {
       const { error } = await db
         .from('deals')
@@ -90,7 +136,7 @@ export async function ensureInboundLeadInFunnel(
           stage_id: newLeadStageId,
           pipeline_id: pipeline.id,
           conversation_id: opts.conversationId ?? null,
-          assigned_to: opts.assignedAgentId ?? null,
+          assigned_to: assignedTo,
           updated_at: new Date().toISOString(),
         })
         .eq('id', openDeal.id)
@@ -120,7 +166,7 @@ export async function ensureInboundLeadInFunnel(
       stage_id: newLeadStageId,
       contact_id: opts.contactId,
       conversation_id: opts.conversationId ?? null,
-      assigned_to: opts.assignedAgentId ?? null,
+      assigned_to: assignedTo,
       title: dealTitleForContact(contact ?? {}),
       value: 0,
       currency: account?.default_currency ?? 'USD',

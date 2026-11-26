@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, ListTodo } from "lucide-react";
+import { CalendarDays, ListTodo, Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
+import { CreateLeadTaskDialog } from "@/components/tasks/create-lead-task-dialog";
 import { TaskCalendar } from "@/components/tasks/task-calendar";
 import { TaskListItem } from "@/components/tasks/task-list-item";
 import { StaffRemindersPanel } from "@/components/tasks/staff-reminders-panel";
@@ -41,6 +42,9 @@ export default function TasksPage() {
   const [view, setView] = useState<TasksView>("week");
   const [board, setBoard] = useState<Board>("leads");
   const [anchor, setAnchor] = useState(() => new Date());
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createSession, setCreateSession] = useState(0);
+  const [createWhen, setCreateWhen] = useState({ date: "", time: "09:00" });
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -243,6 +247,17 @@ export default function TasksPage() {
     [canManageMembers, load, t],
   );
 
+  function openCreate(when?: { date: string; time: string }) {
+    const today = new Date();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    setCreateWhen(
+      when ?? { date: `${today.getFullYear()}-${month}-${day}`, time: "09:00" },
+    );
+    setCreateSession((session) => session + 1);
+    setCreateOpen(true);
+  }
+
   const views: { id: TasksView; label: string }[] = [
     { id: "list", label: t("viewList") },
     { id: "day", label: t("viewDay") },
@@ -266,6 +281,12 @@ export default function TasksPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {board === "leads" && canEdit ? (
+            <Button size="sm" onClick={() => openCreate()} className="hover:bg-primary/90">
+              <Plus />
+              {t("newTask")}
+            </Button>
+          ) : null}
           <div className="flex rounded-lg border border-border p-0.5">
             <button
               type="button"
@@ -371,7 +392,7 @@ export default function TasksPage() {
         ) : loading ? (
           <p className="text-sm text-muted-foreground">{t("loading")}</p>
         ) : view !== "list" ? (
-          tasks.every((task) => !task.due_at) ? (
+          !canEdit && tasks.every((task) => !task.due_at) ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <CalendarDays className="h-8 w-8 text-muted-foreground" />
               <p className="mt-3 text-sm font-medium text-foreground">
@@ -404,6 +425,7 @@ export default function TasksPage() {
               onAssign={assignTask}
               onReschedule={rescheduleTask}
               onCreateNext={createNextTask}
+              onCreateAt={canEdit ? openCreate : undefined}
             />
           )
         ) : tasks.length === 0 ? (
@@ -442,6 +464,17 @@ export default function TasksPage() {
           </ul>
         )}
       </div>
+      <CreateLeadTaskDialog
+        key={createSession}
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        initialDate={createWhen.date}
+        initialTime={createWhen.time}
+        defaultAssigneeId={selectedAgentId ?? selfId ?? ""}
+        canAssign={canManageMembers}
+        members={members}
+        onCreated={load}
+      />
     </div>
   );
 }

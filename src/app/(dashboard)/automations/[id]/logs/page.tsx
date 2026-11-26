@@ -20,6 +20,10 @@ import type {
 } from "@/types"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import {
+  automationLogStatusClass,
+  displayLogStatus,
+} from "@/lib/automations/log-display"
 import { formatRelative } from "@/lib/automations/trigger-meta"
 
 export default function AutomationLogsPage({
@@ -33,6 +37,7 @@ export default function AutomationLogsPage({
 
   const [automation, setAutomation] = useState<Automation | null>(null)
   const [logs, setLogs] = useState<AutomationLog[] | null>(null)
+  const [pendingLogIds, setPendingLogIds] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const [openLogId, setOpenLogId] = useState<string | null>(null)
 
@@ -40,7 +45,7 @@ export default function AutomationLogsPage({
     async function load() {
       try {
         const supabase = createClient()
-        const [autRes, logRes] = await Promise.all([
+        const [autRes, logRes, pendingRes] = await Promise.all([
           supabase
             .from("automations")
             .select("*")
@@ -52,11 +57,23 @@ export default function AutomationLogsPage({
             .eq("automation_id", id)
             .order("created_at", { ascending: false })
             .limit(100),
+          supabase
+            .from("automation_pending_executions")
+            .select("log_id")
+            .eq("automation_id", id)
+            .eq("status", "pending"),
         ])
         if (autRes.error) throw autRes.error
         if (logRes.error) throw logRes.error
         setAutomation(autRes.data as Automation | null)
         setLogs((logRes.data ?? []) as AutomationLog[])
+        const queued = new Set<string>()
+        if (!pendingRes.error) {
+          for (const row of pendingRes.data ?? []) {
+            if (typeof row.log_id === "string") queued.add(row.log_id)
+          }
+        }
+        setPendingLogIds(queued)
       } catch (err) {
         setError(err instanceof Error ? err.message : t("loadError"))
       }
@@ -111,6 +128,12 @@ export default function AutomationLogsPage({
         <ul className="space-y-2">
           {logs.map((log) => {
             const isOpen = openLogId === log.id
+            const shownStatus = displayLogStatus(
+              log.status,
+              log.steps_executed?.length ?? 0,
+              pendingLogIds.has(log.id),
+            )
+            const waiting = shownStatus === "queued" && (log.steps_executed?.length ?? 0) === 0
             return (
               <li
                 key={log.id}
@@ -126,7 +149,7 @@ export default function AutomationLogsPage({
                   ) : (
                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
                   )}
-                  <StatusBadge status={log.status} t={t} />
+                  <StatusBadge status={shownStatus} t={t} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium text-foreground">
                       {log.contact?.name ?? log.contact?.phone ?? t("unknownContact")}
@@ -152,7 +175,9 @@ export default function AutomationLogsPage({
                         <StepRow key={i} result={r} />
                       ))}
                       {(log.steps_executed ?? []).length === 0 && (
-                        <li className="text-xs text-muted-foreground">{t("noSteps")}</li>
+                        <li className="text-xs text-muted-foreground">
+                          {waiting ? t("inQueue") : t("noSteps")}
+                        </li>
                       )}
                     </ul>
                   </div>
@@ -167,12 +192,7 @@ export default function AutomationLogsPage({
 }
 
 function StatusBadge({ status, t }: { status: AutomationLog["status"], t: ReturnType<typeof useTranslations> }) {
-  const classes =
-    status === "success"
-      ? "border-primary/30 bg-primary/10 text-primary"
-      : status === "partial"
-      ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
-      : "border-red-500/30 bg-red-500/10 text-red-300"
+  const classes = automationLogStatusClass(status)
   return (
     <span
       className={cn(
